@@ -47,7 +47,7 @@ class ConversationState:
         max_topics: int = 5,
         topk: int = 4,
         novelty_alpha: float = 0.4,
-        bucket_stride: int = 8,
+        bucket_stride: int = 16,  # Increased from 8 for looser matching
     ) -> None:
         self.encoder = encoder
         self.decay = decay
@@ -144,10 +144,16 @@ class ConversationState:
         return tuple(indices)
 
     def _bucket_signature(self, signature: Tuple[int, ...]) -> Tuple[int, ...]:
+        """Bucket signature indices to group similar activation patterns.
+        
+        Only buckets the most dominant component (first index) to allow
+        more variation in secondary activations. Relies on frame_signature
+        to provide semantic matching.
+        """
         if not signature:
             return signature
-        components = signature[: min(2, len(signature))]
-        return tuple(index // self.bucket_stride for index in components)
+        # Only bucket the dominant activation, allow variation in others
+        return (signature[0] // self.bucket_stride,)
 
     def _compute_novelty(self, activation: torch.Tensor) -> float:
         if self._last_activation is None:
