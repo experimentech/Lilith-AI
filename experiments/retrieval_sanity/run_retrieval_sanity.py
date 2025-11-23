@@ -38,7 +38,10 @@ if str(WORKSPACE_ROOT) not in sys.path:
 if str(PMFLOW_ROOT) not in sys.path:
     sys.path.insert(0, str(PMFLOW_ROOT))
 
-from pmflow_bnn.pmflow import ParallelPMField  # noqa: E402
+try:
+    from pmflow_bnn.pmflow import ParallelPMField  # noqa: E402
+except ImportError:
+    from pmflow_bnn.pmflow import PMField as ParallelPMField  # noqa: E402
 
 from experiments.retrieval_sanity.config_utils import load_labeled_overrides
 from experiments.retrieval_sanity.provenance import collect_provenance
@@ -261,15 +264,24 @@ class PMFlowEmbeddingNet(nn.Module):
             nn.Linear(input_dim, latent_dim),
             nn.Tanh(),
         )
-        self.pm = ParallelPMField(
-            d_latent=latent_dim,
-            n_centers=n_centers,
-            steps=pm_steps,
-            dt=dt,
-            beta=beta,
-            clamp=clamp,
-            temporal_parallel=False,
-        )
+        # Try ParallelPMField args first, fall back to PMField args
+        try:
+            self.pm = ParallelPMField(
+                d_latent=latent_dim,
+                n_centers=n_centers,
+                steps=pm_steps,
+                dt=dt,
+                beta=beta,
+                clamp=clamp,
+                temporal_parallel=False,
+            )
+        except TypeError:
+            # Fallback to PMField without temporal_parallel
+            self.pm = ParallelPMField(
+                d_latent=latent_dim,
+                n_centers=n_centers,
+                steps=pm_steps,
+            )
         self.head = nn.Linear(latent_dim, num_classes)
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
