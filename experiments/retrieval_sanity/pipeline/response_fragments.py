@@ -108,6 +108,13 @@ class ResponseFragmentStore:
             ("greeting", "Good evening", "Good evening! What brings you here?"),
             ("greeting", "Greetings", "Greetings! What can I do for you?"),
             
+            # Capability questions - self-description
+            ("capability", "what can you do", "I can have conversations using learned patterns. I remember topics and learn from our interactions."),
+            ("capability", "what are you", "I'm a neuro-symbolic conversation system. I use neural embeddings and symbolic patterns to chat."),
+            ("capability", "how do you work", "I work by matching your input to learned response patterns using semantic similarity. No LLM!"),
+            ("capability", "can you help", "Yes, I can chat with you and try to understand what you're saying through pattern matching."),
+            ("capability", "tell me about yourself", "I'm an experiment in pure neuro-symbolic dialogue. I learn from conversation dynamics."),
+            
             # Farewells
             ("farewell", "Goodbye", "Goodbye! It was nice talking with you."),
             ("farewell", "Bye", "Bye! Take care!"),

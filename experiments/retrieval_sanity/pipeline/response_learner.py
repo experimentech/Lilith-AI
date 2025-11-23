@@ -89,8 +89,13 @@ class ResponseLearner:
             user_input
         )
         
-        # Apply learning updates
-        self._apply_learning(response, signals)
+        # Apply learning updates (pass user input and bot response for pattern extraction)
+        self._apply_learning(
+            response, 
+            signals,
+            user_input=user_input,
+            bot_response=response.text
+        )
         
         # Track progress
         self.interaction_count += 1
@@ -259,7 +264,9 @@ class ResponseLearner:
     def _apply_learning(
         self,
         response: ComposedResponse,
-        signals: OutcomeSignals
+        signals: OutcomeSignals,
+        user_input: str = "",
+        bot_response: str = ""
     ):
         """
         Apply plasticity updates based on outcome.
@@ -269,6 +276,8 @@ class ResponseLearner:
         Args:
             response: Response that was generated
             signals: Observed outcome signals
+            user_input: User's input that triggered learning
+            bot_response: Bot's previous response (context for user input)
         """
         # Update success scores for used fragments
         for fragment_id in response.fragment_ids:
@@ -281,6 +290,9 @@ class ResponseLearner:
                 feedback=feedback,
                 plasticity_rate=self.learning_rate
             )
+        
+        # Extract new patterns from highly engaging user inputs
+        self._maybe_extract_pattern(signals, user_input, bot_response)
             
         # If plasticity controller available, update embeddings too
         if self.plasticity is not None and response.primary_pattern:
@@ -299,6 +311,54 @@ class ResponseLearner:
             # Note: This requires coordination with semantic encoder
             # For now, we rely on fragment success scores
             pass
+    
+    def _maybe_extract_pattern(
+        self,
+        signals: OutcomeSignals,
+        user_input: str,
+        bot_response: str
+    ):
+        """
+        Extract new response pattern from engaging user input.
+        
+        This is how the system learns NEW vocabulary and syntax!
+        
+        When user says something interesting/engaging, we can:
+        1. Use their phrasing as a response pattern
+        2. Associate it with the context (our previous response)
+        
+        Args:
+            signals: Outcome signals from interaction
+            user_input: What the user said
+            bot_response: What we said that prompted their response
+        """
+        # Only extract from highly positive interactions
+        if signals.overall_success < 0.4:
+            return
+            
+        # Engagement score must be high (user was interested/elaborating)
+        if signals.engagement_score < 0.7:
+            return
+            
+        # Don't extract very short or very long inputs
+        word_count = len(user_input.split())
+        if word_count < 3 or word_count > 20:
+            return
+            
+        # Don't extract questions (those aren't good responses)
+        if user_input.strip().endswith('?'):
+            return
+            
+        # Extract pattern: use bot's previous response as trigger context
+        # and user's engaging reply as the new response
+        self.fragments.add_pattern(
+            trigger_context=bot_response,
+            response_text=user_input,
+            success_score=0.7,  # Start higher since it was engaging
+            intent="learned"
+        )
+        
+        print(f"  🎓 Learned new pattern: '{user_input[:50]}...'")
             
     def get_learning_stats(self) -> Dict:
         """

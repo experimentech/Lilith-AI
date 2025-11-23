@@ -18,6 +18,13 @@ import numpy as np
 from .response_fragments import ResponseFragmentStore, ResponsePattern
 from .conversation_state import ConversationState
 
+# Optional: Import grammar stage for sophisticated composition
+try:
+    from .syntax_stage import GrammarPatternStore, GrammarGuidedComposer
+    GRAMMAR_AVAILABLE = True
+except ImportError:
+    GRAMMAR_AVAILABLE = False
+
 
 @dataclass
 class ComposedResponse:
@@ -43,7 +50,8 @@ class ResponseComposer:
         self, 
         fragment_store: ResponseFragmentStore,
         conversation_state: ConversationState,
-        composition_mode: str = "weighted_blend"
+        composition_mode: str = "weighted_blend",
+        use_grammar: bool = False
     ):
         """
         Initialize response composer.
@@ -54,11 +62,22 @@ class ResponseComposer:
             composition_mode: How to compose responses
                 - "best_match": Use highest-weighted pattern only
                 - "weighted_blend": Blend multiple patterns
+                - "grammar_guided": Use grammatical templates (requires syntax stage)
                 - "adaptive": Choose based on confidence
+            use_grammar: Enable grammar-guided composition
         """
         self.fragments = fragment_store
         self.state = conversation_state
         self.composition_mode = composition_mode
+        
+        # Initialize grammar system if available and requested
+        self.grammar_composer = None
+        if use_grammar and GRAMMAR_AVAILABLE:
+            grammar_store = GrammarPatternStore()
+            self.grammar_composer = GrammarGuidedComposer(grammar_store)
+            print("  📝 Grammar-guided composition enabled!")
+        elif use_grammar and not GRAMMAR_AVAILABLE:
+            print("  ⚠️  Grammar stage not available, falling back to standard composition")
         
     def compose_response(
         self, 
@@ -293,29 +312,48 @@ class ResponseComposer:
         context: str
     ) -> ComposedResponse:
         """
-        Blend multiple patterns weighted by their scores.
+        Blend multiple patterns to create novel responses.
         
-        For now, this selects best match but could be enhanced
-        to actually blend text from multiple patterns.
+        Strategy: Combine fragments from top patterns when appropriate.
+        This creates NEW utterances from learned pieces!
         """
-        # Get top pattern
+        # Get top patterns
         primary_pattern, primary_weight = weighted_patterns[0]
         
-        # For simple blending, use primary pattern
-        # TODO: Implement actual text blending using multiple patterns
-        # Could concatenate, interleave, or use learned blending rules
-        
         response_text = primary_pattern.response_text
+        fragment_ids = [primary_pattern.fragment_id]
+        weights = [primary_weight]
         
-        # If confidence is low and we have alternatives, could augment
-        if primary_weight < 0.6 and len(weighted_patterns) > 1:
-            secondary_pattern, _ = weighted_patterns[1]
-            # Could append secondary pattern for elaboration
-            # response_text += " " + secondary_pattern.response_text
-            pass
+        # Calculate weight ratio between top two patterns
+        # If they're close, blending makes sense
+        should_blend = False
+        if len(weighted_patterns) > 1:
+            secondary_pattern, secondary_weight = weighted_patterns[1]
             
-        fragment_ids = [p.fragment_id for p, _ in weighted_patterns[:3]]
-        weights = [w for _, w in weighted_patterns[:3]]
+            # Blend if:
+            # 1. Secondary is at least 60% as good as primary (close competition)
+            # 2. Both patterns have reasonable weights
+            weight_ratio = secondary_weight / (primary_weight + 1e-6)
+            if weight_ratio > 0.6 and secondary_weight > 0.5:
+                should_blend = True
+                
+                # Try blending
+                blended = self._blend_patterns(primary_pattern, secondary_pattern)
+                if blended:
+                    response_text = blended
+                    fragment_ids.append(secondary_pattern.fragment_id)
+                    weights.append(secondary_weight)
+                    print(f"  🎨 Blended {primary_pattern.intent} + {secondary_pattern.intent}")
+        
+        # If all weights are low (no good match), try composing from fragments
+        if not should_blend and primary_weight < 1.5 and len(weighted_patterns) >= 3:
+            # Create novel composition from multiple weak matches
+            composed = self._compose_from_fragments(weighted_patterns[:3])
+            if composed:
+                response_text = composed
+                fragment_ids = [p.fragment_id for p, _ in weighted_patterns[:3]]
+                weights = [w for _, w in weighted_patterns[:3]]
+                print(f"  🎨 Composed from {len(fragment_ids)} fragments")
         
         return ComposedResponse(
             text=response_text,
@@ -353,6 +391,138 @@ class ResponseComposer:
                 coherence_score=primary_weight,
                 primary_pattern=primary_pattern
             )
+    
+    def _blend_patterns(
+        self,
+        primary: ResponsePattern,
+        secondary: ResponsePattern
+    ) -> Optional[str]:
+        """
+        Blend two patterns into a novel response.
+        
+        Strategy: Use grammatical templates if available, otherwise heuristics.
+        This creates NEW utterances from learned fragments!
+        
+        Args:
+            primary: Main pattern
+            secondary: Supporting pattern
+            
+        Returns:
+            Blended text or None if blending not appropriate
+        """
+        # If grammar system is available, use it!
+        if self.grammar_composer:
+            return self.grammar_composer.compose_with_grammar(
+                primary.response_text,
+                secondary.response_text,
+                primary.intent,
+                secondary.intent
+            )
+        
+        # Fallback: Heuristic blending (original method)
+        # Don't blend if patterns end with questions (creates awkward double-question)
+        if primary.response_text.strip().endswith('?') and secondary.response_text.strip().endswith('?'):
+            return None
+            
+        # Choose connector based on pattern types
+        connectors = {
+            ('question_info', 'explain'): ' ',  # Question + explanation flows naturally
+            ('acknowledgment', 'interest'): ' ',  # "I see. That's interesting!"
+            ('interest', 'question_detail'): ' ',  # "Interesting! Tell me more?"
+            ('agreement', 'explain'): ' ',  # "Yes. The reason is..."
+            ('greeting', 'question_info'): ' ',  # "Hello! What can I help with?"
+            ('greeting', 'interest'): ' ',  # "Hello! Wow, that's..."
+            ('capability', 'question_detail'): ' ',  # Statement + question
+            ('explain', 'meta'): ' ',  # Explanation + meta-comment
+            ('learned', 'capability'): ' ',  # Learned phrase + capability
+            ('learned', 'meta'): ' ',  # Learned phrase + meta
+            ('clarify', 'capability'): ' ',  # Question + answer
+        }
+        
+        # Get connector (default: space for natural flow)
+        intent_pair = (primary.intent, secondary.intent)
+        connector = connectors.get(intent_pair, ' ')
+        
+        # Clean up primary text punctuation
+        primary_text = primary.response_text.strip()
+        
+        # If primary doesn't end with strong punctuation and connector is just space,
+        # we need to ensure proper sentence boundary
+        if connector == ' ' and primary_text[-1] not in '!?':
+            # Replace trailing period with nothing if present, we'll handle it
+            if primary_text[-1] == '.':
+                primary_text = primary_text[:-1]
+            # Add appropriate punctuation based on context
+            if secondary.response_text.strip()[0].isupper():
+                primary_text += '.'  # New sentence
+            else:
+                primary_text += ','  # Continuation
+        elif not primary_text[-1] in '.!?,':
+            primary_text += '.'
+            
+        # Blend
+        blended = primary_text + connector + secondary.response_text.strip()
+        
+        # Don't return if too long (over 150 chars gets verbose)
+        if len(blended) > 150:
+            return None
+            
+        return blended
+    
+    def _compose_from_fragments(
+        self,
+        patterns: List[Tuple[ResponsePattern, float]]
+    ) -> Optional[str]:
+        """
+        Create novel composition from multiple weak pattern matches.
+        
+        When no single pattern is strong, combine fragments to create
+        a reasonable response. This is pure compositional generation!
+        
+        Args:
+            patterns: Multiple patterns to compose from
+            
+        Returns:
+            Composed text or None if composition fails
+        """
+        if len(patterns) < 2:
+            return None
+            
+        # Extract key phrases from patterns
+        fragments = []
+        for pattern, weight in patterns:
+            # Take short patterns whole, extract from long ones
+            text = pattern.response_text.strip()
+            if len(text.split()) <= 6:
+                fragments.append(text)
+            else:
+                # Extract first clause or sentence
+                if '.' in text:
+                    fragments.append(text.split('.')[0].strip())
+                elif ',' in text:
+                    fragments.append(text.split(',')[0].strip())
+                else:
+                    fragments.append(text)
+        
+        # Try to compose coherently
+        # Strategy: Use first fragment as base, add others if they fit
+        if not fragments:
+            return None
+            
+        composed = fragments[0]
+        
+        # Add second fragment if it complements
+        if len(fragments) > 1 and len(composed.split()) < 8:
+            # Add connector
+            if not composed[-1] in '.!?,':
+                composed += ','
+            composed += ' ' + fragments[1]
+            
+        # Ensure proper ending
+        if not composed[-1] in '.!?':
+            composed += '.'
+            
+        return composed
             
     def _fallback_response(self) -> ComposedResponse:
         """
