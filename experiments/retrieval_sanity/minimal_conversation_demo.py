@@ -103,21 +103,24 @@ class MinimalConversationDemo:
         # 3. Compose response
         print("  🔍 Retrieving response patterns...")
         
-        # Build context from recent history
+        # Build context from recent history for coherence checking
         if self.history.turns:
-            context = self.history.get_context_window(n=3)
-            context += f"\nUser: {user_input}"
+            conversation_context = self.history.get_context_window(n=3)
         else:
-            context = user_input
-            
+            conversation_context = ""
+        
+        # Use user_input directly for pattern retrieval
+        # The conversation context is used for coherence filtering
         response = self.composer.compose_response(
-            context=context,
+            context=user_input,  # Match against current input, not full history
             user_input=user_input,
             topk=5
         )
         
         print(f"     Matched {len(response.fragment_ids)} patterns")
         print(f"     Coherence: {response.coherence_score:.3f}")
+        if response.primary_pattern:
+            print(f"     Primary: '{response.primary_pattern.trigger_context}' → '{response.text}')")
         
         # 4. Store in history
         self.history.add_turn(

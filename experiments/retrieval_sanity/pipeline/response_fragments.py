@@ -98,45 +98,140 @@ class ResponseFragmentStore:
         """
             
         seed_patterns = [
-            # Greetings
+            # Greetings (expanded)
             ("greeting", "Hello", "Hello! How can I help you?"),
-            ("greeting", "Hi there", "Hi! What would you like to talk about?"),
+            ("greeting", "Hi", "Hi! What would you like to talk about?"),
+            ("greeting", "Hi there", "Hi there! How are you doing?"),
+            ("greeting", "Hey", "Hey! What's up?"),
             ("greeting", "Good morning", "Good morning! What's on your mind?"),
+            ("greeting", "Good afternoon", "Good afternoon! How can I assist you?"),
+            ("greeting", "Good evening", "Good evening! What brings you here?"),
+            ("greeting", "Greetings", "Greetings! What can I do for you?"),
+            
+            # Farewells
+            ("farewell", "Goodbye", "Goodbye! It was nice talking with you."),
+            ("farewell", "Bye", "Bye! Take care!"),
+            ("farewell", "See you", "See you later! Have a great day."),
+            ("farewell", "Take care", "You too! Goodbye."),
+            ("farewell", "Thanks", "You're welcome! Glad I could help."),
             
             # Understanding checks
             ("confusion", "I don't understand", "I'm not sure I understand. Could you rephrase that?"),
             ("confusion", "unclear", "That's unclear to me. Can you explain differently?"),
+            ("confusion", "confusing", "I find that confusing. Could you clarify?"),
+            ("confusion", "what do you mean", "Let me try to explain that better."),
+            ("confusion", "huh", "Sorry, I didn't catch that. Could you repeat?"),
             
-            # Acknowledgments
+            # Acknowledgments (expanded)
             ("acknowledgment", "I see", "I understand what you mean."),
             ("acknowledgment", "got it", "Got it, that makes sense."),
-            ("acknowledgment", "interesting", "That's interesting!"),
+            ("acknowledgment", "okay", "Okay, I follow you."),
+            ("acknowledgment", "alright", "Alright, I understand."),
+            ("acknowledgment", "understood", "Understood. I've got that now."),
+            ("acknowledgment", "makes sense", "Yes, that makes sense to me."),
+            ("acknowledgment", "right", "Right, I see what you're saying."),
             
-            # Questions - asking for details
+            # Interest and engagement
+            ("interest", "interesting", "That's really interesting!"),
+            ("interest", "fascinating", "How fascinating! Tell me more."),
+            ("interest", "cool", "That's cool! I'd like to know more."),
+            ("interest", "wow", "Wow, that's impressive!"),
+            ("interest", "amazing", "That's amazing! Please continue."),
+            
+            # Questions - asking for details (expanded)
             ("question_detail", "tell me more", "Can you tell me more about that?"),
             ("question_detail", "elaborate", "Could you elaborate on that?"),
             ("question_detail", "explain", "What do you mean by that?"),
+            ("question_detail", "how so", "How so? I'm curious to understand."),
+            ("question_detail", "in what way", "In what way? Could you give an example?"),
+            ("question_detail", "like what", "Like what? Can you be more specific?"),
+            ("question_detail", "for instance", "Could you give me an example?"),
             
-            # Questions - seeking information
-            ("question_info", "what is X", "Let me recall what I know about that..."),
-            ("question_info", "who is X", "I'm trying to remember who that is..."),
+            # Questions - seeking information (expanded)
+            ("question_info", "what is", "Let me recall what I know about that..."),
+            ("question_info", "who is", "I'm trying to remember who that is..."),
             ("question_info", "when", "I'll check when that happened..."),
+            ("question_info", "where", "Let me think about where that was..."),
+            ("question_info", "why", "That's a good question. Let me think about why..."),
+            ("question_info", "how", "I'm considering how that works..."),
+            ("question_info", "which", "Let me think about which one you mean..."),
             
-            # Topic shifts
-            ("topic_shift", "new topic", "Okay, what would you like to discuss?"),
+            # Explanations
+            ("explain", "because", "The reason is that..."),
+            ("explain", "therefore", "Therefore, we can conclude..."),
+            ("explain", "this means", "This means that..."),
+            ("explain", "in other words", "In other words..."),
+            ("explain", "basically", "Basically, what I'm saying is..."),
+            
+            # Topic shifts (expanded)
+            ("topic_shift", "anyway", "Anyway, what else is on your mind?"),
+            ("topic_shift", "by the way", "By the way, is there something else you'd like to know?"),
+            ("topic_shift", "speaking of", "Speaking of that, let's explore it further."),
             ("topic_shift", "change subject", "Sure, let's talk about something else."),
+            ("topic_shift", "new topic", "Okay, what would you like to discuss next?"),
+            ("topic_shift", "different question", "Go ahead, ask me something different."),
             
-            # Agreement
-            ("agreement", "yes", "Yes, I agree."),
+            # Agreement (expanded)
+            ("agreement", "yes", "Yes, I agree with that."),
             ("agreement", "correct", "That's correct."),
+            ("agreement", "exactly", "Exactly! You've got it."),
+            ("agreement", "absolutely", "Absolutely, I think so too."),
+            ("agreement", "definitely", "Definitely, that's right."),
+            ("agreement", "true", "True, I can see that."),
+            ("agreement", "indeed", "Indeed, that's a good point."),
             
-            # Disagreement
+            # Disagreement (expanded)
             ("disagreement", "no", "I don't think so."),
             ("disagreement", "incorrect", "That doesn't seem right to me."),
+            ("disagreement", "not quite", "Not quite, let me clarify."),
+            ("disagreement", "actually", "Actually, I think it's different."),
+            ("disagreement", "I disagree", "I respectfully disagree with that."),
+            ("disagreement", "false", "I believe that's not accurate."),
             
-            # Memory recall
+            # Uncertainty
+            ("uncertainty", "maybe", "Maybe, I'm not entirely sure."),
+            ("uncertainty", "perhaps", "Perhaps, but I'd need to think about it."),
+            ("uncertainty", "possibly", "Possibly, though I can't say for certain."),
+            ("uncertainty", "not sure", "I'm not sure about that."),
+            ("uncertainty", "don't know", "I don't know enough about that yet."),
+            ("uncertainty", "uncertain", "I'm uncertain on that point."),
+            
+            # Memory and recall (expanded)
             ("recall", "remember", "Let me check my memory about that..."),
             ("recall", "previous", "I recall we discussed this before..."),
+            ("recall", "earlier", "Earlier, you mentioned something about..."),
+            ("recall", "before", "Before, we were talking about..."),
+            ("recall", "you said", "You said something about that, right?"),
+            ("recall", "mentioned", "You mentioned that previously."),
+            
+            # Apologies and politeness
+            ("apology", "sorry", "I apologize for any confusion."),
+            ("apology", "excuse me", "Excuse me, let me correct that."),
+            ("apology", "my mistake", "My mistake, let me try again."),
+            ("apology", "pardon", "Pardon me, I misspoke."),
+            
+            # Gratitude
+            ("gratitude", "thank you", "You're very welcome!"),
+            ("gratitude", "thanks", "No problem, happy to help!"),
+            ("gratitude", "appreciate", "I appreciate your patience."),
+            ("gratitude", "helpful", "Glad I could be helpful!"),
+            
+            # Requests for patience
+            ("patience", "wait", "Just a moment while I think about that..."),
+            ("patience", "hold on", "Hold on, let me process that..."),
+            ("patience", "give me a moment", "Give me a moment to consider..."),
+            
+            # Clarification requests
+            ("clarify", "you mean", "Do you mean...?"),
+            ("clarify", "are you asking", "Are you asking about...?"),
+            ("clarify", "do you want", "Do you want to know about...?"),
+            ("clarify", "referring to", "Are you referring to...?"),
+            
+            # Meta-conversation
+            ("meta", "this conversation", "I'm finding this conversation interesting."),
+            ("meta", "talking about", "We're talking about some complex topics."),
+            ("meta", "our discussion", "Our discussion has covered a lot."),
+            ("meta", "what we're discussing", "What we're discussing is important."),
         ]
         
         # Add seed patterns
