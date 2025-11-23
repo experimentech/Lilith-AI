@@ -26,7 +26,7 @@ class ComposedResponse:
     fragment_ids: List[str]            # Which patterns were used
     composition_weights: List[float]   # How much each pattern contributed
     coherence_score: float             # How well it fits working memory
-    primary_pattern: ResponsePattern   # Main pattern used
+    primary_pattern: Optional[ResponsePattern] = None   # Main pattern used (can be None for fallback)
     
 
 class ResponseComposer:

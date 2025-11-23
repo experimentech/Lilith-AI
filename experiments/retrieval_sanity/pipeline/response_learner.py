@@ -14,7 +14,7 @@ import numpy as np
 from .response_composer import ResponseComposer, ComposedResponse
 from .response_fragments import ResponseFragmentStore
 from .conversation_state import ConversationState
-from .plasticity_controller import PlasticityController
+from .plasticity import PlasticityController
 
 
 @dataclass
