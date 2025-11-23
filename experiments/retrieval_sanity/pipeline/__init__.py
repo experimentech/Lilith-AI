@@ -19,6 +19,7 @@ from .stage_coordinator import (
     IntakeStage,
     SemanticStage,
 )
+from .concept_taxonomy import ConceptTaxonomy, Concept, CompositionalQuery
 
 __all__ = [
     "PipelineArtifact",
@@ -46,4 +47,7 @@ __all__ = [
     "CognitiveStage",
     "IntakeStage",
     "SemanticStage",
+    "ConceptTaxonomy",
+    "Concept",
+    "CompositionalQuery",
 ]

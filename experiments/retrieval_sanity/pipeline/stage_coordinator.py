@@ -258,14 +258,22 @@ class IntakeStage(CognitiveStage):
 
 
 class SemanticStage(CognitiveStage):
-    """Specialized for semantic embedding and concept retrieval."""
+    """Specialized for semantic embedding and concept retrieval with taxonomy."""
+    
+    def __init__(self, config: StageConfig):
+        super().__init__(config)
+        
+        # Initialize concept taxonomy for query expansion
+        from .concept_taxonomy import ConceptTaxonomy, CompositionalQuery
+        self.taxonomy = ConceptTaxonomy()
+        self.compositor = CompositionalQuery(self.taxonomy)
     
     def process(
         self,
         input_data: Any,
         upstream_artifacts: Optional[List[StageArtifact]] = None,
     ) -> StageArtifact:
-        """Process parsed tokens into semantic embeddings."""
+        """Process parsed tokens into semantic embeddings with concept expansion."""
         from .parser import parse as parse_sentence
         from . import symbolic
         
@@ -279,12 +287,27 @@ class SemanticStage(CognitiveStage):
         parsed = parse_sentence(text)
         tokens = [token.text for token in parsed.tokens]
         
+        # Extract and expand concepts using taxonomy
+        concepts = self.taxonomy.extract_concepts(text)
+        expanded_concepts = self.taxonomy.expand_query(list(concepts))
+        
+        # Augment tokens with expanded concepts for richer embedding
+        augmented_tokens = tokens.copy()
+        for concept in expanded_concepts:
+            # Add concept if not already in tokens
+            concept_words = concept.replace("_", " ")
+            if concept_words not in text.lower():
+                augmented_tokens.append(concept.replace("_", " "))
+        
         # Use intake embedding as context if available
         context_embs = [art.embedding for art in (upstream_artifacts or []) if art.stage == StageType.INTAKE]
         
-        artifact = self.encode_with_context(tokens, context_embeddings=context_embs if context_embs else None)
+        artifact = self.encode_with_context(augmented_tokens, context_embeddings=context_embs if context_embs else None)
         artifact.metadata["parsed"] = parsed
         artifact.metadata["num_tokens"] = len(tokens)
+        artifact.metadata["concepts"] = list(concepts)
+        artifact.metadata["expanded_concepts"] = list(expanded_concepts)
+        artifact.metadata["augmented_tokens"] = augmented_tokens
         
         return artifact
 
