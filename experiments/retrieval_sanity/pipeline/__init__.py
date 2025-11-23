@@ -10,6 +10,15 @@ from .trace import TraceLogger
 from .plasticity import PlasticityController
 from .response_planner import ResponsePlanner, ResponsePlan, PlanEvidence
 from .conversation_state import ConversationState, ConversationStateSnapshot, WorkingMemoryTopic
+from .stage_coordinator import (
+    StageCoordinator,
+    StageType,
+    StageConfig,
+    StageArtifact,
+    CognitiveStage,
+    IntakeStage,
+    SemanticStage,
+)
 
 __all__ = [
     "PipelineArtifact",
@@ -30,4 +39,11 @@ __all__ = [
     "ConversationState",
     "ConversationStateSnapshot",
     "WorkingMemoryTopic",
+    "StageCoordinator",
+    "StageType",
+    "StageConfig",
+    "StageArtifact",
+    "CognitiveStage",
+    "IntakeStage",
+    "SemanticStage",
 ]
