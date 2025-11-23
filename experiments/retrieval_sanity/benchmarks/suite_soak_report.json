@@ -1,0 +1,163 @@
+{
+  "generated_at": 1759806753.2651322,
+  "iterations": 3,
+  "scenarios": [
+    "synthetic-baseline",
+    "synthetic-hard",
+    "relational-sample"
+  ],
+  "sqlite_path": "runs/soak_vectors.db",
+  "sqlite_prefix": "soak",
+  "metric": "cosine",
+  "log_path": "retrieval_runs.log",
+  "skip_log": false,
+  "elapsed_seconds": 51.32263541221619,
+  "summaries": [
+    {
+      "name": "synthetic-baseline",
+      "baseline_retrieval": 1.0,
+      "pmflow_retrieval": 1.0,
+      "baseline_class": 1.0,
+      "pmflow_class": 1.0,
+      "delta": 0.0,
+      "config_label": "synthetic-baseline"
+    },
+    {
+      "name": "synthetic-hard",
+      "baseline_retrieval": 0.8576388955116272,
+      "pmflow_retrieval": 0.8628472089767456,
+      "baseline_class": 0.9045138955116272,
+      "pmflow_class": 0.9045138955116272,
+      "delta": 0.005208313465118408,
+      "config_label": "synthetic-hard"
+    },
+    {
+      "name": "relational-sample",
+      "baseline_retrieval": 1.0,
+      "pmflow_retrieval": 1.0,
+      "baseline_class": 1.0,
+      "pmflow_class": 1.0,
+      "delta": 0.0,
+      "config_label": "relational-sample"
+    },
+    {
+      "name": "synthetic-baseline",
+      "baseline_retrieval": 1.0,
+      "pmflow_retrieval": 1.0,
+      "baseline_class": 1.0,
+      "pmflow_class": 1.0,
+      "delta": 0.0,
+      "config_label": "synthetic-baseline"
+    },
+    {
+      "name": "synthetic-hard",
+      "baseline_retrieval": 0.8576388955116272,
+      "pmflow_retrieval": 0.8628472089767456,
+      "baseline_class": 0.9045138955116272,
+      "pmflow_class": 0.9045138955116272,
+      "delta": 0.005208313465118408,
+      "config_label": "synthetic-hard"
+    },
+    {
+      "name": "relational-sample",
+      "baseline_retrieval": 1.0,
+      "pmflow_retrieval": 1.0,
+      "baseline_class": 1.0,
+      "pmflow_class": 1.0,
+      "delta": 0.0,
+      "config_label": "relational-sample"
+    },
+    {
+      "name": "synthetic-baseline",
+      "baseline_retrieval": 1.0,
+      "pmflow_retrieval": 1.0,
+      "baseline_class": 1.0,
+      "pmflow_class": 1.0,
+      "delta": 0.0,
+      "config_label": "synthetic-baseline"
+    },
+    {
+      "name": "synthetic-hard",
+      "baseline_retrieval": 0.8576388955116272,
+      "pmflow_retrieval": 0.8628472089767456,
+      "baseline_class": 0.9045138955116272,
+      "pmflow_class": 0.9045138955116272,
+      "delta": 0.005208313465118408,
+      "config_label": "synthetic-hard"
+    },
+    {
+      "name": "relational-sample",
+      "baseline_retrieval": 1.0,
+      "pmflow_retrieval": 1.0,
+      "baseline_class": 1.0,
+      "pmflow_class": 1.0,
+      "delta": 0.0,
+      "config_label": "relational-sample"
+    }
+  ],
+  "sqlite_summary": [
+    {
+      "base": "soak-00:relational-sample",
+      "baseline": 186,
+      "pmflow": 186,
+      "other": {},
+      "total": 372
+    },
+    {
+      "base": "soak-00:synthetic-baseline",
+      "baseline": 216,
+      "pmflow": 216,
+      "other": {},
+      "total": 432
+    },
+    {
+      "base": "soak-00:synthetic-hard",
+      "baseline": 384,
+      "pmflow": 384,
+      "other": {},
+      "total": 768
+    },
+    {
+      "base": "soak-01:relational-sample",
+      "baseline": 186,
+      "pmflow": 186,
+      "other": {},
+      "total": 372
+    },
+    {
+      "base": "soak-01:synthetic-baseline",
+      "baseline": 216,
+      "pmflow": 216,
+      "other": {},
+      "total": 432
+    },
+    {
+      "base": "soak-01:synthetic-hard",
+      "baseline": 384,
+      "pmflow": 384,
+      "other": {},
+      "total": 768
+    },
+    {
+      "base": "soak-02:relational-sample",
+      "baseline": 186,
+      "pmflow": 186,
+      "other": {},
+      "total": 372
+    },
+    {
+      "base": "soak-02:synthetic-baseline",
+      "baseline": 216,
+      "pmflow": 216,
+      "other": {},
+      "total": 432
+    },
+    {
+      "base": "soak-02:synthetic-hard",
+      "baseline": 384,
+      "pmflow": 384,
+      "other": {},
+      "total": 768
+    }
+  ]
+}

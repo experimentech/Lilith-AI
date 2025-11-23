@@ -1,0 +1,16 @@
+{
+  "label": "synthetic-baseline",
+  "description": "Default synthetic configuration used for regression tracking while tuning PMFlow hyperparameters.",
+  "overrides": {
+    "data-mode": "synthetic",
+    "num-classes": "3",
+    "points-per-class": "120",
+    "support-ratio": "0.6",
+    "cluster-std": "0.5",
+    "epochs": "400",
+    "latent-dim": "16",
+    "n-centers": "32",
+    "pm-steps": "4",
+    "metric": "cosine"
+  }
+}

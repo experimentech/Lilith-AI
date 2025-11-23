@@ -1,0 +1,63 @@
+{
+  "generated_at": 1759806142.544356,
+  "metric": "cosine",
+  "dim": 64,
+  "queries": 256,
+  "repeats": 3,
+  "results": [
+    {
+      "backend": "memory",
+      "size": 1000,
+      "add_mean": 3.7536005644748606e-05,
+      "add_std": 2.1994091812718198e-05,
+      "search_mean": 0.010860737655699873,
+      "search_std": 0.00848993290447247,
+      "samples": 3
+    },
+    {
+      "backend": "sqlite",
+      "size": 1000,
+      "add_mean": 0.1426007009965057,
+      "add_std": 0.022502849604286015,
+      "search_mean": 0.010066074658728516,
+      "search_std": 0.0012810462178049374,
+      "samples": 3
+    },
+    {
+      "backend": "memory",
+      "size": 5000,
+      "add_mean": 2.9300979804247618e-05,
+      "add_std": 5.502101739073422e-06,
+      "search_mean": 0.022300532010073464,
+      "search_std": 0.019159857245653292,
+      "samples": 3
+    },
+    {
+      "backend": "sqlite",
+      "size": 5000,
+      "add_mean": 0.3782131773380873,
+      "add_std": 0.0649384185405313,
+      "search_mean": 0.04505279400230696,
+      "search_std": 0.004848624765317743,
+      "samples": 3
+    },
+    {
+      "backend": "memory",
+      "size": 20000,
+      "add_mean": 2.5336679148798186e-05,
+      "add_std": 2.4645390458346366e-06,
+      "search_mean": 0.03138559532817453,
+      "search_std": 0.013635896904169852,
+      "samples": 3
+    },
+    {
+      "backend": "sqlite",
+      "size": 20000,
+      "add_mean": 0.8834117493339969,
+      "add_std": 0.03503625694710837,
+      "search_mean": 0.20250358733270937,
+      "search_std": 0.03126861203142105,
+      "samples": 3
+    }
+  ]
+}

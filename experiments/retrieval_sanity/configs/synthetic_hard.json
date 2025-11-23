@@ -1,0 +1,19 @@
+{
+  "label": "synthetic-hard",
+  "description": "Noisy synthetic configuration with more classes, fewer support points, and deeper PMFlow steps to stress retrieval.",
+  "overrides": {
+    "data-mode": "synthetic",
+    "num-classes": "6",
+    "points-per-class": "160",
+    "support-ratio": "0.4",
+    "cluster-std": "0.9",
+    "epochs": "120",
+    "latent-dim": "16",
+    "n-centers": "48",
+    "pm-steps": "6",
+    "pm-beta": "0.12",
+    "pm-dt": "0.05",
+    "pm-clamp": "4.0",
+    "metric": "cosine"
+  }
+}

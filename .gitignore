@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+
+# Experiment outputs
+runs/
+retrieval_plots/
+*.log
+chatlog
+
+# SQLite databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Model checkpoints and weights
+*.pt
+*.pth
+*.ckpt
+*.pkl
+*.pickle
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
+.cache/
+
+# Documentation builds
+docs/_build/
+site/
+
+# Pushing-Medium submodule (if using submodule approach)
+# Comment out if you want to track it
+Pushing-Medium/
+
+# Benchmarks output
+benchmarks/results/
+benchmarks/data/

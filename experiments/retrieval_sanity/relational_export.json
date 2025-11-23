@@ -1,0 +1,2434 @@
+{
+  "entries": [
+    {
+      "id": "mechanics_0",
+      "symbol": "mec_0",
+      "class": "mechanics",
+      "coords": [
+        3.5798208030599814,
+        -0.12405649066287754
+      ]
+    },
+    {
+      "id": "mechanics_1",
+      "symbol": "mec_1",
+      "class": "mechanics",
+      "coords": [
+        4.208372301606899,
+        0.05692048435005312
+      ]
+    },
+    {
+      "id": "mechanics_2",
+      "symbol": "mec_2",
+      "class": "mechanics",
+      "coords": [
+        3.674408641293471,
+        -0.2706069722128924
+      ]
+    },
+    {
+      "id": "mechanics_3",
+      "symbol": "mec_3",
+      "class": "mechanics",
+      "coords": [
+        2.8910367533525148,
+        -0.20289961915151913
+      ]
+    },
+    {
+      "id": "mechanics_4",
+      "symbol": "mec_4",
+      "class": "mechanics",
+      "coords": [
+        3.0417969041553734,
+        -0.4021853292097771
+      ]
+    },
+    {
+      "id": "mechanics_5",
+      "symbol": "mec_5",
+      "class": "mechanics",
+      "coords": [
+        3.951758384965769,
+        0.1866076441906833
+      ]
+    },
+    {
+      "id": "mechanics_6",
+      "symbol": "mec_6",
+      "class": "mechanics",
+      "coords": [
+        2.563684139068228,
+        0.6326641664912018
+      ]
+    },
+    {
+      "id": "mechanics_7",
+      "symbol": "mec_7",
+      "class": "mechanics",
+      "coords": [
+        2.7670832508074756,
+        -0.20747495465477234
+      ]
+    },
+    {
+      "id": "mechanics_8",
+      "symbol": "mec_8",
+      "class": "mechanics",
+      "coords": [
+        3.1106551401780878,
+        0.24751906660902306
+      ]
+    },
+    {
+      "id": "mechanics_9",
+      "symbol": "mec_9",
+      "class": "mechanics",
+      "coords": [
+        3.6325639268963252,
+        0.05826653726673047
+      ]
+    },
+    {
+      "id": "mechanics_10",
+      "symbol": "mec_10",
+      "class": "mechanics",
+      "coords": [
+        3.1960765910171705,
+        -0.04395566334235359
+      ]
+    },
+    {
+      "id": "mechanics_11",
+      "symbol": "mec_11",
+      "class": "mechanics",
+      "coords": [
+        2.4044286170794855,
+        -0.15726497229144631
+      ]
+    },
+    {
+      "id": "mechanics_12",
+      "symbol": "mec_12",
+      "class": "mechanics",
+      "coords": [
+        2.8092517668732055,
+        -0.14128460624229783
+      ]
+    },
+    {
+      "id": "mechanics_13",
+      "symbol": "mec_13",
+      "class": "mechanics",
+      "coords": [
+        2.616661348472803,
+        -0.20762479513615034
+      ]
+    },
+    {
+      "id": "mechanics_14",
+      "symbol": "mec_14",
+      "class": "mechanics",
+      "coords": [
+        2.2580530556875265,
+        -0.27468597797453576
+      ]
+    },
+    {
+      "id": "mechanics_15",
+      "symbol": "mec_15",
+      "class": "mechanics",
+      "coords": [
+        2.4883672917605955,
+        0.061252201360608056
+      ]
+    },
+    {
+      "id": "mechanics_16",
+      "symbol": "mec_16",
+      "class": "mechanics",
+      "coords": [
+        3.0068223947631987,
+        1.2806167397150265
+      ]
+    },
+    {
+      "id": "mechanics_17",
+      "symbol": "mec_17",
+      "class": "mechanics",
+      "coords": [
+        2.3527706111669433,
+        0.19516743667704975
+      ]
+    },
+    {
+      "id": "mechanics_18",
+      "symbol": "mec_18",
+      "class": "mechanics",
+      "coords": [
+        3.650351254358172,
+        0.07925222273279715
+      ]
+    },
+    {
+      "id": "mechanics_19",
+      "symbol": "mec_19",
+      "class": "mechanics",
+      "coords": [
+        3.3062366910327565,
+        0.011126889501622097
+      ]
+    },
+    {
+      "id": "mechanics_20",
+      "symbol": "mec_20",
+      "class": "mechanics",
+      "coords": [
+        2.4724069173907064,
+        0.09096337490410679
+      ]
+    },
+    {
+      "id": "mechanics_21",
+      "symbol": "mec_21",
+      "class": "mechanics",
+      "coords": [
+        3.689972689777314,
+        0.24437377114247674
+      ]
+    },
+    {
+      "id": "mechanics_22",
+      "symbol": "mec_22",
+      "class": "mechanics",
+      "coords": [
+        3.3612084019972905,
+        0.6021311259934315
+      ]
+    },
+    {
+      "id": "mechanics_23",
+      "symbol": "mec_23",
+      "class": "mechanics",
+      "coords": [
+        3.7982042987735882,
+        1.0190297004250826
+      ]
+    },
+    {
+      "id": "mechanics_24",
+      "symbol": "mec_24",
+      "class": "mechanics",
+      "coords": [
+        3.181306905692959,
+        -1.3674258509031685
+      ]
+    },
+    {
+      "id": "mechanics_25",
+      "symbol": "mec_25",
+      "class": "mechanics",
+      "coords": [
+        3.296495868316024,
+        0.364084369184417
+      ]
+    },
+    {
+      "id": "mechanics_26",
+      "symbol": "mec_26",
+      "class": "mechanics",
+      "coords": [
+        3.429145472281705,
+        0.10900712263502005
+      ]
+    },
+    {
+      "id": "mechanics_27",
+      "symbol": "mec_27",
+      "class": "mechanics",
+      "coords": [
+        3.1194799683380117,
+        -0.3222269427520932
+      ]
+    },
+    {
+      "id": "mechanics_28",
+      "symbol": "mec_28",
+      "class": "mechanics",
+      "coords": [
+        3.7721798033845224,
+        1.1296586857169988
+      ]
+    },
+    {
+      "id": "mechanics_29",
+      "symbol": "mec_29",
+      "class": "mechanics",
+      "coords": [
+        3.5881913602090014,
+        0.8602714187675156
+      ]
+    },
+    {
+      "id": "mechanics_30",
+      "symbol": "mec_30",
+      "class": "mechanics",
+      "coords": [
+        3.5254070998994926,
+        0.13864796011354824
+      ]
+    },
+    {
+      "id": "mechanics_31",
+      "symbol": "mec_31",
+      "class": "mechanics",
+      "coords": [
+        2.7054192307165286,
+        0.4076475432771806
+      ]
+    },
+    {
+      "id": "mechanics_32",
+      "symbol": "mec_32",
+      "class": "mechanics",
+      "coords": [
+        3.253573602033641,
+        -0.5715021907306193
+      ]
+    },
+    {
+      "id": "mechanics_33",
+      "symbol": "mec_33",
+      "class": "mechanics",
+      "coords": [
+        3.1273259083745066,
+        -0.6073295972819319
+      ]
+    },
+    {
+      "id": "mechanics_34",
+      "symbol": "mec_34",
+      "class": "mechanics",
+      "coords": [
+        3.466504848201612,
+        -1.0358996339676985
+      ]
+    },
+    {
+      "id": "mechanics_35",
+      "symbol": "mec_35",
+      "class": "mechanics",
+      "coords": [
+        2.109582369057332,
+        0.35515589224869787
+      ]
+    },
+    {
+      "id": "mechanics_36",
+      "symbol": "mec_36",
+      "class": "mechanics",
+      "coords": [
+        3.182201142616904,
+        -0.4229277869484582
+      ]
+    },
+    {
+      "id": "mechanics_37",
+      "symbol": "mec_37",
+      "class": "mechanics",
+      "coords": [
+        3.2509765476396852,
+        0.24745850298789798
+      ]
+    },
+    {
+      "id": "mechanics_38",
+      "symbol": "mec_38",
+      "class": "mechanics",
+      "coords": [
+        2.744649786489173,
+        0.10848691765289242
+      ]
+    },
+    {
+      "id": "mechanics_39",
+      "symbol": "mec_39",
+      "class": "mechanics",
+      "coords": [
+        1.9836810899760824,
+        -0.1925442215255284
+      ]
+    },
+    {
+      "id": "mechanics_40",
+      "symbol": "mec_40",
+      "class": "mechanics",
+      "coords": [
+        1.989551799385635,
+        0.09422713195922484
+      ]
+    },
+    {
+      "id": "mechanics_41",
+      "symbol": "mec_41",
+      "class": "mechanics",
+      "coords": [
+        2.5631776058236952,
+        -0.6550119210521076
+      ]
+    },
+    {
+      "id": "mechanics_42",
+      "symbol": "mec_42",
+      "class": "mechanics",
+      "coords": [
+        2.5169587062413474,
+        0.7074325222205865
+      ]
+    },
+    {
+      "id": "mechanics_43",
+      "symbol": "mec_43",
+      "class": "mechanics",
+      "coords": [
+        3.1182898502373084,
+        -0.299092234138822
+      ]
+    },
+    {
+      "id": "mechanics_44",
+      "symbol": "mec_44",
+      "class": "mechanics",
+      "coords": [
+        3.3649073097029865,
+        -0.23809229453562655
+      ]
+    },
+    {
+      "id": "mechanics_45",
+      "symbol": "mec_45",
+      "class": "mechanics",
+      "coords": [
+        3.59317234219354,
+        0.8710183235060427
+      ]
+    },
+    {
+      "id": "mechanics_46",
+      "symbol": "mec_46",
+      "class": "mechanics",
+      "coords": [
+        2.8176988858759477,
+        -0.9598485983291306
+      ]
+    },
+    {
+      "id": "mechanics_47",
+      "symbol": "mec_47",
+      "class": "mechanics",
+      "coords": [
+        2.8009858219734536,
+        0.06929846436905149
+      ]
+    },
+    {
+      "id": "mechanics_48",
+      "symbol": "mec_48",
+      "class": "mechanics",
+      "coords": [
+        2.863914339557671,
+        0.10522639049726354
+      ]
+    },
+    {
+      "id": "mechanics_49",
+      "symbol": "mec_49",
+      "class": "mechanics",
+      "coords": [
+        2.965542539686936,
+        0.14915590965744033
+      ]
+    },
+    {
+      "id": "mechanics_50",
+      "symbol": "mec_50",
+      "class": "mechanics",
+      "coords": [
+        2.7646053004215827,
+        -0.009937339736245835
+      ]
+    },
+    {
+      "id": "mechanics_51",
+      "symbol": "mec_51",
+      "class": "mechanics",
+      "coords": [
+        3.777908370360982,
+        -0.34932469328063387
+      ]
+    },
+    {
+      "id": "mechanics_52",
+      "symbol": "mec_52",
+      "class": "mechanics",
+      "coords": [
+        2.4586935797824965,
+        1.2092579366066234
+      ]
+    },
+    {
+      "id": "mechanics_53",
+      "symbol": "mec_53",
+      "class": "mechanics",
+      "coords": [
+        3.388134721458223,
+        0.1715272778288722
+      ]
+    },
+    {
+      "id": "mechanics_54",
+      "symbol": "mec_54",
+      "class": "mechanics",
+      "coords": [
+        3.5198760544756666,
+        0.2567115542803664
+      ]
+    },
+    {
+      "id": "mechanics_55",
+      "symbol": "mec_55",
+      "class": "mechanics",
+      "coords": [
+        3.1645710793624877,
+        0.5278200134648193
+      ]
+    },
+    {
+      "id": "mechanics_56",
+      "symbol": "mec_56",
+      "class": "mechanics",
+      "coords": [
+        2.6783687890416936,
+        -1.1034357375274888
+      ]
+    },
+    {
+      "id": "mechanics_57",
+      "symbol": "mec_57",
+      "class": "mechanics",
+      "coords": [
+        1.9838668804447364,
+        -0.003305899593468079
+      ]
+    },
+    {
+      "id": "mechanics_58",
+      "symbol": "mec_58",
+      "class": "mechanics",
+      "coords": [
+        2.299865903998122,
+        0.8328621682966496
+      ]
+    },
+    {
+      "id": "mechanics_59",
+      "symbol": "mec_59",
+      "class": "mechanics",
+      "coords": [
+        2.147491580318043,
+        -0.08077047191758024
+      ]
+    },
+    {
+      "id": "mechanics_60",
+      "symbol": "mec_60",
+      "class": "mechanics",
+      "coords": [
+        3.332202433447134,
+        0.6488556871019274
+      ]
+    },
+    {
+      "id": "mechanics_61",
+      "symbol": "mec_61",
+      "class": "mechanics",
+      "coords": [
+        2.678171204031324,
+        0.9541052691657478
+      ]
+    },
+    {
+      "id": "mechanics_62",
+      "symbol": "mec_62",
+      "class": "mechanics",
+      "coords": [
+        2.367817060081152,
+        -0.13856268891510315
+      ]
+    },
+    {
+      "id": "mechanics_63",
+      "symbol": "mec_63",
+      "class": "mechanics",
+      "coords": [
+        3.101363319882895,
+        -0.6866737422349245
+      ]
+    },
+    {
+      "id": "mechanics_64",
+      "symbol": "mec_64",
+      "class": "mechanics",
+      "coords": [
+        2.853636919263336,
+        0.2519532906435059
+      ]
+    },
+    {
+      "id": "mechanics_65",
+      "symbol": "mec_65",
+      "class": "mechanics",
+      "coords": [
+        2.1112771147588374,
+        -0.8832228307614163
+      ]
+    },
+    {
+      "id": "mechanics_66",
+      "symbol": "mec_66",
+      "class": "mechanics",
+      "coords": [
+        3.1146494906535622,
+        -0.17492287238489765
+      ]
+    },
+    {
+      "id": "mechanics_67",
+      "symbol": "mec_67",
+      "class": "mechanics",
+      "coords": [
+        2.9853556188618278,
+        0.02861433711421824
+      ]
+    },
+    {
+      "id": "mechanics_68",
+      "symbol": "mec_68",
+      "class": "mechanics",
+      "coords": [
+        2.642580492371007,
+        -0.6981882433937768
+      ]
+    },
+    {
+      "id": "mechanics_69",
+      "symbol": "mec_69",
+      "class": "mechanics",
+      "coords": [
+        3.015477914211067,
+        -0.31121869487832166
+      ]
+    },
+    {
+      "id": "mechanics_70",
+      "symbol": "mec_70",
+      "class": "mechanics",
+      "coords": [
+        3.120450155399836,
+        0.5731696933182431
+      ]
+    },
+    {
+      "id": "mechanics_71",
+      "symbol": "mec_71",
+      "class": "mechanics",
+      "coords": [
+        2.9687813618357164,
+        -0.373410080697321
+      ]
+    },
+    {
+      "id": "mechanics_72",
+      "symbol": "mec_72",
+      "class": "mechanics",
+      "coords": [
+        3.2380955499080812,
+        -0.48342045341305767
+      ]
+    },
+    {
+      "id": "mechanics_73",
+      "symbol": "mec_73",
+      "class": "mechanics",
+      "coords": [
+        3.982423410211772,
+        -0.9912806268958779
+      ]
+    },
+    {
+      "id": "mechanics_74",
+      "symbol": "mec_74",
+      "class": "mechanics",
+      "coords": [
+        1.7947911335594429,
+        -0.2892467017182605
+      ]
+    },
+    {
+      "id": "mechanics_75",
+      "symbol": "mec_75",
+      "class": "mechanics",
+      "coords": [
+        2.2620451091410287,
+        0.3934806775567319
+      ]
+    },
+    {
+      "id": "mechanics_76",
+      "symbol": "mec_76",
+      "class": "mechanics",
+      "coords": [
+        3.6009880823740565,
+        -0.8619069847882913
+      ]
+    },
+    {
+      "id": "mechanics_77",
+      "symbol": "mec_77",
+      "class": "mechanics",
+      "coords": [
+        3.3564410630443096,
+        0.23532225229753959
+      ]
+    },
+    {
+      "id": "mechanics_78",
+      "symbol": "mec_78",
+      "class": "mechanics",
+      "coords": [
+        2.0818170578949213,
+        0.5806107078022478
+      ]
+    },
+    {
+      "id": "mechanics_79",
+      "symbol": "mec_79",
+      "class": "mechanics",
+      "coords": [
+        2.9547991368475928,
+        0.266471042015221
+      ]
+    },
+    {
+      "id": "mechanics_80",
+      "symbol": "mec_80",
+      "class": "mechanics",
+      "coords": [
+        2.729599619461277,
+        0.26921894638997745
+      ]
+    },
+    {
+      "id": "mechanics_81",
+      "symbol": "mec_81",
+      "class": "mechanics",
+      "coords": [
+        2.8458847911660703,
+        -0.7155427998838609
+      ]
+    },
+    {
+      "id": "mechanics_82",
+      "symbol": "mec_82",
+      "class": "mechanics",
+      "coords": [
+        4.06616169382562,
+        0.36502090938304194
+      ]
+    },
+    {
+      "id": "mechanics_83",
+      "symbol": "mec_83",
+      "class": "mechanics",
+      "coords": [
+        2.1130284374753514,
+        0.3476033476885322
+      ]
+    },
+    {
+      "id": "mechanics_84",
+      "symbol": "mec_84",
+      "class": "mechanics",
+      "coords": [
+        3.2393871477557443,
+        0.40664949988620996
+      ]
+    },
+    {
+      "id": "mechanics_85",
+      "symbol": "mec_85",
+      "class": "mechanics",
+      "coords": [
+        3.49388802443297,
+        0.24514091487675735
+      ]
+    },
+    {
+      "id": "mechanics_86",
+      "symbol": "mec_86",
+      "class": "mechanics",
+      "coords": [
+        2.2483035032728766,
+        0.36002790110255994
+      ]
+    },
+    {
+      "id": "mechanics_87",
+      "symbol": "mec_87",
+      "class": "mechanics",
+      "coords": [
+        2.44818328050063,
+        0.07116292446441323
+      ]
+    },
+    {
+      "id": "mechanics_88",
+      "symbol": "mec_88",
+      "class": "mechanics",
+      "coords": [
+        2.5572829229781338,
+        0.061697398490017936
+      ]
+    },
+    {
+      "id": "mechanics_89",
+      "symbol": "mec_89",
+      "class": "mechanics",
+      "coords": [
+        2.4915982253155606,
+        0.5446382113814628
+      ]
+    },
+    {
+      "id": "electromagnetism_0",
+      "symbol": "ele_0",
+      "class": "electromagnetism",
+      "coords": [
+        -1.318678981905726,
+        3.2381889418706704
+      ]
+    },
+    {
+      "id": "electromagnetism_1",
+      "symbol": "ele_1",
+      "class": "electromagnetism",
+      "coords": [
+        -0.9502187625380857,
+        2.337986424360274
+      ]
+    },
+    {
+      "id": "electromagnetism_2",
+      "symbol": "ele_2",
+      "class": "electromagnetism",
+      "coords": [
+        -1.8966104237432644,
+        1.8944420345785957
+      ]
+    },
+    {
+      "id": "electromagnetism_3",
+      "symbol": "ele_3",
+      "class": "electromagnetism",
+      "coords": [
+        -1.2195892985773515,
+        1.7592512498057964
+      ]
+    },
+    {
+      "id": "electromagnetism_4",
+      "symbol": "ele_4",
+      "class": "electromagnetism",
+      "coords": [
+        -1.636942592126229,
+        2.3801553705667766
+      ]
+    },
+    {
+      "id": "electromagnetism_5",
+      "symbol": "ele_5",
+      "class": "electromagnetism",
+      "coords": [
+        -2.154095301200629,
+        3.3248248504075675
+      ]
+    },
+    {
+      "id": "electromagnetism_6",
+      "symbol": "ele_6",
+      "class": "electromagnetism",
+      "coords": [
+        -1.2228981089352595,
+        2.7183875255730623
+      ]
+    },
+    {
+      "id": "electromagnetism_7",
+      "symbol": "ele_7",
+      "class": "electromagnetism",
+      "coords": [
+        -0.8932659654540268,
+        2.1877443000760635
+      ]
+    },
+    {
+      "id": "electromagnetism_8",
+      "symbol": "ele_8",
+      "class": "electromagnetism",
+      "coords": [
+        -0.5865747718110824,
+        2.4836676606868817
+      ]
+    },
+    {
+      "id": "electromagnetism_9",
+      "symbol": "ele_9",
+      "class": "electromagnetism",
+      "coords": [
+        -1.036925328838366,
+        2.585497752215554
+      ]
+    },
+    {
+      "id": "electromagnetism_10",
+      "symbol": "ele_10",
+      "class": "electromagnetism",
+      "coords": [
+        -1.6926948641444903,
+        2.144548186317885
+      ]
+    },
+    {
+      "id": "electromagnetism_11",
+      "symbol": "ele_11",
+      "class": "electromagnetism",
+      "coords": [
+        -1.067446370125276,
+        2.445319137173542
+      ]
+    },
+    {
+      "id": "electromagnetism_12",
+      "symbol": "ele_12",
+      "class": "electromagnetism",
+      "coords": [
+        -1.1555501221351028,
+        3.5467042364990973
+      ]
+    },
+    {
+      "id": "electromagnetism_13",
+      "symbol": "ele_13",
+      "class": "electromagnetism",
+      "coords": [
+        -1.623312626320844,
+        3.266505216404096
+      ]
+    },
+    {
+      "id": "electromagnetism_14",
+      "symbol": "ele_14",
+      "class": "electromagnetism",
+      "coords": [
+        -1.901241800634684,
+        2.297981764431977
+      ]
+    },
+    {
+      "id": "electromagnetism_15",
+      "symbol": "ele_15",
+      "class": "electromagnetism",
+      "coords": [
+        -1.7443780622268914,
+        3.015868074998021
+      ]
+    },
+    {
+      "id": "electromagnetism_16",
+      "symbol": "ele_16",
+      "class": "electromagnetism",
+      "coords": [
+        -1.601937977738266,
+        3.52121685622172
+      ]
+    },
+    {
+      "id": "electromagnetism_17",
+      "symbol": "ele_17",
+      "class": "electromagnetism",
+      "coords": [
+        -2.0872108769891122,
+        2.2293951711509057
+      ]
+    },
+    {
+      "id": "electromagnetism_18",
+      "symbol": "ele_18",
+      "class": "electromagnetism",
+      "coords": [
+        -1.309520003917298,
+        2.2191819578010956
+      ]
+    },
+    {
+      "id": "electromagnetism_19",
+      "symbol": "ele_19",
+      "class": "electromagnetism",
+      "coords": [
+        -1.4140259723783393,
+        2.698206820573561
+      ]
+    },
+    {
+      "id": "electromagnetism_20",
+      "symbol": "ele_20",
+      "class": "electromagnetism",
+      "coords": [
+        0.13570209806873268,
+        2.989186387519646
+      ]
+    },
+    {
+      "id": "electromagnetism_21",
+      "symbol": "ele_21",
+      "class": "electromagnetism",
+      "coords": [
+        -0.6958158124089714,
+        2.4645591635032047
+      ]
+    },
+    {
+      "id": "electromagnetism_22",
+      "symbol": "ele_22",
+      "class": "electromagnetism",
+      "coords": [
+        -0.8388738870571142,
+        2.5592352241071783
+      ]
+    },
+    {
+      "id": "electromagnetism_23",
+      "symbol": "ele_23",
+      "class": "electromagnetism",
+      "coords": [
+        -2.1067423284546125,
+        2.8626518586424314
+      ]
+    },
+    {
+      "id": "electromagnetism_24",
+      "symbol": "ele_24",
+      "class": "electromagnetism",
+      "coords": [
+        -0.6572770185622451,
+        2.988162787306411
+      ]
+    },
+    {
+      "id": "electromagnetism_25",
+      "symbol": "ele_25",
+      "class": "electromagnetism",
+      "coords": [
+        -1.7891470281970316,
+        3.3986627308076307
+      ]
+    },
+    {
+      "id": "electromagnetism_26",
+      "symbol": "ele_26",
+      "class": "electromagnetism",
+      "coords": [
+        -1.1736342714349444,
+        2.3895248899784836
+      ]
+    },
+    {
+      "id": "electromagnetism_27",
+      "symbol": "ele_27",
+      "class": "electromagnetism",
+      "coords": [
+        -2.3000709442336493,
+        2.576071142208405
+      ]
+    },
+    {
+      "id": "electromagnetism_28",
+      "symbol": "ele_28",
+      "class": "electromagnetism",
+      "coords": [
+        -1.1885388380448694,
+        1.8250470497106792
+      ]
+    },
+    {
+      "id": "electromagnetism_29",
+      "symbol": "ele_29",
+      "class": "electromagnetism",
+      "coords": [
+        -1.8457424590159042,
+        3.2168896949980215
+      ]
+    },
+    {
+      "id": "electromagnetism_30",
+      "symbol": "ele_30",
+      "class": "electromagnetism",
+      "coords": [
+        -1.162046618900775,
+        3.1498328274078347
+      ]
+    },
+    {
+      "id": "electromagnetism_31",
+      "symbol": "ele_31",
+      "class": "electromagnetism",
+      "coords": [
+        -0.24736413018155257,
+        2.1025602126540304
+      ]
+    },
+    {
+      "id": "electromagnetism_32",
+      "symbol": "ele_32",
+      "class": "electromagnetism",
+      "coords": [
+        -1.0675827831491795,
+        3.1203689936825345
+      ]
+    },
+    {
+      "id": "electromagnetism_33",
+      "symbol": "ele_33",
+      "class": "electromagnetism",
+      "coords": [
+        -1.7250462107945368,
+        2.3871111624628574
+      ]
+    },
+    {
+      "id": "electromagnetism_34",
+      "symbol": "ele_34",
+      "class": "electromagnetism",
+      "coords": [
+        -1.1102354093305813,
+        2.4686963657855916
+      ]
+    },
+    {
+      "id": "electromagnetism_35",
+      "symbol": "ele_35",
+      "class": "electromagnetism",
+      "coords": [
+        -1.1646459211177773,
+        3.1590792811471027
+      ]
+    },
+    {
+      "id": "electromagnetism_36",
+      "symbol": "ele_36",
+      "class": "electromagnetism",
+      "coords": [
+        -2.4473150488548043,
+        2.568284149151718
+      ]
+    },
+    {
+      "id": "electromagnetism_37",
+      "symbol": "ele_37",
+      "class": "electromagnetism",
+      "coords": [
+        -1.2047215482068525,
+        2.2082683276129544
+      ]
+    },
+    {
+      "id": "electromagnetism_38",
+      "symbol": "ele_38",
+      "class": "electromagnetism",
+      "coords": [
+        -1.6832962731914212,
+        1.9158235593690296
+      ]
+    },
+    {
+      "id": "electromagnetism_39",
+      "symbol": "ele_39",
+      "class": "electromagnetism",
+      "coords": [
+        -2.225743234596571,
+        2.435464433474579
+      ]
+    },
+    {
+      "id": "electromagnetism_40",
+      "symbol": "ele_40",
+      "class": "electromagnetism",
+      "coords": [
+        -2.0003983346943635,
+        2.7734937054228137
+      ]
+    },
+    {
+      "id": "electromagnetism_41",
+      "symbol": "ele_41",
+      "class": "electromagnetism",
+      "coords": [
+        -0.6563582867893667,
+        2.1992948350279686
+      ]
+    },
+    {
+      "id": "electromagnetism_42",
+      "symbol": "ele_42",
+      "class": "electromagnetism",
+      "coords": [
+        -2.0151038152372722,
+        1.5733258963229957
+      ]
+    },
+    {
+      "id": "electromagnetism_43",
+      "symbol": "ele_43",
+      "class": "electromagnetism",
+      "coords": [
+        -1.6674440642052288,
+        2.469799701996914
+      ]
+    },
+    {
+      "id": "electromagnetism_44",
+      "symbol": "ele_44",
+      "class": "electromagnetism",
+      "coords": [
+        -1.3629167861957319,
+        3.579974464913919
+      ]
+    },
+    {
+      "id": "electromagnetism_45",
+      "symbol": "ele_45",
+      "class": "electromagnetism",
+      "coords": [
+        -2.2405125619097026,
+        3.670425721953321
+      ]
+    },
+    {
+      "id": "electromagnetism_46",
+      "symbol": "ele_46",
+      "class": "electromagnetism",
+      "coords": [
+        -1.7008730947481316,
+        2.099424425475361
+      ]
+    },
+    {
+      "id": "electromagnetism_47",
+      "symbol": "ele_47",
+      "class": "electromagnetism",
+      "coords": [
+        -1.680350347545558,
+        2.6062566237275187
+      ]
+    },
+    {
+      "id": "electromagnetism_48",
+      "symbol": "ele_48",
+      "class": "electromagnetism",
+      "coords": [
+        -1.7130006219865375,
+        2.6701429817075426
+      ]
+    },
+    {
+      "id": "electromagnetism_49",
+      "symbol": "ele_49",
+      "class": "electromagnetism",
+      "coords": [
+        -1.839155716922441,
+        3.817802876962824
+      ]
+    },
+    {
+      "id": "electromagnetism_50",
+      "symbol": "ele_50",
+      "class": "electromagnetism",
+      "coords": [
+        -1.0052256149108918,
+        3.2604626597309796
+      ]
+    },
+    {
+      "id": "electromagnetism_51",
+      "symbol": "ele_51",
+      "class": "electromagnetism",
+      "coords": [
+        -1.9934763808247813,
+        1.9117354753134146
+      ]
+    },
+    {
+      "id": "electromagnetism_52",
+      "symbol": "ele_52",
+      "class": "electromagnetism",
+      "coords": [
+        -1.196857309192207,
+        1.5415343168683846
+      ]
+    },
+    {
+      "id": "electromagnetism_53",
+      "symbol": "ele_53",
+      "class": "electromagnetism",
+      "coords": [
+        -1.8290502788077558,
+        3.0135451408228464
+      ]
+    },
+    {
+      "id": "electromagnetism_54",
+      "symbol": "ele_54",
+      "class": "electromagnetism",
+      "coords": [
+        -1.1391809381700404,
+        3.2958886516907056
+      ]
+    },
+    {
+      "id": "electromagnetism_55",
+      "symbol": "ele_55",
+      "class": "electromagnetism",
+      "coords": [
+        -1.414571994768867,
+        2.9516646619278357
+      ]
+    },
+    {
+      "id": "electromagnetism_56",
+      "symbol": "ele_56",
+      "class": "electromagnetism",
+      "coords": [
+        -0.7359372817691137,
+        2.5504503634917555
+      ]
+    },
+    {
+      "id": "electromagnetism_57",
+      "symbol": "ele_57",
+      "class": "electromagnetism",
+      "coords": [
+        -1.578760505951275,
+        1.953560689832726
+      ]
+    },
+    {
+      "id": "electromagnetism_58",
+      "symbol": "ele_58",
+      "class": "electromagnetism",
+      "coords": [
+        -0.6873463975484901,
+        3.491175622766612
+      ]
+    },
+    {
+      "id": "electromagnetism_59",
+      "symbol": "ele_59",
+      "class": "electromagnetism",
+      "coords": [
+        -1.6019082781805247,
+        2.4554762866414523
+      ]
+    },
+    {
+      "id": "electromagnetism_60",
+      "symbol": "ele_60",
+      "class": "electromagnetism",
+      "coords": [
+        -0.9701048294576823,
+        2.280132791667966
+      ]
+    },
+    {
+      "id": "electromagnetism_61",
+      "symbol": "ele_61",
+      "class": "electromagnetism",
+      "coords": [
+        -1.933395098878558,
+        2.292423169505047
+      ]
+    },
+    {
+      "id": "electromagnetism_62",
+      "symbol": "ele_62",
+      "class": "electromagnetism",
+      "coords": [
+        -2.2604985835903246,
+        3.175419789734009
+      ]
+    },
+    {
+      "id": "electromagnetism_63",
+      "symbol": "ele_63",
+      "class": "electromagnetism",
+      "coords": [
+        -1.4927614005375465,
+        2.6706135447954105
+      ]
+    },
+    {
+      "id": "electromagnetism_64",
+      "symbol": "ele_64",
+      "class": "electromagnetism",
+      "coords": [
+        -2.114133151678269,
+        4.074179168279093
+      ]
+    },
+    {
+      "id": "electromagnetism_65",
+      "symbol": "ele_65",
+      "class": "electromagnetism",
+      "coords": [
+        -0.9588343776407131,
+        3.1093030390810106
+      ]
+    },
+    {
+      "id": "electromagnetism_66",
+      "symbol": "ele_66",
+      "class": "electromagnetism",
+      "coords": [
+        -1.0502826374183756,
+        2.0884692610478757
+      ]
+    },
+    {
+      "id": "electromagnetism_67",
+      "symbol": "ele_67",
+      "class": "electromagnetism",
+      "coords": [
+        -2.0681113252669876,
+        2.219429637285597
+      ]
+    },
+    {
+      "id": "electromagnetism_68",
+      "symbol": "ele_68",
+      "class": "electromagnetism",
+      "coords": [
+        -1.7289671342677992,
+        3.0674191745974575
+      ]
+    },
+    {
+      "id": "electromagnetism_69",
+      "symbol": "ele_69",
+      "class": "electromagnetism",
+      "coords": [
+        -0.7226786299682868,
+        2.211847057431539
+      ]
+    },
+    {
+      "id": "electromagnetism_70",
+      "symbol": "ele_70",
+      "class": "electromagnetism",
+      "coords": [
+        -1.8794096934708864,
+        2.1233742577235803
+      ]
+    },
+    {
+      "id": "electromagnetism_71",
+      "symbol": "ele_71",
+      "class": "electromagnetism",
+      "coords": [
+        -0.5459435405568409,
+        2.0007565477549853
+      ]
+    },
+    {
+      "id": "electromagnetism_72",
+      "symbol": "ele_72",
+      "class": "electromagnetism",
+      "coords": [
+        -0.8257837934735103,
+        2.456900843910429
+      ]
+    },
+    {
+      "id": "electromagnetism_73",
+      "symbol": "ele_73",
+      "class": "electromagnetism",
+      "coords": [
+        -1.801296230799848,
+        2.7929966602976433
+      ]
+    },
+    {
+      "id": "electromagnetism_74",
+      "symbol": "ele_74",
+      "class": "electromagnetism",
+      "coords": [
+        -1.6620816440637967,
+        3.6923626304033244
+      ]
+    },
+    {
+      "id": "electromagnetism_75",
+      "symbol": "ele_75",
+      "class": "electromagnetism",
+      "coords": [
+        -0.891192924571813,
+        3.779073613810543
+      ]
+    },
+    {
+      "id": "electromagnetism_76",
+      "symbol": "ele_76",
+      "class": "electromagnetism",
+      "coords": [
+        -2.4127477364896754,
+        2.047712267396081
+      ]
+    },
+    {
+      "id": "electromagnetism_77",
+      "symbol": "ele_77",
+      "class": "electromagnetism",
+      "coords": [
+        -2.4056740260333727,
+        2.424596408908635
+      ]
+    },
+    {
+      "id": "electromagnetism_78",
+      "symbol": "ele_78",
+      "class": "electromagnetism",
+      "coords": [
+        -2.380994298972672,
+        2.0604278104910816
+      ]
+    },
+    {
+      "id": "electromagnetism_79",
+      "symbol": "ele_79",
+      "class": "electromagnetism",
+      "coords": [
+        -2.3792047013116977,
+        2.5186759318768512
+      ]
+    },
+    {
+      "id": "electromagnetism_80",
+      "symbol": "ele_80",
+      "class": "electromagnetism",
+      "coords": [
+        -1.3246767762369507,
+        2.0963695638767557
+      ]
+    },
+    {
+      "id": "electromagnetism_81",
+      "symbol": "ele_81",
+      "class": "electromagnetism",
+      "coords": [
+        -0.8408325622178987,
+        3.0935362176181473
+      ]
+    },
+    {
+      "id": "electromagnetism_82",
+      "symbol": "ele_82",
+      "class": "electromagnetism",
+      "coords": [
+        -0.8858038682690303,
+        1.755819387339062
+      ]
+    },
+    {
+      "id": "electromagnetism_83",
+      "symbol": "ele_83",
+      "class": "electromagnetism",
+      "coords": [
+        -0.8275088006761375,
+        3.288053765789879
+      ]
+    },
+    {
+      "id": "electromagnetism_84",
+      "symbol": "ele_84",
+      "class": "electromagnetism",
+      "coords": [
+        -2.1896016518197765,
+        2.649710553997342
+      ]
+    },
+    {
+      "id": "electromagnetism_85",
+      "symbol": "ele_85",
+      "class": "electromagnetism",
+      "coords": [
+        -0.8628190521737228,
+        3.2925100674988137
+      ]
+    },
+    {
+      "id": "electromagnetism_86",
+      "symbol": "ele_86",
+      "class": "electromagnetism",
+      "coords": [
+        -1.4410360418468569,
+        3.4477314802333776
+      ]
+    },
+    {
+      "id": "electromagnetism_87",
+      "symbol": "ele_87",
+      "class": "electromagnetism",
+      "coords": [
+        -2.2036313661128686,
+        3.7826152525881143
+      ]
+    },
+    {
+      "id": "electromagnetism_88",
+      "symbol": "ele_88",
+      "class": "electromagnetism",
+      "coords": [
+        -1.6233724024695286,
+        2.09802295134482
+      ]
+    },
+    {
+      "id": "electromagnetism_89",
+      "symbol": "ele_89",
+      "class": "electromagnetism",
+      "coords": [
+        -1.8392506569812017,
+        2.492427716176212
+      ]
+    },
+    {
+      "id": "thermodynamics_0",
+      "symbol": "the_0",
+      "class": "thermodynamics",
+      "coords": [
+        -2.753928318362642,
+        -2.382675201547104
+      ]
+    },
+    {
+      "id": "thermodynamics_1",
+      "symbol": "the_1",
+      "class": "thermodynamics",
+      "coords": [
+        -1.064586395346809,
+        -2.806245319840836
+      ]
+    },
+    {
+      "id": "thermodynamics_2",
+      "symbol": "the_2",
+      "class": "thermodynamics",
+      "coords": [
+        -2.126289335316095,
+        -2.357279143921191
+      ]
+    },
+    {
+      "id": "thermodynamics_3",
+      "symbol": "the_3",
+      "class": "thermodynamics",
+      "coords": [
+        -3.1118301229956966,
+        -3.0029716237350086
+      ]
+    },
+    {
+      "id": "thermodynamics_4",
+      "symbol": "the_4",
+      "class": "thermodynamics",
+      "coords": [
+        -1.1870178492657462,
+        -2.4106561851259056
+      ]
+    },
+    {
+      "id": "thermodynamics_5",
+      "symbol": "the_5",
+      "class": "thermodynamics",
+      "coords": [
+        -1.8879637629153214,
+        -2.909713383616382
+      ]
+    },
+    {
+      "id": "thermodynamics_6",
+      "symbol": "the_6",
+      "class": "thermodynamics",
+      "coords": [
+        -2.1095468659016463,
+        -2.0092777040453056
+      ]
+    },
+    {
+      "id": "thermodynamics_7",
+      "symbol": "the_7",
+      "class": "thermodynamics",
+      "coords": [
+        -1.4581671834796197,
+        -2.470434279617217
+      ]
+    },
+    {
+      "id": "thermodynamics_8",
+      "symbol": "the_8",
+      "class": "thermodynamics",
+      "coords": [
+        -1.0286439611947065,
+        -2.6854453252023447
+      ]
+    },
+    {
+      "id": "thermodynamics_9",
+      "symbol": "the_9",
+      "class": "thermodynamics",
+      "coords": [
+        -1.3491972144900628,
+        -2.488872548599518
+      ]
+    },
+    {
+      "id": "thermodynamics_10",
+      "symbol": "the_10",
+      "class": "thermodynamics",
+      "coords": [
+        -1.7471364587930833,
+        -3.120248213717823
+      ]
+    },
+    {
+      "id": "thermodynamics_11",
+      "symbol": "the_11",
+      "class": "thermodynamics",
+      "coords": [
+        -2.322319464067358,
+        -1.3015111328552709
+      ]
+    },
+    {
+      "id": "thermodynamics_12",
+      "symbol": "the_12",
+      "class": "thermodynamics",
+      "coords": [
+        -0.7126781421347763,
+        -2.9710040313074013
+      ]
+    },
+    {
+      "id": "thermodynamics_13",
+      "symbol": "the_13",
+      "class": "thermodynamics",
+      "coords": [
+        -1.2285954688441407,
+        -2.788736820611311
+      ]
+    },
+    {
+      "id": "thermodynamics_14",
+      "symbol": "the_14",
+      "class": "thermodynamics",
+      "coords": [
+        -1.427754970697555,
+        -2.610718331798883
+      ]
+    },
+    {
+      "id": "thermodynamics_15",
+      "symbol": "the_15",
+      "class": "thermodynamics",
+      "coords": [
+        -2.5190935533836933,
+        -3.3057279023398394
+      ]
+    },
+    {
+      "id": "thermodynamics_16",
+      "symbol": "the_16",
+      "class": "thermodynamics",
+      "coords": [
+        -0.7759289408196095,
+        -3.058384099346036
+      ]
+    },
+    {
+      "id": "thermodynamics_17",
+      "symbol": "the_17",
+      "class": "thermodynamics",
+      "coords": [
+        -0.8258953744563,
+        -2.9361515254655277
+      ]
+    },
+    {
+      "id": "thermodynamics_18",
+      "symbol": "the_18",
+      "class": "thermodynamics",
+      "coords": [
+        -0.8108582979672939,
+        -1.5690273477805736
+      ]
+    },
+    {
+      "id": "thermodynamics_19",
+      "symbol": "the_19",
+      "class": "thermodynamics",
+      "coords": [
+        -1.292861260768753,
+        -2.0305933795816453
+      ]
+    },
+    {
+      "id": "thermodynamics_20",
+      "symbol": "the_20",
+      "class": "thermodynamics",
+      "coords": [
+        -2.110952642388616,
+        -2.3782482847825204
+      ]
+    },
+    {
+      "id": "thermodynamics_21",
+      "symbol": "the_21",
+      "class": "thermodynamics",
+      "coords": [
+        -1.7247973547658066,
+        -2.225466518148073
+      ]
+    },
+    {
+      "id": "thermodynamics_22",
+      "symbol": "the_22",
+      "class": "thermodynamics",
+      "coords": [
+        -1.079800443870826,
+        -2.950563031512086
+      ]
+    },
+    {
+      "id": "thermodynamics_23",
+      "symbol": "the_23",
+      "class": "thermodynamics",
+      "coords": [
+        -1.7527262801491612,
+        -3.1877610293421124
+      ]
+    },
+    {
+      "id": "thermodynamics_24",
+      "symbol": "the_24",
+      "class": "thermodynamics",
+      "coords": [
+        -1.4934480545415185,
+        -2.1464823726029674
+      ]
+    },
+    {
+      "id": "thermodynamics_25",
+      "symbol": "the_25",
+      "class": "thermodynamics",
+      "coords": [
+        -0.33037161094373024,
+        -2.819707547662954
+      ]
+    },
+    {
+      "id": "thermodynamics_26",
+      "symbol": "the_26",
+      "class": "thermodynamics",
+      "coords": [
+        -1.2805680999370188,
+        -2.263429393938877
+      ]
+    },
+    {
+      "id": "thermodynamics_27",
+      "symbol": "the_27",
+      "class": "thermodynamics",
+      "coords": [
+        -0.30027567115803055,
+        -2.914547806888139
+      ]
+    },
+    {
+      "id": "thermodynamics_28",
+      "symbol": "the_28",
+      "class": "thermodynamics",
+      "coords": [
+        -1.9184124060527217,
+        -2.0505217301021346
+      ]
+    },
+    {
+      "id": "thermodynamics_29",
+      "symbol": "the_29",
+      "class": "thermodynamics",
+      "coords": [
+        -2.0395873205702832,
+        -2.344569717797536
+      ]
+    },
+    {
+      "id": "thermodynamics_30",
+      "symbol": "the_30",
+      "class": "thermodynamics",
+      "coords": [
+        -2.4103550933266495,
+        -2.8931012769186215
+      ]
+    },
+    {
+      "id": "thermodynamics_31",
+      "symbol": "the_31",
+      "class": "thermodynamics",
+      "coords": [
+        -1.6735438277744155,
+        -3.455119916778483
+      ]
+    },
+    {
+      "id": "thermodynamics_32",
+      "symbol": "the_32",
+      "class": "thermodynamics",
+      "coords": [
+        -1.128330465811783,
+        -2.4208516714060133
+      ]
+    },
+    {
+      "id": "thermodynamics_33",
+      "symbol": "the_33",
+      "class": "thermodynamics",
+      "coords": [
+        -2.026841767139468,
+        -3.290291566753264
+      ]
+    },
+    {
+      "id": "thermodynamics_34",
+      "symbol": "the_34",
+      "class": "thermodynamics",
+      "coords": [
+        -2.4524069145477596,
+        -2.5107721985814275
+      ]
+    },
+    {
+      "id": "thermodynamics_35",
+      "symbol": "the_35",
+      "class": "thermodynamics",
+      "coords": [
+        -0.6864694963230699,
+        -2.8252747133189677
+      ]
+    },
+    {
+      "id": "thermodynamics_36",
+      "symbol": "the_36",
+      "class": "thermodynamics",
+      "coords": [
+        -1.2576314215146207,
+        -3.02362364962207
+      ]
+    },
+    {
+      "id": "thermodynamics_37",
+      "symbol": "the_37",
+      "class": "thermodynamics",
+      "coords": [
+        -1.2265467988778012,
+        -3.204068685826668
+      ]
+    },
+    {
+      "id": "thermodynamics_38",
+      "symbol": "the_38",
+      "class": "thermodynamics",
+      "coords": [
+        -1.2146860845435299,
+        -3.380551370627412
+      ]
+    },
+    {
+      "id": "thermodynamics_39",
+      "symbol": "the_39",
+      "class": "thermodynamics",
+      "coords": [
+        -1.8068154429415215,
+        -1.7063048801759806
+      ]
+    },
+    {
+      "id": "thermodynamics_40",
+      "symbol": "the_40",
+      "class": "thermodynamics",
+      "coords": [
+        -1.300811824200447,
+        -3.215302459431172
+      ]
+    },
+    {
+      "id": "thermodynamics_41",
+      "symbol": "the_41",
+      "class": "thermodynamics",
+      "coords": [
+        -1.1671318561403434,
+        -2.180961412483728
+      ]
+    },
+    {
+      "id": "thermodynamics_42",
+      "symbol": "the_42",
+      "class": "thermodynamics",
+      "coords": [
+        -1.367942381147639,
+        -2.330372317369887
+      ]
+    },
+    {
+      "id": "thermodynamics_43",
+      "symbol": "the_43",
+      "class": "thermodynamics",
+      "coords": [
+        -1.7020481015885278,
+        -1.9941175697674087
+      ]
+    },
+    {
+      "id": "thermodynamics_44",
+      "symbol": "the_44",
+      "class": "thermodynamics",
+      "coords": [
+        -1.2641724769945428,
+        -3.305457528828054
+      ]
+    },
+    {
+      "id": "thermodynamics_45",
+      "symbol": "the_45",
+      "class": "thermodynamics",
+      "coords": [
+        -1.63099002012095,
+        -1.3783451066360244
+      ]
+    },
+    {
+      "id": "thermodynamics_46",
+      "symbol": "the_46",
+      "class": "thermodynamics",
+      "coords": [
+        -0.46463851907817255,
+        -2.939746021119943
+      ]
+    },
+    {
+      "id": "thermodynamics_47",
+      "symbol": "the_47",
+      "class": "thermodynamics",
+      "coords": [
+        -2.597761432099457,
+        -2.402941875783091
+      ]
+    },
+    {
+      "id": "thermodynamics_48",
+      "symbol": "the_48",
+      "class": "thermodynamics",
+      "coords": [
+        -1.0171443290256759,
+        -1.7514366288665668
+      ]
+    },
+    {
+      "id": "thermodynamics_49",
+      "symbol": "the_49",
+      "class": "thermodynamics",
+      "coords": [
+        -1.448483410563683,
+        -2.184321990145336
+      ]
+    },
+    {
+      "id": "thermodynamics_50",
+      "symbol": "the_50",
+      "class": "thermodynamics",
+      "coords": [
+        -0.5614281381328381,
+        -2.1791395585999993
+      ]
+    },
+    {
+      "id": "thermodynamics_51",
+      "symbol": "the_51",
+      "class": "thermodynamics",
+      "coords": [
+        -1.0836635346825159,
+        -3.5470282501237693
+      ]
+    },
+    {
+      "id": "thermodynamics_52",
+      "symbol": "the_52",
+      "class": "thermodynamics",
+      "coords": [
+        -1.7851006835161107,
+        -2.7138434243088247
+      ]
+    },
+    {
+      "id": "thermodynamics_53",
+      "symbol": "the_53",
+      "class": "thermodynamics",
+      "coords": [
+        -1.803271676705568,
+        -2.3599715006868713
+      ]
+    },
+    {
+      "id": "thermodynamics_54",
+      "symbol": "the_54",
+      "class": "thermodynamics",
+      "coords": [
+        -1.787178934194551,
+        -2.7126927776237717
+      ]
+    },
+    {
+      "id": "thermodynamics_55",
+      "symbol": "the_55",
+      "class": "thermodynamics",
+      "coords": [
+        -1.2914928418587548,
+        -1.74007369677211
+      ]
+    },
+    {
+      "id": "thermodynamics_56",
+      "symbol": "the_56",
+      "class": "thermodynamics",
+      "coords": [
+        -2.1116081371944397,
+        -3.158900392533453
+      ]
+    },
+    {
+      "id": "thermodynamics_57",
+      "symbol": "the_57",
+      "class": "thermodynamics",
+      "coords": [
+        -2.0037250084774043,
+        -2.6566890456759653
+      ]
+    },
+    {
+      "id": "thermodynamics_58",
+      "symbol": "the_58",
+      "class": "thermodynamics",
+      "coords": [
+        -1.3589303697724198,
+        -2.233036211575524
+      ]
+    },
+    {
+      "id": "thermodynamics_59",
+      "symbol": "the_59",
+      "class": "thermodynamics",
+      "coords": [
+        -1.5980341579036241,
+        -2.632233988336129
+      ]
+    },
+    {
+      "id": "thermodynamics_60",
+      "symbol": "the_60",
+      "class": "thermodynamics",
+      "coords": [
+        -1.8867068898318882,
+        -2.149147117945631
+      ]
+    },
+    {
+      "id": "thermodynamics_61",
+      "symbol": "the_61",
+      "class": "thermodynamics",
+      "coords": [
+        -1.5337723893986153,
+        -2.672872422073562
+      ]
+    },
+    {
+      "id": "thermodynamics_62",
+      "symbol": "the_62",
+      "class": "thermodynamics",
+      "coords": [
+        -2.0084729636965357,
+        -2.328238417978692
+      ]
+    },
+    {
+      "id": "thermodynamics_63",
+      "symbol": "the_63",
+      "class": "thermodynamics",
+      "coords": [
+        -0.7550691466163422,
+        -2.876655106299842
+      ]
+    },
+    {
+      "id": "thermodynamics_64",
+      "symbol": "the_64",
+      "class": "thermodynamics",
+      "coords": [
+        -2.418939689761424,
+        -2.7055895468465816
+      ]
+    },
+    {
+      "id": "thermodynamics_65",
+      "symbol": "the_65",
+      "class": "thermodynamics",
+      "coords": [
+        -1.3699190805804868,
+        -3.546856060400812
+      ]
+    },
+    {
+      "id": "thermodynamics_66",
+      "symbol": "the_66",
+      "class": "thermodynamics",
+      "coords": [
+        -1.932590259305095,
+        -2.7808494101075314
+      ]
+    },
+    {
+      "id": "thermodynamics_67",
+      "symbol": "the_67",
+      "class": "thermodynamics",
+      "coords": [
+        -1.593489819670658,
+        -2.658071578611281
+      ]
+    },
+    {
+      "id": "thermodynamics_68",
+      "symbol": "the_68",
+      "class": "thermodynamics",
+      "coords": [
+        -1.5902576333433407,
+        -2.8655559337960237
+      ]
+    },
+    {
+      "id": "thermodynamics_69",
+      "symbol": "the_69",
+      "class": "thermodynamics",
+      "coords": [
+        -0.79660894653209,
+        -2.7345927087346857
+      ]
+    },
+    {
+      "id": "thermodynamics_70",
+      "symbol": "the_70",
+      "class": "thermodynamics",
+      "coords": [
+        -1.4679845825314781,
+        -3.1487378195075046
+      ]
+    },
+    {
+      "id": "thermodynamics_71",
+      "symbol": "the_71",
+      "class": "thermodynamics",
+      "coords": [
+        -1.3524714986464916,
+        -2.0326442546133654
+      ]
+    },
+    {
+      "id": "thermodynamics_72",
+      "symbol": "the_72",
+      "class": "thermodynamics",
+      "coords": [
+        -1.0663147326182194,
+        -2.2322539284748757
+      ]
+    },
+    {
+      "id": "thermodynamics_73",
+      "symbol": "the_73",
+      "class": "thermodynamics",
+      "coords": [
+        -1.0311722022102365,
+        -3.189023300338745
+      ]
+    },
+    {
+      "id": "thermodynamics_74",
+      "symbol": "the_74",
+      "class": "thermodynamics",
+      "coords": [
+        -0.7507090711148466,
+        -3.0571548610461807
+      ]
+    },
+    {
+      "id": "thermodynamics_75",
+      "symbol": "the_75",
+      "class": "thermodynamics",
+      "coords": [
+        -1.2905101062668858,
+        -3.4865424217347285
+      ]
+    },
+    {
+      "id": "thermodynamics_76",
+      "symbol": "the_76",
+      "class": "thermodynamics",
+      "coords": [
+        -1.4745407242132544,
+        -2.400859752310246
+      ]
+    },
+    {
+      "id": "thermodynamics_77",
+      "symbol": "the_77",
+      "class": "thermodynamics",
+      "coords": [
+        -1.7088849822300933,
+        -2.4017462684384623
+      ]
+    },
+    {
+      "id": "thermodynamics_78",
+      "symbol": "the_78",
+      "class": "thermodynamics",
+      "coords": [
+        -1.5604488138372574,
+        -2.716423306884102
+      ]
+    },
+    {
+      "id": "thermodynamics_79",
+      "symbol": "the_79",
+      "class": "thermodynamics",
+      "coords": [
+        -2.4862776893861693,
+        -2.6502685680845137
+      ]
+    },
+    {
+      "id": "thermodynamics_80",
+      "symbol": "the_80",
+      "class": "thermodynamics",
+      "coords": [
+        -1.5130191036569651,
+        -2.7011561219266422
+      ]
+    },
+    {
+      "id": "thermodynamics_81",
+      "symbol": "the_81",
+      "class": "thermodynamics",
+      "coords": [
+        -0.2207029736160666,
+        -2.2248034045748346
+      ]
+    },
+    {
+      "id": "thermodynamics_82",
+      "symbol": "the_82",
+      "class": "thermodynamics",
+      "coords": [
+        -0.595427468939387,
+        -2.423039385765579
+      ]
+    },
+    {
+      "id": "thermodynamics_83",
+      "symbol": "the_83",
+      "class": "thermodynamics",
+      "coords": [
+        -1.2044089238683229,
+        -2.8650998645800403
+      ]
+    },
+    {
+      "id": "thermodynamics_84",
+      "symbol": "the_84",
+      "class": "thermodynamics",
+      "coords": [
+        -2.017005870648114,
+        -3.10001888387593
+      ]
+    },
+    {
+      "id": "thermodynamics_85",
+      "symbol": "the_85",
+      "class": "thermodynamics",
+      "coords": [
+        -1.1786086212434257,
+        -2.8539089664323956
+      ]
+    },
+    {
+      "id": "thermodynamics_86",
+      "symbol": "the_86",
+      "class": "thermodynamics",
+      "coords": [
+        -1.9158053278363671,
+        -2.4884490501600554
+      ]
+    },
+    {
+      "id": "thermodynamics_87",
+      "symbol": "the_87",
+      "class": "thermodynamics",
+      "coords": [
+        -2.28571191595804,
+        -2.1494644352142207
+      ]
+    },
+    {
+      "id": "thermodynamics_88",
+      "symbol": "the_88",
+      "class": "thermodynamics",
+      "coords": [
+        -1.575393244015705,
+        -2.608679292107923
+      ]
+    },
+    {
+      "id": "thermodynamics_89",
+      "symbol": "the_89",
+      "class": "thermodynamics",
+      "coords": [
+        -1.709800060406671,
+        -1.824163124835056
+      ]
+    }
+  ]
+}

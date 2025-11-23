@@ -1,0 +1,14 @@
+{
+  "label": "relational-sample",
+  "description": "Configuration tuned for the bundled relational_export.json sanity dataset.",
+  "overrides": {
+    "data-mode": "relational",
+    "relational-path": "experiments/retrieval_sanity/relational_export.json",
+    "support-ratio": "0.7",
+    "epochs": "300",
+    "latent-dim": "24",
+    "n-centers": "48",
+    "pm-steps": "5",
+    "metric": "cosine"
+  }
+}
