@@ -121,6 +121,14 @@ class ConversationLoop:
         print(f"  History window: {self.history.max_turns} turns")
         print(f"  Composition mode: {self.composer.composition_mode}")
         print(f"  Learning rate: {self.learner.learning_rate}")
+        
+        # Show syntax stage status
+        if hasattr(self.composer, 'syntax_stage') and self.composer.syntax_stage:
+            print(f"  Grammar stage: ✅ BNN-based syntax stage enabled")
+            syntax_pattern_count = len(self.composer.syntax_stage.patterns)
+            print(f"    - Syntax patterns: {syntax_pattern_count}")
+        else:
+            print(f"  Grammar stage: ⏸️  Disabled (set use_grammar=True to enable)")
         print()
         
         # Show fragment store stats

@@ -31,6 +31,7 @@ class StageType(Enum):
     
     INTAKE = "intake"           # Noise normalization, typo learning
     SEMANTIC = "semantic"       # Concept embedding, retrieval
+    SYNTAX = "syntax"           # Grammatical pattern processing
     REASONING = "reasoning"     # Inference, logical composition
     RESPONSE = "response"       # Generation quality, coherence
 

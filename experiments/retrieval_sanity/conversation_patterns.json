@@ -381,9 +381,9 @@
     "fragment_id": "seed_question_info_42",
     "trigger_context": "what is",
     "response_text": "Let me recall what I know about that...",
-    "success_score": 0.5,
+    "success_score": 0.5235721119983897,
     "intent": "question_info",
-    "usage_count": 0,
+    "usage_count": 3,
     "embedding_cache": null
   },
   {
@@ -930,9 +930,9 @@
     "fragment_id": "seed_meta_103",
     "trigger_context": "what we're discussing",
     "response_text": "What we're discussing is important.",
-    "success_score": 0.5,
+    "success_score": 0.5235721119983897,
     "intent": "meta",
-    "usage_count": 0,
+    "usage_count": 3,
     "embedding_cache": null
   },
   {

@@ -20,7 +20,7 @@ from .conversation_state import ConversationState
 
 # Optional: Import grammar stage for sophisticated composition
 try:
-    from .syntax_stage import GrammarPatternStore, GrammarGuidedComposer
+    from .syntax_stage_bnn import SyntaxStage
     GRAMMAR_AVAILABLE = True
 except ImportError:
     GRAMMAR_AVAILABLE = False
@@ -70,14 +70,13 @@ class ResponseComposer:
         self.state = conversation_state
         self.composition_mode = composition_mode
         
-        # Initialize grammar system if available and requested
-        self.grammar_composer = None
+        # Initialize syntax stage if available and requested
+        self.syntax_stage = None
         if use_grammar and GRAMMAR_AVAILABLE:
-            grammar_store = GrammarPatternStore()
-            self.grammar_composer = GrammarGuidedComposer(grammar_store)
-            print("  📝 Grammar-guided composition enabled!")
+            self.syntax_stage = SyntaxStage()
+            print("  📝 BNN-based syntax stage enabled!")
         elif use_grammar and not GRAMMAR_AVAILABLE:
-            print("  ⚠️  Grammar stage not available, falling back to standard composition")
+            print("  ⚠️  Syntax stage not available, falling back to standard composition")
         
     def compose_response(
         self, 
@@ -400,7 +399,7 @@ class ResponseComposer:
         """
         Blend two patterns into a novel response.
         
-        Strategy: Use grammatical templates if available, otherwise heuristics.
+        Strategy: Use BNN syntax stage if available for grammatically-guided blending.
         This creates NEW utterances from learned fragments!
         
         Args:
@@ -410,14 +409,9 @@ class ResponseComposer:
         Returns:
             Blended text or None if blending not appropriate
         """
-        # If grammar system is available, use it!
-        if self.grammar_composer:
-            return self.grammar_composer.compose_with_grammar(
-                primary.response_text,
-                secondary.response_text,
-                primary.intent,
-                secondary.intent
-            )
+        # If BNN syntax stage is available, use it for intelligent composition!
+        if self.syntax_stage:
+            return self._blend_with_syntax_bnn(primary, secondary)
         
         # Fallback: Heuristic blending (original method)
         # Don't blend if patterns end with questions (creates awkward double-question)
@@ -523,6 +517,128 @@ class ResponseComposer:
             composed += '.'
             
         return composed
+    
+    def _blend_with_syntax_bnn(self, primary: ResponsePattern, secondary: ResponsePattern) -> str:
+        """
+        Blend two patterns using BNN-based syntax stage for grammatical composition.
+        
+        Args:
+            primary: Primary pattern to use as base
+            secondary: Secondary pattern to blend in
+            
+        Returns:
+            Grammatically composed text using BNN-learned templates
+        """
+        if not self.syntax_stage:
+            # Fallback if syntax stage not available
+            return self._simple_blend(primary.response_text, secondary.response_text)
+        
+        # Process patterns through syntax stage
+        tokens_a = primary.response_text.split()
+        tokens_b = secondary.response_text.split()
+        
+        artifact_a = self.syntax_stage.process(tokens_a)
+        artifact_b = self.syntax_stage.process(tokens_b)
+        
+        # Extract intents and retrieved patterns from artifacts
+        intent_a = artifact_a.metadata.get('intent', 'statement')
+        intent_b = artifact_b.metadata.get('intent', 'statement')
+        
+        # Get matched patterns from retrieval_info (list of dicts)
+        retrieval_a = artifact_a.metadata.get('retrieval_info', [])
+        retrieval_b = artifact_b.metadata.get('retrieval_info', [])
+        
+        # Select composition strategy based on intents
+        template = None
+        if intent_a == intent_b:
+            # Same intent: blend templates
+            if retrieval_a and retrieval_b:
+                # Use higher-confidence template as base
+                base_info = retrieval_a[0] if retrieval_a[0]['similarity'] > retrieval_b[0]['similarity'] else retrieval_b[0]
+                template = base_info.get('template')
+            elif retrieval_a:
+                template = retrieval_a[0].get('template')
+            elif retrieval_b:
+                template = retrieval_b[0].get('template')
+        else:
+            # Different intents: choose dominant
+            base_info = retrieval_a[0] if retrieval_a else (retrieval_b[0] if retrieval_b else None)
+            template = base_info.get('template') if base_info else None
+        
+        # Apply template or use heuristic fallback
+        if template:
+            # Fill template with content from both patterns
+            composed = self._apply_syntax_template(template, tokens_a, tokens_b)
+        else:
+            # Fallback to simpler composition
+            composed = self._simple_blend(primary.response_text, secondary.response_text)
+        
+        return composed
+    
+    def _apply_syntax_template(self, template: str, tokens_a: list, tokens_b: list) -> str:
+        """
+        Apply a syntax template by filling slots with tokens.
+        
+        Args:
+            template: Template string with {pos} slots (e.g., "this is {adv} {adj}")
+            tokens_a: Tokens from primary pattern
+            tokens_b: Tokens from secondary pattern
+            
+        Returns:
+            Composed text with template slots filled
+        """
+        import re
+        
+        # Combine token pools
+        all_tokens = tokens_a + tokens_b
+        
+        # Extract slot types from template
+        slots = re.findall(r'\{([^}]+)\}', template)
+        
+        if not slots:
+            # No slots, template is literal
+            return template
+        
+        # Simple slot filling: use tokens in order
+        filled = template
+        token_idx = 0
+        
+        for slot in slots:
+            if token_idx < len(all_tokens):
+                filled = filled.replace(f'{{{slot}}}', all_tokens[token_idx], 1)
+                token_idx += 1
+            else:
+                # Out of tokens, use placeholder
+                filled = filled.replace(f'{{{slot}}}', slot.lower(), 1)
+        
+        # Ensure proper capitalization and ending
+        if filled:
+            filled = filled[0].upper() + filled[1:]
+            if not filled[-1] in '.!?':
+                filled += '.'
+        
+        return filled
+    
+    def _simple_blend(self, text_a: str, text_b: str) -> str:
+        """
+        Simple fallback blending when no BNN template available.
+        
+        Args:
+            text_a: Primary text
+            text_b: Secondary text
+            
+        Returns:
+            Simple grammatical blend
+        """
+        # Take first clause from each
+        clause_a = text_a.split('.')[0].split(',')[0].strip()
+        clause_b = text_b.split('.')[0].split(',')[0].strip()
+        
+        # Combine with connector
+        if len(clause_a.split()) + len(clause_b.split()) < 12:
+            return f"{clause_a}, {clause_b}."
+        else:
+            return f"{clause_a}."
             
     def _fallback_response(self) -> ComposedResponse:
         """
