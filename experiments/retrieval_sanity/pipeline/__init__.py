@@ -1,33 +1,53 @@
-"""Pipeline package - minimal init for conversation demo."""
+"""Language-to-symbol smoke test pipeline components."""
 
-# Only import what's safe (no storage_bridge or responder)
 from .base import PipelineArtifact, SymbolicFrame, Utterance
+from .decoder import TemplateDecoder
+from .responder import ConversationResponder, Response
+from .embedding import HashedEmbeddingEncoder, PMFlowEmbeddingEncoder
+from .pipeline import SymbolicPipeline
+from .storage_bridge import SymbolicStore
+from .trace import TraceLogger
+from .plasticity import PlasticityController
+from .response_planner import ResponsePlanner, ResponsePlan, PlanEvidence
+from .conversation_state import ConversationState, ConversationStateSnapshot, WorkingMemoryTopic
 from .stage_coordinator import (
     StageCoordinator,
     StageType,
     StageConfig,
     StageArtifact,
+    CognitiveStage,
+    IntakeStage,
+    SemanticStage,
 )
-from .conversation_state import ConversationState, ConversationStateSnapshot
-from .conversation_history import ConversationHistory
-from .response_fragments import ResponseFragmentStore, ResponsePattern
-from .response_composer import ResponseComposer, ComposedResponse
-from .response_learner import ResponseLearner
+from .concept_taxonomy import ConceptTaxonomy, Concept, CompositionalQuery
 
 __all__ = [
     "PipelineArtifact",
     "SymbolicFrame",
     "Utterance",
+    "HashedEmbeddingEncoder",
+    "PMFlowEmbeddingEncoder",
+    "SymbolicPipeline",
+    "SymbolicStore",
+    "TemplateDecoder",
+    "ConversationResponder",
+    "Response",
+    "TraceLogger",
+    "PlasticityController",
+    "ResponsePlanner",
+    "ResponsePlan",
+    "PlanEvidence",
+    "ConversationState",
+    "ConversationStateSnapshot",
+    "WorkingMemoryTopic",
     "StageCoordinator",
     "StageType",
     "StageConfig",
     "StageArtifact",
-    "ConversationState",
-    "ConversationStateSnapshot",
-    "ConversationHistory",
-    "ResponseFragmentStore",
-    "ResponsePattern",
-    "ResponseComposer",
-    "ComposedResponse",
-    "ResponseLearner",
+    "CognitiveStage",
+    "IntakeStage",
+    "SemanticStage",
+    "ConceptTaxonomy",
+    "Concept",
+    "CompositionalQuery",
 ]

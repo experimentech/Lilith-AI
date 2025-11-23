@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""
+Test learning system - verify patterns learn from outcomes.
+
+This tests:
+1. ResponseLearner evaluates interaction quality
+2. ResponseFragmentStore updates success scores
+3. Better patterns get selected over time
+"""
+
+import sys
+from pathlib import Path
+
+# Add experiments/retrieval_sanity to path
+sys.path.insert(0, str(Path(__file__).parent))
+
+from pipeline import (
+    ResponseFragmentStore,
+    ResponseComposer,
+    ConversationState,
+    StageCoordinator,
+    StageType,
+)
+from pipeline.response_learner import ResponseLearner
+
+def main():
+    print("🧠 Learning System Test\n")
+    print("="*80)
+    
+    # Initialize components
+    print("1. Initializing components...")
+    coordinator = StageCoordinator()
+    semantic_stage = coordinator.get_stage(StageType.SEMANTIC)
+    
+    store = ResponseFragmentStore(
+        semantic_encoder=semantic_stage.encoder,
+        storage_path="test_learning_patterns.json"
+    )
+    
+    conv_state = ConversationState(
+        encoder=semantic_stage.encoder,
+        decay=0.75,
+        max_topics=5
+    )
+    
+    composer = ResponseComposer(
+        fragment_store=store,
+        conversation_state=conv_state,
+        composition_mode="best_match"
+    )
+    
+    learner = ResponseLearner(
+        composer=composer,
+        fragment_store=store,
+        learning_rate=0.1
+    )
+    
+    print(f"   Loaded {len(store.patterns)} patterns")
+    print(f"   Initial average success: {store.get_stats()['average_success']:.3f}\n")
+    
+    # Simulate conversations with feedback
+    print("2. Simulating learning interactions...\n")
+    
+    test_sequence = [
+        ("Hello!", "greeting"),
+        ("Tell me more about that", "question"),
+        ("That's interesting!", "acknowledgment"),
+        ("What is artificial intelligence?", "question"),
+        ("I don't understand", "confusion"),
+        ("Can you explain?", "question"),
+    ]
+    
+    for i, (user_input, expected_intent) in enumerate(test_sequence, 1):
+        print(f"Interaction {i}: \"{user_input}\"")
+        
+        # Save state before response
+        previous_state = ConversationState(
+            encoder=semantic_stage.encoder,
+            decay=0.75,
+            max_topics=5
+        )
+        
+        # Generate response
+        response = composer.compose_response(
+            context=user_input,
+            user_input=user_input,
+            topk=5
+        )
+        
+        print(f"  Bot: \"{response.text}\"")
+        
+        if response.primary_pattern:
+            old_success = response.primary_pattern.success_score
+            print(f"  Pattern: '{response.primary_pattern.trigger_context}' (intent: {response.primary_pattern.intent})")
+            print(f"  Success before: {old_success:.3f}")
+            
+            # Simulate user's next input (reaction)
+            # Positive reactions
+            if i < 4:  # First 3 interactions go well
+                next_input = "Yes, that makes sense"
+            else:  # Later interactions show confusion
+                next_input = "I'm confused" if i % 2 == 0 else "Huh?"
+            
+            # Create current state (after user reaction)
+            current_state = ConversationState(
+                encoder=semantic_stage.encoder,
+                decay=0.75,
+                max_topics=5
+            )
+            
+            # Learn from interaction
+            signals = learner.observe_interaction(
+                response=response,
+                previous_state=previous_state,
+                current_state=current_state,
+                user_input=next_input  # User's reaction
+            )
+            
+            # Get updated pattern
+            updated_pattern = store.patterns.get(response.primary_pattern.fragment_id)
+            if updated_pattern:
+                new_success = updated_pattern.success_score
+                change = new_success - old_success
+                arrow = "📈" if change > 0 else "📉" if change < 0 else "➡️"
+                print(f"  {arrow} Success after: {new_success:.3f} (Δ {change:+.3f})")
+                print(f"  Signals: topic={signals.topic_maintained}, "
+                      f"engagement={signals.engagement_score:.2f}, "
+                      f"coherence={signals.coherence_score:.2f}")
+        
+        print()
+    
+    # Show final statistics
+    print("="*80)
+    print("3. Learning Results:\n")
+    
+    stats = store.get_stats()
+    print(f"   Total patterns: {stats['total_patterns']}")
+    print(f"   Average success: {stats['average_success']:.3f}")
+    
+    # Calculate min/max manually
+    success_scores = [p.success_score for p in store.patterns.values()]
+    print(f"   Success range: {min(success_scores):.3f} - {max(success_scores):.3f}")
+    print()
+    
+    # Show top/bottom patterns
+    patterns_by_success = sorted(
+        store.patterns.values(),
+        key=lambda p: p.success_score,
+        reverse=True
+    )
+    
+    print("   Top 5 patterns (learned as successful):")
+    for i, pattern in enumerate(patterns_by_success[:5], 1):
+        if pattern.usage_count > 0:
+            print(f"     {i}. '{pattern.trigger_context}' - Success: {pattern.success_score:.3f} "
+                  f"(used {pattern.usage_count}x)")
+    
+    print()
+    print("   Bottom 5 patterns (learned as unsuccessful):")
+    for i, pattern in enumerate(patterns_by_success[-5:], 1):
+        if pattern.usage_count > 0:
+            print(f"     {i}. '{pattern.trigger_context}' - Success: {pattern.success_score:.3f} "
+                  f"(used {pattern.usage_count}x)")
+    
+    print()
+    print("="*80)
+    print("✅ Learning test complete!")
+    print()
+    print("Key insight: Patterns that led to good outcomes (topic maintained,")
+    print("engagement high) should have increased success scores, while patterns")
+    print("that led to poor outcomes should have decreased scores.")
+
+if __name__ == "__main__":
+    main()
