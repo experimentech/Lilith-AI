@@ -144,13 +144,24 @@ class CognitiveStage:
         
         confidence = self._compute_confidence(raw_activations)
         
+        # Get centers snapshot (handle MultiScalePMField)
+        centers_snapshot = None
+        if hasattr(self.encoder, 'pm_field'):
+            pm_field = self.encoder.pm_field
+            if hasattr(pm_field, 'fine_field') and hasattr(pm_field.fine_field, 'centers'):
+                # MultiScalePMField - snapshot fine field centers
+                centers_snapshot = pm_field.fine_field.centers.detach().clone()
+            elif hasattr(pm_field, 'centers'):
+                # Standard PMField
+                centers_snapshot = pm_field.centers.detach().clone()
+        
         return StageArtifact(
             stage=self.stage_type,
             embedding=embedding,
             confidence=confidence,
             tokens=tokens,
             activations=raw_activations,
-            centers_snapshot=self.encoder.pm_field.centers.detach().clone() if hasattr(self.encoder, 'pm_field') else None,
+            centers_snapshot=centers_snapshot,
             metadata={
                 "latent_norm": float(torch.norm(latent).item()),
                 "activation_energy": float(torch.norm(raw_activations).item()),
@@ -188,9 +199,17 @@ class CognitiveStage:
             # Re-encode to get gradients - need to enable gradients on centers
             self.encoder.pm_field.train()
             
-            # Enable gradients for PMFlow centers
-            if hasattr(self.encoder.pm_field, 'centers'):
-                self.encoder.pm_field.centers.requires_grad_(True)
+            # Enable gradients for PMFlow centers (handle MultiScalePMField)
+            pm_field = self.encoder.pm_field
+            if hasattr(pm_field, 'fine_field'):
+                # MultiScalePMField - update both fields
+                if hasattr(pm_field.fine_field, 'centers'):
+                    pm_field.fine_field.centers.requires_grad_(True)
+                if hasattr(pm_field.coarse_field, 'centers'):
+                    pm_field.coarse_field.centers.requires_grad_(True)
+            elif hasattr(pm_field, 'centers'):
+                # Standard PMField
+                pm_field.centers.requires_grad_(True)
             
             embedding, latent, raw = self.encoder.encode_with_components(tokens)
             
@@ -200,18 +219,28 @@ class CognitiveStage:
             loss.backward()
             
             # Manual gradient step on PMFlow parameters
+            grad_norm = 0.0
             with torch.no_grad():
-                if hasattr(self.encoder.pm_field, 'centers'):
-                    grad = self.encoder.pm_field.centers.grad
+                if hasattr(pm_field, 'fine_field'):
+                    # MultiScalePMField - update both fields
+                    if hasattr(pm_field.fine_field, 'centers') and pm_field.fine_field.centers.grad is not None:
+                        grad = pm_field.fine_field.centers.grad
+                        pm_field.fine_field.centers -= self.config.plasticity_lr * grad
+                        grad_norm += float(torch.norm(grad).item())
+                        pm_field.fine_field.centers.grad.zero_()
+                    
+                    if hasattr(pm_field.coarse_field, 'centers') and pm_field.coarse_field.centers.grad is not None:
+                        grad = pm_field.coarse_field.centers.grad
+                        pm_field.coarse_field.centers -= self.config.plasticity_lr * grad
+                        grad_norm += float(torch.norm(grad).item())
+                        pm_field.coarse_field.centers.grad.zero_()
+                elif hasattr(pm_field, 'centers'):
+                    # Standard PMField
+                    grad = pm_field.centers.grad
                     if grad is not None:
-                        self.encoder.pm_field.centers -= self.config.plasticity_lr * grad
+                        pm_field.centers -= self.config.plasticity_lr * grad
                         grad_norm = float(torch.norm(grad).item())
-                        # Zero gradients for next iteration
-                        self.encoder.pm_field.centers.grad.zero_()
-                    else:
-                        grad_norm = 0.0
-                else:
-                    grad_norm = 0.0
+                        pm_field.centers.grad.zero_()
             
             self.encoder.pm_field.eval()
             

@@ -77,10 +77,45 @@ class PMFlowEmbeddingEncoder:
     @staticmethod
     def _init_pm_field(latent_dim: int, seed: int):
         try:
-            module = importlib.import_module("pmflow_bnn.pmflow")
-        except ModuleNotFoundError as exc:  # pragma: no cover - handled by caller fallback
-            raise RuntimeError("pmflow_bnn is required for PMFlow embeddings") from exc
+            module = importlib.import_module("pmflow_bnn_enhanced.pmflow")
+        except ModuleNotFoundError:
+            # Fallback to original pmflow_bnn if enhanced version not available
+            try:
+                module = importlib.import_module("pmflow_bnn.pmflow")
+            except ModuleNotFoundError as exc:  # pragma: no cover - handled by caller fallback
+                raise RuntimeError("pmflow_bnn is required for PMFlow embeddings") from exc
 
+        # Try to use MultiScalePMField for hierarchical concept learning
+        PMFieldCls = getattr(module, "MultiScalePMField", None)
+        if PMFieldCls is not None:
+            # Use multi-scale field for better hierarchical concept representation
+            field = PMFieldCls(
+                d_latent=latent_dim, 
+                n_centers_fine=128,  # Fine-grained specific concepts
+                n_centers_coarse=32,  # Coarse-grained categories
+                steps_fine=5, 
+                steps_coarse=3,
+                dt=0.15, 
+                beta=1.2, 
+                clamp=3.0
+            )
+            # MultiScalePMField manages its own internal fields - no manual init needed
+            generator = torch.Generator().manual_seed(seed)
+            with torch.no_grad():
+                # Initialize fine field
+                centres_fine = torch.randn(field.fine_field.centers.shape, generator=generator, device=field.fine_field.centers.device) * 0.5
+                mus_fine = torch.full(field.fine_field.mus.shape, 0.35, device=field.fine_field.mus.device)
+                field.fine_field.centers.copy_(centres_fine)
+                field.fine_field.mus.copy_(mus_fine)
+                
+                # Initialize coarse field
+                centres_coarse = torch.randn(field.coarse_field.centers.shape, generator=generator, device=field.coarse_field.centers.device) * 0.5
+                mus_coarse = torch.full(field.coarse_field.mus.shape, 0.35, device=field.coarse_field.mus.device)
+                field.coarse_field.centers.copy_(centres_coarse)
+                field.coarse_field.mus.copy_(mus_coarse)
+            return field
+        
+        # Fallback to standard PMField if MultiScale not available
         PMFieldCls = getattr(module, "PMField", None)
         if PMFieldCls is None:
             PMFieldCls = getattr(module, "ParallelPMField", None)
@@ -122,10 +157,25 @@ class PMFlowEmbeddingEncoder:
             path = self._state_path
         if path is None:
             return
-        payload = {
-            "centers": self.pm_field.centers.detach().cpu(),
-            "mus": self.pm_field.mus.detach().cpu(),
-        }
+        
+        # Handle MultiScalePMField (has fine_field and coarse_field)
+        if hasattr(self.pm_field, 'fine_field') and hasattr(self.pm_field, 'coarse_field'):
+            payload = {
+                "type": "multiscale",
+                "fine_centers": self.pm_field.fine_field.centers.detach().cpu(),
+                "fine_mus": self.pm_field.fine_field.mus.detach().cpu(),
+                "coarse_centers": self.pm_field.coarse_field.centers.detach().cpu(),
+                "coarse_mus": self.pm_field.coarse_field.mus.detach().cpu(),
+                "coarse_projection": self.pm_field.coarse_projection.weight.detach().cpu(),
+            }
+        else:
+            # Standard PMField
+            payload = {
+                "type": "standard",
+                "centers": self.pm_field.centers.detach().cpu(),
+                "mus": self.pm_field.mus.detach().cpu(),
+            }
+        
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(payload, path)
 
@@ -135,17 +185,38 @@ class PMFlowEmbeddingEncoder:
         if path is None or not path.exists():
             return
         payload = torch.load(path, map_location=self.device)
+        
         with torch.no_grad():
-            if "centers" in payload:
-                self.pm_field.centers.copy_(payload["centers"].to(self.device))
-            if "mus" in payload:
-                self.pm_field.mus.copy_(payload["mus"].to(self.device))
+            # Handle MultiScalePMField
+            if payload.get("type") == "multiscale":
+                if hasattr(self.pm_field, 'fine_field') and hasattr(self.pm_field, 'coarse_field'):
+                    self.pm_field.fine_field.centers.copy_(payload["fine_centers"].to(self.device))
+                    self.pm_field.fine_field.mus.copy_(payload["fine_mus"].to(self.device))
+                    self.pm_field.coarse_field.centers.copy_(payload["coarse_centers"].to(self.device))
+                    self.pm_field.coarse_field.mus.copy_(payload["coarse_mus"].to(self.device))
+                    self.pm_field.coarse_projection.weight.copy_(payload["coarse_projection"].to(self.device))
+            # Handle standard PMField (backward compatibility)
+            elif "centers" in payload:
+                if hasattr(self.pm_field, 'centers'):
+                    self.pm_field.centers.copy_(payload["centers"].to(self.device))
+                if "mus" in payload and hasattr(self.pm_field, 'mus'):
+                    self.pm_field.mus.copy_(payload["mus"].to(self.device))
 
     def _encode_internal(self, tokens: Iterable[str]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         with torch.no_grad():
             base = self.base_encoder.encode(tokens).to(self.device)
             latent = base @ self._projection
-            raw_refined = self.pm_field(latent)
+            
+            # Handle MultiScalePMField which returns (fine, coarse, combined) tuple
+            pm_output = self.pm_field(latent)
+            if isinstance(pm_output, tuple) and len(pm_output) == 3:
+                # MultiScalePMField returns (fine_emb, coarse_emb, combined)
+                # Use combined for hierarchical concept representation
+                raw_refined: torch.Tensor = pm_output[2]  # Combined multi-scale embedding
+            else:
+                # Standard PMField returns single tensor
+                raw_refined: torch.Tensor = pm_output
+            
             refined = F.normalize(raw_refined, p=2, dim=1)
             if self.combine_mode == "concat":
                 hashed = F.normalize(base, p=2, dim=1)

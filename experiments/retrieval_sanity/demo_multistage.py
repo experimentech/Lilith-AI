@@ -60,7 +60,7 @@ def print_artifact_details(stage_name: str, artifact, show_embedding: bool = Fal
     print()
 
 
-def cosine_similarity(a: torch.Tensor, b: torch.Tensor) -> float:
+def cosine_similarity(a: torch.Tensor, b: torch.Tensor) -> float | None:
     """Compute cosine similarity between two tensors.
     
     If dimensions don't match, returns None (indicates incompatible embeddings).
@@ -74,6 +74,56 @@ def cosine_similarity(a: torch.Tensor, b: torch.Tensor) -> float:
     a_norm = a_flat / (torch.norm(a_flat) + 1e-8)
     b_norm = b_flat / (torch.norm(b_flat) + 1e-8)
     return float(torch.dot(a_norm, b_norm).item())
+
+
+def hybrid_similarity(
+    a: torch.Tensor,
+    b: torch.Tensor,
+    pm_field=None,
+    alpha: float = 0.7,
+) -> float | None:
+    """Compute hybrid similarity combining cosine and PMFlow energy.
+    
+    Uses PMFlow Enhanced hybrid_similarity if available, otherwise falls back to cosine.
+    
+    Args:
+        a: First embedding tensor
+        b: Second embedding tensor
+        pm_field: Optional PMFlow field for energy computation
+        alpha: Weight for cosine similarity (1-alpha for energy)
+    
+    Returns:
+        Weighted similarity score in [0, 1], or None if dimensions don't match
+    """
+    # Ensure tensors are flat
+    a_flat = a.squeeze()
+    b_flat = b.squeeze()
+    
+    if a_flat.shape != b_flat.shape:
+        return None  # Incompatible dimensions
+    
+    # Try to use PMFlow Enhanced hybrid_similarity
+    try:
+        from pmflow_bnn_enhanced.pmflow import hybrid_similarity as pmf_hybrid
+        
+        # Need batch dimension for PMFlow functions
+        a_batch = a_flat.unsqueeze(0) if a_flat.dim() == 1 else a_flat
+        b_batch = b_flat.unsqueeze(0) if b_flat.dim() == 1 else b_flat
+        
+        if pm_field is not None:
+            score = pmf_hybrid(
+                query_emb=a_batch,
+                doc_emb=b_batch,
+                pmfield=pm_field,
+                cosine_weight=alpha,
+                energy_weight=1.0 - alpha,
+            )
+            return float(score.item()) if hasattr(score, 'item') else float(score)
+    except (ImportError, AttributeError):
+        pass  # Fall back to cosine only
+    
+    # Fallback: pure cosine similarity
+    return cosine_similarity(a, b)
 
 
 def compare_embeddings(
