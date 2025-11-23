@@ -215,6 +215,8 @@ class ResponseFragmentStore:
             # Convert to numpy for cosine similarity
             if hasattr(context_emb, 'cpu'):
                 context_emb = context_emb.cpu().numpy()
+            # Flatten to 1D if needed
+            context_emb = context_emb.flatten()
             context_norm = context_emb / (np.linalg.norm(context_emb) + 1e-8)
         except Exception:
             # If encoding fails, use simple text matching
@@ -228,6 +230,8 @@ class ResponseFragmentStore:
                 pattern_emb = self.encoder.encode(pattern.trigger_context)
                 if hasattr(pattern_emb, 'cpu'):
                     pattern_emb = pattern_emb.cpu().numpy()
+                # Flatten to 1D if needed
+                pattern_emb = pattern_emb.flatten()
                 pattern_norm = pattern_emb / (np.linalg.norm(pattern_emb) + 1e-8)
                 
                 # Cosine similarity

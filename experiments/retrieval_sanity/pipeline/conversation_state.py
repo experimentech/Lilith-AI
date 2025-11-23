@@ -61,6 +61,27 @@ class ConversationState:
 
     def is_active(self) -> bool:
         return self.encoder is not None
+        
+    def snapshot(self) -> ConversationStateSnapshot:
+        """Get current state snapshot without update."""
+        if self.encoder is None:
+            return ConversationStateSnapshot(
+                active=False,
+                activation_energy=0.0,
+                novelty=0.0,
+                topics=[],
+            )
+            
+        items = sorted(self._topics.items(), key=lambda pair: pair[1].strength, reverse=True)
+        sorted_topics = [topic for _, topic in items]
+        snapshot_topics = [replace(topic) for topic in sorted_topics]
+        
+        return ConversationStateSnapshot(
+            active=bool(self._topics),
+            activation_energy=sorted_topics[0].strength if sorted_topics else 0.0,
+            novelty=self._last_novelty if self._last_novelty is not None else 0.0,
+            topics=snapshot_topics,
+        )
 
     def update(self, artefact: PipelineArtifact) -> ConversationStateSnapshot:
         if self.encoder is None:

@@ -1,0 +1,200 @@
+[
+  {
+    "fragment_id": "seed_greeting_0",
+    "trigger_context": "Hello",
+    "response_text": "Hello! How can I help you?",
+    "success_score": 0.5,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_greeting_1",
+    "trigger_context": "Hi there",
+    "response_text": "Hi! What would you like to talk about?",
+    "success_score": 0.5,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_greeting_2",
+    "trigger_context": "Good morning",
+    "response_text": "Good morning! What's on your mind?",
+    "success_score": 0.5,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_confusion_3",
+    "trigger_context": "I don't understand",
+    "response_text": "I'm not sure I understand. Could you rephrase that?",
+    "success_score": 0.5,
+    "intent": "confusion",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_confusion_4",
+    "trigger_context": "unclear",
+    "response_text": "That's unclear to me. Can you explain differently?",
+    "success_score": 0.5,
+    "intent": "confusion",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_acknowledgment_5",
+    "trigger_context": "I see",
+    "response_text": "I understand what you mean.",
+    "success_score": 0.5,
+    "intent": "acknowledgment",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_acknowledgment_6",
+    "trigger_context": "got it",
+    "response_text": "Got it, that makes sense.",
+    "success_score": 0.5,
+    "intent": "acknowledgment",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_acknowledgment_7",
+    "trigger_context": "interesting",
+    "response_text": "That's interesting!",
+    "success_score": 0.5,
+    "intent": "acknowledgment",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_detail_8",
+    "trigger_context": "tell me more",
+    "response_text": "Can you tell me more about that?",
+    "success_score": 0.5,
+    "intent": "question_detail",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_detail_9",
+    "trigger_context": "elaborate",
+    "response_text": "Could you elaborate on that?",
+    "success_score": 0.5,
+    "intent": "question_detail",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_detail_10",
+    "trigger_context": "explain",
+    "response_text": "What do you mean by that?",
+    "success_score": 0.5,
+    "intent": "question_detail",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_info_11",
+    "trigger_context": "what is X",
+    "response_text": "Let me recall what I know about that...",
+    "success_score": 0.5,
+    "intent": "question_info",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_info_12",
+    "trigger_context": "who is X",
+    "response_text": "I'm trying to remember who that is...",
+    "success_score": 0.5,
+    "intent": "question_info",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_info_13",
+    "trigger_context": "when",
+    "response_text": "I'll check when that happened...",
+    "success_score": 0.5,
+    "intent": "question_info",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_topic_shift_14",
+    "trigger_context": "new topic",
+    "response_text": "Okay, what would you like to discuss?",
+    "success_score": 0.5,
+    "intent": "topic_shift",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_topic_shift_15",
+    "trigger_context": "change subject",
+    "response_text": "Sure, let's talk about something else.",
+    "success_score": 0.5,
+    "intent": "topic_shift",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_agreement_16",
+    "trigger_context": "yes",
+    "response_text": "Yes, I agree.",
+    "success_score": 0.5,
+    "intent": "agreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_agreement_17",
+    "trigger_context": "correct",
+    "response_text": "That's correct.",
+    "success_score": 0.5,
+    "intent": "agreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_disagreement_18",
+    "trigger_context": "no",
+    "response_text": "I don't think so.",
+    "success_score": 0.5,
+    "intent": "disagreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_disagreement_19",
+    "trigger_context": "incorrect",
+    "response_text": "That doesn't seem right to me.",
+    "success_score": 0.5,
+    "intent": "disagreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_recall_20",
+    "trigger_context": "remember",
+    "response_text": "Let me check my memory about that...",
+    "success_score": 0.5,
+    "intent": "recall",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_recall_21",
+    "trigger_context": "previous",
+    "response_text": "I recall we discussed this before...",
+    "success_score": 0.5,
+    "intent": "recall",
+    "usage_count": 0,
+    "embedding_cache": null
+  }
+]
