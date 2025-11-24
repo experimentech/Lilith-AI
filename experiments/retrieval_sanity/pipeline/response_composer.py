@@ -253,7 +253,7 @@ class ResponseComposer:
         patterns: List[Tuple[ResponsePattern, float]],
         user_query: str,
         topk: int = 5,
-        min_relevance: float = 0.35
+        min_relevance: float = 0.55
     ) -> List[Tuple[ResponsePattern, float]]:
         """
         Score patterns by semantic relevance between user query and response content.
@@ -267,7 +267,7 @@ class ResponseComposer:
             patterns: Candidate patterns with trigger-based scores
             user_query: User's actual input query
             topk: Number of relevant patterns to return
-            min_relevance: Minimum semantic similarity threshold
+            min_relevance: Minimum semantic similarity threshold (raised to 0.55 to filter garbage)
             
         Returns:
             Patterns scored by query-response semantic relevance

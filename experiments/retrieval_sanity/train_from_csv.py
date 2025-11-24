@@ -162,6 +162,10 @@ def train_from_csv(
         else:
             print(f"  (Syntax stage doesn't support saving)")
     
+    # Build BNN intent clusters for faster retrieval
+    print()
+    conv.build_intent_clusters()
+    
     print()
     print("🎉 Training complete! System ready for conversation.")
     print()
