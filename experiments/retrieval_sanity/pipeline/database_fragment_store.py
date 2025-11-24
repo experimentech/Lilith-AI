@@ -73,18 +73,20 @@ class DatabaseBackedFragmentStore:
         self,
         context: str,
         topk: int = 5,
-        min_score: float = 0.0
+        min_score: float = 0.0,
+        intent_hint: Optional[str] = None
     ) -> List[Tuple[ResponsePattern, float]]:
         """
-        Retrieve response patterns using database queries.
+        Retrieve response patterns using BNN intent + database queries.
         
-        Extracts keywords from context and queries database with indexed lookups.
-        Much faster than embedding similarity for large pattern sets!
+        Strategy: Use BNN to understand semantic intent, then query database
+        for patterns matching that intent + keywords.
         
         Args:
             context: Current conversation context
             topk: Number of patterns to retrieve
             min_score: Minimum success score threshold
+            intent_hint: Optional intent classification from BNN
             
         Returns:
             List of (ResponsePattern, relevance_score) tuples
@@ -93,24 +95,42 @@ class DatabaseBackedFragmentStore:
         keyword_tuples = extract_keywords(context, 'query')
         keywords = [kw for kw, _, _ in keyword_tuples]
         
-        if not keywords:
-            # No keywords - fallback to high success patterns
-            return self._get_top_patterns(topk, min_score)
+        # Try intent-based retrieval first if we have an intent hint
+        if intent_hint:
+            # Query by intent + keywords
+            pattern_rows = self.db.query_patterns(
+                intent=intent_hint,
+                keywords=keywords if keywords else None,
+                min_success=min_score,
+                limit=topk * 2  # Get more candidates for scoring
+            )
+            
+            if pattern_rows:
+                return self._score_patterns(pattern_rows, keywords, topk)
         
-        # Query database with keyword matching
-        pattern_rows = self.db.query_patterns(
-            keywords=keywords,
-            min_success=min_score,
-            limit=topk * 3  # Get more candidates for scoring
-        )
+        # Fallback: keyword-only retrieval
+        if keywords:
+            pattern_rows = self.db.query_patterns(
+                keywords=keywords,
+                min_success=min_score,
+                limit=topk * 3
+            )
+            
+            if pattern_rows:
+                return self._score_patterns(pattern_rows, keywords, topk)
         
-        if not pattern_rows:
-            # No keyword matches - fallback to high success patterns
-            return self._get_top_patterns(topk, min_score)
-        
-        # Score patterns by keyword overlap
+        # Last resort: high success patterns
+        return self._get_top_patterns(topk, min_score)
+    
+    def _score_patterns(
+        self,
+        pattern_rows: List[Dict],
+        context_keywords: List[str],
+        topk: int
+    ) -> List[Tuple[ResponsePattern, float]]:
+        """Score retrieved patterns by keyword overlap + success."""
         scored_patterns = []
-        context_keywords = set(keywords)
+        context_keywords_set = set(context_keywords)
         
         for row in pattern_rows:
             pattern = ResponsePattern(
@@ -131,11 +151,14 @@ class DatabaseBackedFragmentStore:
             pattern_keywords = set(kw_row[0] for kw_row in cursor.fetchall())
             
             # Calculate keyword overlap score
-            overlap = len(context_keywords & pattern_keywords)
-            overlap_score = overlap / max(len(context_keywords), 1)
+            if context_keywords_set:
+                overlap = len(context_keywords_set & pattern_keywords)
+                overlap_score = overlap / max(len(context_keywords_set), 1)
+            else:
+                overlap_score = 0.5  # Neutral score when no keywords
             
-            # Combine with success score
-            combined_score = (overlap_score * 0.7) + (pattern.success_score * 0.3)
+            # Combine with success score (weight overlap more heavily)
+            combined_score = (overlap_score * 0.6) + (pattern.success_score * 0.4)
             
             scored_patterns.append((pattern, combined_score))
         
