@@ -1389,9 +1389,9 @@
     "fragment_id": "learned_csv_0",
     "trigger_context": "hi, how are you doing?",
     "response_text": "i'm fine. how about yourself?",
-    "success_score": 0.6096748992591742,
+    "success_score": 0.6213800569444541,
     "intent": "question_info",
-    "usage_count": 3,
+    "usage_count": 6,
     "embedding_cache": null
   },
   {
@@ -2370,18 +2370,18 @@
     "fragment_id": "learned_csv_97",
     "trigger_context": "that sounds like fun. what's the weather going to be like?",
     "response_text": "i heard that it's going to be warm this weekend.",
-    "success_score": 0.7221726979285079,
+    "success_score": 0.7369409037912941,
     "intent": "greeting",
-    "usage_count": 32,
+    "usage_count": 36,
     "embedding_cache": null
   },
   {
     "fragment_id": "learned_csv_98",
     "trigger_context": "i heard that it's going to be warm this weekend.",
     "response_text": "is it going to be perfect beach weather?",
-    "success_score": 0.6541333855198106,
+    "success_score": 0.6636689715005291,
     "intent": "statement",
-    "usage_count": 12,
+    "usage_count": 14,
     "embedding_cache": null
   },
   {
@@ -2451,9 +2451,9 @@
     "fragment_id": "learned_csv_105",
     "trigger_context": "i really wish the weather would just stay the same.",
     "response_text": "i do too. that way we can have our activities planned ahead of time.",
-    "success_score": 0.7522782584318245,
+    "success_score": 0.7561684015446406,
     "intent": "statement",
-    "usage_count": 40,
+    "usage_count": 41,
     "embedding_cache": null
   },
   {
@@ -2478,27 +2478,27 @@
     "fragment_id": "pattern_learned_275",
     "trigger_context": "i do too. that way we can have our activities planned ahead of time.",
     "response_text": "i would like to take a trip to the beach this weekend.",
-    "success_score": 0.7439807706105985,
+    "success_score": 0.7477953095433258,
     "intent": "learned",
-    "usage_count": 10,
+    "usage_count": 11,
     "embedding_cache": null
   },
   {
     "fragment_id": "learned_csv_107",
     "trigger_context": "i would like to take a trip to the beach this weekend.",
     "response_text": "a trip to the beach would be fun. how is the weather going to be?",
-    "success_score": 0.6224173981499614,
+    "success_score": 0.6267477893591656,
     "intent": "question_info",
-    "usage_count": 5,
+    "usage_count": 6,
     "embedding_cache": null
   },
   {
     "fragment_id": "learned_csv_108",
     "trigger_context": "a trip to the beach would be fun. how is the weather going to be?",
     "response_text": "the forecast says that it will be warm on the weekend.",
-    "success_score": 0.7923829919481028,
+    "success_score": 0.7945920832930382,
     "intent": "statement",
-    "usage_count": 49,
+    "usage_count": 50,
     "embedding_cache": null
   },
   {
@@ -2775,9 +2775,9 @@
     "fragment_id": "learned_csv_135",
     "trigger_context": "sure, what did you want to do?",
     "response_text": "maybe we can go see a movie or something.",
-    "success_score": 0.6042005649629099,
+    "success_score": 0.6065601309049649,
     "intent": "greeting",
-    "usage_count": 1,
+    "usage_count": 2,
     "embedding_cache": null
   },
   {
@@ -4539,9 +4539,9 @@
     "fragment_id": "pattern_learned_504",
     "trigger_context": "sure, what did you want to do?",
     "response_text": "i was taught in high school how to draw and paint.",
-    "success_score": 0.7,
+    "success_score": 0.7034610217886977,
     "intent": "learned",
-    "usage_count": 0,
+    "usage_count": 1,
     "embedding_cache": null
   },
   {
@@ -4701,9 +4701,9 @@
     "fragment_id": "learned_csv_323",
     "trigger_context": "which movie is your favorite to watch?",
     "response_text": "i have to say, my favorite movie is superbad.",
-    "success_score": 0.6058114444422892,
+    "success_score": 0.6179989326915205,
     "intent": "statement",
-    "usage_count": 1,
+    "usage_count": 3,
     "embedding_cache": null
   },
   {
@@ -4818,9 +4818,9 @@
     "fragment_id": "pattern_learned_535",
     "trigger_context": "the forecast says that it will be warm on the weekend.",
     "response_text": "i'm going to have to say that superbad is the best movie ever.",
-    "success_score": 0.710066894449819,
+    "success_score": 0.7176783226503023,
     "intent": "learned",
-    "usage_count": 2,
+    "usage_count": 4,
     "embedding_cache": null
   },
   {
@@ -4980,9 +4980,9 @@
     "fragment_id": "learned_csv_350",
     "trigger_context": "that's a good reason to like something.",
     "response_text": "yeah, i think so too.",
-    "success_score": 0.6124776174059844,
+    "success_score": 0.620229239958856,
     "intent": "greeting",
-    "usage_count": 3,
+    "usage_count": 6,
     "embedding_cache": null
   },
   {
@@ -5394,9 +5394,9 @@
     "fragment_id": "learned_csv_396",
     "trigger_context": "what are you doing this weekend?",
     "response_text": "i'm going to the movies with a friend. how about you?",
-    "success_score": 0.605834831008445,
+    "success_score": 0.6113759164920446,
     "intent": "question_info",
-    "usage_count": 2,
+    "usage_count": 3,
     "embedding_cache": null
   },
   {
@@ -5421,9 +5421,9 @@
     "fragment_id": "learned_csv_399",
     "trigger_context": "well, did you want to go see a movie with me?",
     "response_text": "what movie are you going to see?",
-    "success_score": 0.6211491020922671,
+    "success_score": 0.6231378924854861,
     "intent": "question_info",
-    "usage_count": 5,
+    "usage_count": 6,
     "embedding_cache": null
   },
   {
@@ -5502,18 +5502,18 @@
     "fragment_id": "learned_csv_408",
     "trigger_context": "would you like to see a movie with me and my friend?",
     "response_text": "do you know what movie you're going to watch?",
-    "success_score": 0.626612874764658,
+    "success_score": 0.6292901725347767,
     "intent": "question_info",
-    "usage_count": 6,
+    "usage_count": 7,
     "embedding_cache": null
   },
   {
     "fragment_id": "learned_csv_409",
     "trigger_context": "do you know what movie you're going to watch?",
     "response_text": "i don't know, but was there a certain movie you wanted to see?",
-    "success_score": 0.615867113345212,
+    "success_score": 0.6197831326614991,
     "intent": "disagreement",
-    "usage_count": 4,
+    "usage_count": 5,
     "embedding_cache": null
   },
   {
@@ -5556,9 +5556,9 @@
     "fragment_id": "learned_csv_414",
     "trigger_context": "you have any ideas as to what you want to do this weekend?",
     "response_text": "i'm going to the movie theater with my friend. what are you going to do?",
-    "success_score": 0.608114531018406,
+    "success_score": 0.612545808745036,
     "intent": "question_info",
-    "usage_count": 2,
+    "usage_count": 3,
     "embedding_cache": null
   },
   {
@@ -5583,9 +5583,9 @@
     "fragment_id": "learned_csv_417",
     "trigger_context": "how about you see a movie with me and my friend?",
     "response_text": "what movie are you and your friend planning on watching?",
-    "success_score": 0.6350447369803602,
+    "success_score": 0.6408598996171305,
     "intent": "question_info",
-    "usage_count": 8,
+    "usage_count": 9,
     "embedding_cache": null
   },
   {
@@ -5610,9 +5610,9 @@
     "fragment_id": "learned_csv_420",
     "trigger_context": "no good movies come to mind.",
     "response_text": "have you decided whether or not you would like to go?",
-    "success_score": 0.6040751716417829,
+    "success_score": 0.6064572599326555,
     "intent": "disagreement",
-    "usage_count": 1,
+    "usage_count": 2,
     "embedding_cache": null
   },
   {
@@ -5691,9 +5691,9 @@
     "fragment_id": "learned_csv_428",
     "trigger_context": "i will be glad to do the same for you when you're sick.",
     "response_text": "well, thank you. i hope to see you at school tomorrow.",
-    "success_score": 0.692827135751699,
+    "success_score": 0.6985368719398246,
     "intent": "farewell",
-    "usage_count": 23,
+    "usage_count": 25,
     "embedding_cache": null
   },
   {
@@ -5736,9 +5736,9 @@
     "fragment_id": "learned_csv_432",
     "trigger_context": "i'm sorry to hear that. would you like the assignments from english class?",
     "response_text": "i would really appreciate that, thanks.",
-    "success_score": 0.6313041518631746,
+    "success_score": 0.6334362210813332,
     "intent": "acknowledgment",
-    "usage_count": 8,
+    "usage_count": 9,
     "embedding_cache": null
   },
   {
@@ -5772,18 +5772,18 @@
     "fragment_id": "learned_csv_436",
     "trigger_context": "have you gone to school today?",
     "response_text": "i went to school today. did you go to school?",
-    "success_score": 0.6101101967657632,
+    "success_score": 0.6124276865370145,
     "intent": "statement",
-    "usage_count": 3,
+    "usage_count": 4,
     "embedding_cache": null
   },
   {
     "fragment_id": "learned_csv_437",
     "trigger_context": "i went to school today. did you go to school?",
     "response_text": "i couldn't go to school today, i was sick.",
-    "success_score": 0.6090167831233334,
+    "success_score": 0.6115421257741542,
     "intent": "statement",
-    "usage_count": 2,
+    "usage_count": 3,
     "embedding_cache": null
   },
   {
@@ -6132,9 +6132,9 @@
     "fragment_id": "learned_csv_474",
     "trigger_context": "did you go to school today?",
     "response_text": "of course. did you?",
-    "success_score": 0.6,
+    "success_score": 0.6029108673383483,
     "intent": "statement",
-    "usage_count": 0,
+    "usage_count": 1,
     "embedding_cache": null
   },
   {
@@ -6231,9 +6231,9 @@
     "fragment_id": "learned_csv_485",
     "trigger_context": "did you make it to school today?",
     "response_text": "i always do. did you go to school today?",
-    "success_score": 0.6040320802239518,
+    "success_score": 0.6062066387181647,
     "intent": "statement",
-    "usage_count": 1,
+    "usage_count": 2,
     "embedding_cache": null
   },
   {
@@ -8454,9 +8454,9 @@
     "fragment_id": "learned_csv_732",
     "trigger_context": "is it in northern california?",
     "response_text": "no. it's in southern california.",
-    "success_score": 0.6042988613193494,
+    "success_score": 0.61954365942021,
     "intent": "disagreement",
-    "usage_count": 1,
+    "usage_count": 5,
     "embedding_cache": null
   },
   {
@@ -8607,9 +8607,9 @@
     "fragment_id": "learned_csv_750",
     "trigger_context": "do you have a girlfriend?",
     "response_text": "no, i don't. do you?",
-    "success_score": 0.6,
+    "success_score": 0.6035736705482005,
     "intent": "disagreement",
-    "usage_count": 0,
+    "usage_count": 1,
     "embedding_cache": null
   },
   {
@@ -9822,9 +9822,9 @@
     "fragment_id": "learned_csv_886",
     "trigger_context": "i found out that she gave it to her new boyfriend.",
     "response_text": "why did she do that?",
-    "success_score": 0.6184638814301517,
+    "success_score": 0.6226184979415439,
     "intent": "question_info",
-    "usage_count": 4,
+    "usage_count": 5,
     "embedding_cache": null
   },
   {
@@ -9894,18 +9894,18 @@
     "fragment_id": "learned_csv_894",
     "trigger_context": "they talk about other animals.",
     "response_text": "what else do they talk about?",
-    "success_score": 0.6071683624582477,
+    "success_score": 0.6114698037440963,
     "intent": "question_info",
-    "usage_count": 2,
+    "usage_count": 3,
     "embedding_cache": null
   },
   {
     "fragment_id": "learned_csv_895",
     "trigger_context": "what else do they talk about?",
     "response_text": "they talk about food and the weather.",
-    "success_score": 0.6040622320293987,
+    "success_score": 0.6126466450795734,
     "intent": "greeting",
-    "usage_count": 1,
+    "usage_count": 3,
     "embedding_cache": null
   },
   {

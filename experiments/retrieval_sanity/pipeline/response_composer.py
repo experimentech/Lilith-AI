@@ -306,9 +306,30 @@ class ResponseComposer:
                 
                 trigger_relevance = float(np.dot(query_norm, trigger_norm))
                 
-                # Combined score: max of response relevance and trigger relevance
-                # This allows both "answers to queries" and "contextual responses"
-                combined_relevance = max(relevance, trigger_relevance * 0.7)
+                # IMPORTANT: BNN embeddings are unreliable! Add keyword/topic boost
+                # Extract key content words (not stopwords)
+                stopwords = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+                           'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should',
+                           'can', 'could', 'may', 'might', 'must', 'i', 'you', 'he', 'she', 'it',
+                           'we', 'they', 'them', 'this', 'that', 'these', 'those', 'to', 'of', 'in',
+                           'on', 'at', 'by', 'for', 'with', 'about', 'as', 'from'}
+                
+                query_words = set(w.lower() for w in user_query.split() if w.lower() not in stopwords)
+                response_words = set(w.lower() for w in pattern.response_text.split() if w.lower() not in stopwords)
+                trigger_words = set(w.lower() for w in pattern.trigger_context.split() if w.lower() not in stopwords)
+                
+                # Keyword overlap scores
+                response_overlap = len(query_words & response_words) / max(len(query_words), 1)
+                trigger_overlap = len(query_words & trigger_words) / max(len(query_words), 1)
+                
+                # Combined score: BNN similarity + keyword overlap boost
+                # Weight keyword overlap VERY heavily since BNN is unreliable
+                # Prioritize patterns with actual keyword matches
+                keyword_boost = max(response_overlap, trigger_overlap) * 0.5  # Up to +0.5 boost
+                combined_relevance = max(
+                    relevance + keyword_boost,
+                    trigger_relevance * 0.7 + keyword_boost
+                )
                 
                 # Filter out low-relevance patterns
                 if combined_relevance >= min_relevance:
