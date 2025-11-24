@@ -38,6 +38,10 @@ class DatabaseBackedFragmentStore:
         self.storage_path = storage_path
         self.db = PatternDatabase(storage_path)
         
+        # Calculate IDF scores for keyword weighting (brain: distinctiveness!)
+        # Rare words like 'hi', 'beach' get higher weights than common 'you', 'it'
+        self._idf_scores = self.db.calculate_idf_scores()
+        
         # Check if database is populated
         stats = self.db.get_stats()
         if stats['total_patterns'] == 0:
@@ -95,25 +99,52 @@ class DatabaseBackedFragmentStore:
         keyword_tuples = extract_keywords(context, 'query')
         keywords = [kw for kw, _, _ in keyword_tuples]
         
+        # Brain insight: Query by most DISTINCTIVE keyword first!
+        # Sort keywords by IDF (rare = more informative)
+        if keywords:
+            keyword_idf_pairs = [(kw, self._idf_scores.get(kw, 0.0)) for kw in keywords]
+            keyword_idf_pairs.sort(key=lambda x: x[1], reverse=True)  # Highest IDF first
+            sorted_keywords = [kw for kw, _ in keyword_idf_pairs]
+        else:
+            sorted_keywords = []
+        
         # Try intent-based retrieval first if we have an intent hint
         if intent_hint:
             # Query by intent + keywords
             pattern_rows = self.db.query_patterns(
                 intent=intent_hint,
-                keywords=keywords if keywords else None,
+                keywords=sorted_keywords if sorted_keywords else None,
                 min_success=min_score,
-                limit=topk * 2  # Get more candidates for scoring
+                limit=topk * 3  # Get more candidates for scoring
             )
             
             if pattern_rows:
-                return self._score_patterns(pattern_rows, keywords, topk)
+                return self._score_patterns(pattern_rows, sorted_keywords, topk)
         
         # Fallback: keyword-only retrieval
-        if keywords:
+        if sorted_keywords:
+            # Brain strategy: Start with MOST distinctive keyword (highest IDF)
+            # This gives us fewer, more relevant candidates
+            # Then expand if needed
+            pattern_rows = []
+            
+            # Try top keyword first (most distinctive)
+            if sorted_keywords:
+                pattern_rows = self.db.query_patterns(
+                    keywords=[sorted_keywords[0]],  # Just the most distinctive keyword!
+                    min_success=min_score,
+                    limit=topk * 3
+                )
+            
+            # If we got good candidates, score them
+            if pattern_rows:
+                return self._score_patterns(pattern_rows, keywords, topk)
+            
+            # If top keyword didn't work, try all keywords (fallback)
             pattern_rows = self.db.query_patterns(
-                keywords=keywords,
+                keywords=sorted_keywords,
                 min_success=min_score,
-                limit=topk * 3
+                limit=topk * 5
             )
             
             if pattern_rows:
@@ -129,15 +160,28 @@ class DatabaseBackedFragmentStore:
         topk: int
     ) -> List[Tuple[ResponsePattern, float]]:
         """
-        Score retrieved patterns by keyword overlap + success.
+        Score retrieved patterns by TF-IDF weighted keyword overlap + success.
         
         Brain-inspired improvements:
         1. Match user input to TRIGGER patterns (what activates response)
         2. Weight trigger matches > response matches (70/30)
-        3. Boost EXACT trigger matches (brain recognizes familiar patterns strongly)
+        3. Use TF-IDF: rare words like 'hi' weighted more than common 'you'
+        4. Boost EXACT trigger matches (brain recognizes familiar patterns strongly)
         """
         scored_patterns = []
         context_keywords_set = set(context_keywords)
+        
+        # Calculate IDF-weighted importance for each user keyword
+        keyword_weights = {}
+        for kw in context_keywords:
+            # Get IDF score (0 if keyword not in database)
+            idf = self._idf_scores.get(kw, 0.0)
+            keyword_weights[kw] = idf
+        
+        # Normalize weights so they sum to 1.0
+        total_weight = sum(keyword_weights.values()) if keyword_weights else 1.0
+        if total_weight > 0:
+            keyword_weights = {kw: w/total_weight for kw, w in keyword_weights.items()}
         
         for row in pattern_rows:
             pattern = ResponsePattern(
@@ -164,11 +208,11 @@ class DatabaseBackedFragmentStore:
                 else:
                     response_keywords.add(kw_row[0])
             
-            # Calculate keyword overlap scores
+            # Calculate TF-IDF weighted overlap scores
             if context_keywords_set:
-                # TRIGGER match (primary): Does user input match what activates this pattern?
-                trigger_overlap = len(context_keywords_set & trigger_keywords)
-                trigger_score = trigger_overlap / max(len(context_keywords_set), 1)
+                # TRIGGER match (primary): Weighted by IDF (rare words count more!)
+                trigger_matches = context_keywords_set & trigger_keywords
+                trigger_score = sum(keyword_weights.get(kw, 0) for kw in trigger_matches)
                 
                 # EXACT trigger match bonus: If ALL user keywords match trigger, strong signal!
                 # This helps "Hi" match "Hi" even if other patterns match "how you"
@@ -176,8 +220,8 @@ class DatabaseBackedFragmentStore:
                     trigger_score *= 1.5  # 50% boost for exact matches
                 
                 # RESPONSE match (secondary): Topic coherence for multi-turn conversations
-                response_overlap = len(context_keywords_set & response_keywords)
-                response_score = response_overlap / max(len(context_keywords_set), 1)
+                response_matches = context_keywords_set & response_keywords
+                response_score = sum(keyword_weights.get(kw, 0) for kw in response_matches)
                 
                 # Brain-like: Weight trigger matching more heavily (70/30)
                 overlap_score = (trigger_score * 0.7) + (response_score * 0.3)

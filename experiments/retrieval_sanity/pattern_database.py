@@ -270,6 +270,75 @@ class PatternDatabase:
             "avg_success": avg_success
         }
     
+    def calculate_idf_scores(self) -> Dict[str, float]:
+        """
+        Calculate IDF (Inverse Document Frequency) scores for all keywords.
+        
+        Brain insight: Rare words are more distinctive and informative!
+        - 'hi' appears in 4 patterns → high IDF (distinctive greeting signal)
+        - 'you' appears in 500 patterns → low IDF (ubiquitous, less informative)
+        
+        Formula: IDF(word) = log(total_patterns / patterns_containing_word)
+        
+        Returns:
+            Dict mapping keyword → IDF score
+        """
+        import math
+        
+        cursor = self.conn.cursor()
+        
+        # Get total number of patterns (corpus size)
+        cursor.execute("SELECT COUNT(*) FROM patterns")
+        total_patterns = cursor.fetchone()[0]
+        
+        if total_patterns == 0:
+            return {}
+        
+        # Count how many patterns each keyword appears in
+        cursor.execute("""
+            SELECT keyword, COUNT(DISTINCT pattern_id) as doc_freq
+            FROM pattern_keywords
+            GROUP BY keyword
+        """)
+        
+        idf_scores = {}
+        for row in cursor.fetchall():
+            keyword = row['keyword']
+            doc_freq = row['doc_freq']
+            
+            # IDF = log(N / df) where N = total docs, df = document frequency
+            # Add 1 to avoid log(0) and division by zero
+            idf = math.log((total_patterns + 1) / (doc_freq + 1))
+            idf_scores[keyword] = idf
+        
+        return idf_scores
+    
+    def get_keyword_idf(self, keyword: str) -> float:
+        """Get IDF score for a specific keyword."""
+        cursor = self.conn.cursor()
+        
+        # Total patterns
+        cursor.execute("SELECT COUNT(*) FROM patterns")
+        total_patterns = cursor.fetchone()[0]
+        
+        if total_patterns == 0:
+            return 0.0
+        
+        # How many patterns contain this keyword
+        cursor.execute("""
+            SELECT COUNT(DISTINCT pattern_id)
+            FROM pattern_keywords
+            WHERE keyword = ?
+        """, (keyword,))
+        
+        doc_freq = cursor.fetchone()[0]
+        
+        if doc_freq == 0:
+            return 0.0
+        
+        import math
+        return math.log((total_patterns + 1) / (doc_freq + 1))
+    
     def close(self):
         """Close database connection."""
         self.conn.close()
