@@ -313,6 +313,17 @@ def main():
     
     args = parser.parse_args()
     
+    # Check if dataset exists
+    if not Path(args.dataset).exists():
+        print(f"\n❌ Error: Dataset file not found: {args.dataset}")
+        print(f"\nAvailable example datasets:")
+        print(f"  - sample_training_data.json (40 turns about neural networks)")
+        print(f"\nUsage:")
+        print(f"  python train_from_conversations.py sample_training_data.json")
+        print(f"  python train_from_conversations.py your_data.json --output trained.json")
+        print()
+        sys.exit(1)
+    
     # Initialize system
     print("\n🧠 Initializing Pure Neuro-Symbolic System...")
     loop = ConversationLoop(

@@ -11,11 +11,26 @@ The system is **production-ready for conversational training data**. You can now
 
 ## Quick Start
 
-### Train on Your Dataset
+### Test with Sample Data (Recommended First Step)
+
+The repository includes a sample dataset with 40 dialogue turns about neural networks:
 
 ```bash
-python train_from_conversations.py your_dialogues.json --output trained_patterns.json
+cd experiments/retrieval_sanity
+python train_from_conversations.py sample_training_data.json
 ```
+
+This will train the system and save patterns to `conversation_patterns_trained.json`.
+
+### Train on Your Dataset
+
+Once you've verified the sample works, prepare your own data and run:
+
+```bash
+python train_from_conversations.py your_dialogues.json --output my_trained_model.json
+```
+
+**Note:** The file `your_dialogues.json` in examples is just a placeholder - you need to create your own dialogue file or use `sample_training_data.json` for testing.
 
 ### Test the Trained Model
 
