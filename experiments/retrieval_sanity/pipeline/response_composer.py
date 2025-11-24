@@ -86,6 +86,36 @@ class ResponseComposer:
             print("  📝 BNN-based syntax stage enabled!")
         elif use_grammar and not GRAMMAR_AVAILABLE:
             print("  ⚠️  Syntax stage not available, falling back to standard composition")
+        
+        # Track last query and response for success learning
+        self.last_query = None
+        self.last_response = None
+    
+    def record_conversation_outcome(self, success: bool):
+        """
+        Record the outcome of the last conversation turn.
+        
+        Call this after each response to enable success-based learning.
+        The system learns which patterns work for which queries.
+        
+        Args:
+            success: True if conversation continued well, False if it broke down
+                     
+        Examples of success signals:
+            - User continues the topic → True
+            - User asks follow-up question → True
+            - User changes topic abruptly → False
+            - User says "what?" or "huh?" → False
+        """
+        if self.last_query and self.last_response and hasattr(self.fragments, 'record_conversation_outcome'):
+            # Get the primary pattern ID that was used
+            if self.last_response.primary_pattern:
+                pattern_id = self.last_response.primary_pattern.fragment_id
+                self.fragments.record_conversation_outcome(
+                    self.last_query,
+                    pattern_id,
+                    success
+                )
     
     def cluster_patterns(self):
         """Build intent clusters from learned patterns using BNN embeddings."""
@@ -108,7 +138,9 @@ class ResponseComposer:
         context: str,
         user_input: str = "",
         topk: int = 5,
-        use_intent_filtering: bool = False  # Disabled: BNN intent classification unreliable on user inputs
+        use_intent_filtering: bool = False,  # Disabled: BNN intent classification unreliable on user inputs
+        use_semantic_retrieval: bool = True,  # ENABLED: BNN + success-based learning (OPEN BOOK EXAM)
+        semantic_weight: float = 0.5  # Balanced: 50% BNN semantics, 50% keywords
     ) -> ComposedResponse:
         """
         Generate response through learned composition.
@@ -118,10 +150,15 @@ class ResponseComposer:
             user_input: Raw user input (for direct references)
             topk: Number of patterns to consider
             use_intent_filtering: Use BNN intent classification to filter patterns
+            use_semantic_retrieval: Use BNN embeddings for similarity (OPEN BOOK EXAM)
+            semantic_weight: Weight for semantic similarity (0.0=keywords only, 1.0=semantic only)
             
         Returns:
             ComposedResponse with text and metadata
         """
+        # Track query for success learning
+        self.last_query = user_input if user_input else context
+        
         # 1. Classify intent using BNN if available
         intent_hint = None
         if use_intent_filtering and self.intent_classifier is not None and user_input:
@@ -131,37 +168,64 @@ class ResponseComposer:
             if intent_scores and intent_scores[0][1] > 0.5:  # Reasonable confidence
                 intent_hint = intent_scores[0][0]  # Top intent label
         
-        # 2. Database queries patterns matching intent + keywords
-        # Brain insight: Match USER'S CURRENT INPUT to trigger patterns!
-        # (Don't use enriched context - that includes previous turns)
+        # 2. RETRIEVE PATTERNS - Choose method based on configuration  
+        # For keyword matching, use clean user_input
+        # For semantic matching, we'll use context to boost topic-relevant patterns
         retrieval_query = user_input if user_input else context
-        patterns = self.fragments.retrieve_patterns(
-            retrieval_query,  # Use current input for trigger matching!
-            topk=topk * 3,
-            intent_hint=intent_hint
-        )
+        
+        if use_semantic_retrieval and hasattr(self.fragments, 'retrieve_patterns_hybrid'):
+            # NEW PATH: BNN embedding + keyword hybrid (OPEN BOOK EXAM)
+            # BNN learns "how to recognize similar contexts" 
+            # Database stores "what to respond"
+            patterns = self.fragments.retrieve_patterns_hybrid(
+                retrieval_query,
+                topk=topk * 3,
+                min_score=0.0,
+                semantic_weight=semantic_weight
+            )
+            
+            # MULTI-TURN COHERENCE: Boost patterns that match active conversation topics
+            # NOTE: Disabled for now - the real issue is pattern quality, not topic coherence
+            # patterns = self._boost_topic_coherent_patterns(patterns, context)
+        else:
+            # OLD PATH: Pure keyword matching
+            patterns = self.fragments.retrieve_patterns(
+                retrieval_query,
+                topk=topk * 3,
+                intent_hint=intent_hint
+            )
         
         if not patterns:
             # Fallback if no patterns found
             return self._fallback_response()
         
-        # 2. Score patterns by semantic relevance to user query
-        # This is the KEY fix: match response content to user's actual question!
-        if user_input:
+        # 2b. Score patterns by semantic relevance to user query
+        # SKIP if using hybrid retrieval (already scored by BNN + keywords)
+        if user_input and not use_semantic_retrieval:
+            # Only re-score for keyword-only retrieval
             patterns = self._score_by_query_relevance(patterns, user_input, topk=topk)
         else:
+            # Hybrid retrieval already scored - just limit to topk
             patterns = patterns[:topk]
         
         if not patterns:
             return self._fallback_response()
         
-        # 2b. Check if best pattern has sufficient relevance
+        # 2c. Filter out assumptive responses (assume prior conversation context)
+        # These patterns come from different conversations and don't fit
+        patterns = self._filter_assumptive_responses(patterns)
+        
+        if not patterns:
+            return self._fallback_response()
+        
+        # 2d. Check if best pattern has sufficient relevance
         # If not, provide a graceful fallback instead of hallucinating
         best_pattern, best_score = patterns[0]
-        if best_score < 0.70:  # Confidence threshold - reject weak matches
+        
+        if best_score < 0.80:  # Confidence threshold - reject weak matches
             return self._fallback_response_low_confidence(user_input, best_pattern, best_score)
         
-        # 2c. Additional check: is user asking about specific topic not in training data?
+        # 2d. Additional check: is user asking about specific topic not in training data?
         # Check for specific technical terms that aren't well-covered
         uncovered_terms = ['transformer', 'cnn', 'rnn', 'gan', 'lstm', 'gru', 'vae', 
                           'resnet', 'bert', 'gpt', 'diffusion', 'reinforcement']
@@ -177,17 +241,26 @@ class ResponseComposer:
             if uncovered_in_query and not any(t in response_lower for t in uncovered_in_query):
                 return self._fallback_response_low_confidence(user_input, best_pattern, best_score)
             
-        # 3. For high-relevance patterns, use top match directly
-        # (Additional weighting can destroy semantic relevance order)
+        # 3. PATTERN ADAPTATION: Use pattern as template, not verbatim
+        # Brain-like: retrieved pattern provides structure/intent, BNN adapts to context
         if user_input and best_score > 0.75:
-            # High confidence - use best pattern directly
-            return ComposedResponse(
-                text=best_pattern.response_text,
+            # High confidence - adapt pattern to current context
+            adapted_text = self._adapt_pattern_to_context(
+                best_pattern, 
+                user_input, 
+                context,
+                activation_signature=self._get_activation_signature()
+            )
+            
+            response = ComposedResponse(
+                text=adapted_text,
                 fragment_ids=[best_pattern.fragment_id],
                 composition_weights=[1.0],
                 coherence_score=best_score,
                 primary_pattern=best_pattern
             )
+            self.last_response = response
+            return response
             
         # 4. For medium-relevance patterns, apply gentle PMFlow weighting
         activation_signature = self._get_activation_signature()
@@ -215,7 +288,90 @@ class ResponseComposer:
             user_input
         )
         
+        # Track response for success learning
+        self.last_response = response
+        
         return response
+    
+    def _boost_topic_coherent_patterns(
+        self,
+        patterns: List[Tuple[ResponsePattern, float]],
+        context: str
+    ) -> List[Tuple[ResponsePattern, float]]:
+        """
+        Boost patterns that maintain topic coherence with recent conversation.
+        
+        This is key for multi-turn coherence - patterns that match active topics
+        should be preferred over random tangents.
+        
+        Args:
+            patterns: Retrieved patterns with scores
+            context: Current context (may include history like "Previous: X | Current: Y")
+            
+        Returns:
+            Patterns with topic-coherent ones boosted
+        """
+        # The issue with keyword overlap on full context is that it's too noisy
+        # ("movies" shares "about"/"learn" with "learn about machine learning")
+        # 
+        # Better approach: penalize patterns that introduce NEW topics
+        # not mentioned anywhere in recent conversation
+        
+        # Extract ALL words from context (previous responses + current input)
+        context_lower = context.lower()
+        context_words = set(context_lower.split())
+        
+        # Common stop words to ignore
+        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+                     'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
+                     'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+                     'should', 'could', 'may', 'might', 'must', 'can', 'previous', 'current',
+                     'earlier', 'i', 'you', 'we', 'they', 'he', 'she', 'it', 'my', 'your',
+                     'his', 'her', 'their', 'this', 'that', 'these', 'those', '→', '|'}
+        
+        context_keywords = context_words - stop_words
+        
+        if not context_keywords or len(patterns) == 0:
+            return patterns  # No context or no patterns to boost
+        
+        print(f"  🎯 Topic coherence check:")
+        print(f"     Context: '{context[:60]}...'")
+        
+        boosted = []
+        for pattern, score in patterns:
+            # Check if pattern introduces completely new topics
+            pattern_text = (pattern.trigger_context + " " + pattern.response_text).lower()
+            pattern_words = set(pattern_text.split()) - stop_words
+            
+            # Calculate what's new vs what's already in conversation
+            new_topics = pattern_words - context_keywords
+            existing_topics = pattern_words & context_keywords
+            
+            if len(pattern_words) == 0:
+                # Empty pattern, keep as is
+                boosted.append((pattern, score))
+                continue
+            
+            # Ratio of new topics to total pattern content
+            novelty_ratio = len(new_topics) / len(pattern_words) if len(pattern_words) > 0 else 1.0
+            
+            # PENALIZE high novelty (random topic jumps)
+            # novelty 0.0 = all words in conversation already (good!)
+            # novelty 1.0 = completely new topic (bad!)
+            coherence_score = 1.0 - (novelty_ratio * 0.5)  # Max 50% penalty
+            
+            adjusted_score = score * coherence_score
+            
+            if len(boosted) < 3:  # Show first 3
+                print(f"     Pattern: '{pattern.response_text[:35]}...'")
+                print(f"       Novelty: {novelty_ratio:.2f} → coherence: {coherence_score:.2f} → {score:.3f} → {adjusted_score:.3f}")
+            
+            boosted.append((pattern, adjusted_score))
+        
+        # Re-sort by adjusted scores
+        boosted.sort(key=lambda x: x[1], reverse=True)
+        
+        return boosted
         
     def _get_activation_signature(self) -> Dict[str, float]:
         """
@@ -231,6 +387,271 @@ class ResponseComposer:
             activation_sig[topic.signature] = topic.strength
             
         return activation_sig
+    
+    def _adapt_pattern_to_context(
+        self,
+        pattern: ResponsePattern,
+        user_input: str,
+        context: str,
+        activation_signature: Dict[str, float]
+    ) -> str:
+        """
+        Adapt retrieved pattern to current context - brain-like generation.
+        
+        Instead of using pattern verbatim (canned response), extract its structure
+        and generate contextually appropriate content. The pattern provides:
+        - Intent (question/statement/greeting)
+        - Sentiment/tone
+        - General structure
+        
+        BNN and working memory help fill in context-appropriate content.
+        
+        Args:
+            pattern: Retrieved pattern (template)
+            user_input: Current user query
+            context: Conversation context
+            activation_signature: Working memory activations
+            
+        Returns:
+            Adapted response text
+        """
+        # Step 1: Analyze pattern structure
+        pattern_intent = pattern.intent if hasattr(pattern, 'intent') else "statement"
+        is_question = "?" in pattern.response_text
+        is_greeting = any(word in pattern.response_text.lower() 
+                         for word in ["hello", "hi", "hey", "greetings"])
+        
+        # Step 2: Extract key concepts from pattern (what it's ABOUT)
+        # These are content words, not structure
+        pattern_words = set(pattern.response_text.lower().split())
+        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+                     'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
+                     'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+                     'should', 'could', 'may', 'might', 'must', 'can', 'i', 'you', 'we', 
+                     'they', 'he', 'she', 'it', 'my', 'your', 'his', 'her', 'their',
+                     'this', 'that', 'these', 'those', 'how', 'what', 'about'}
+        pattern_concepts = pattern_words - stop_words
+        
+        # Step 3: Extract context topics (what conversation is ABOUT)
+        context_words = set(context.lower().split())
+        user_words = set(user_input.lower().split())
+        
+        # Remove context formatting markers
+        context_words.discard("previous:")
+        context_words.discard("current:")
+        context_words.discard("earlier:")
+        
+        context_concepts = (context_words | user_words) - stop_words
+        
+        # Step 4: Decide adaptation strategy based on overlap
+        concept_overlap = len(pattern_concepts & context_concepts)
+        
+        if concept_overlap >= 2:
+            # Good overlap - pattern is relevant, use with minor tweaks
+            return self._adapt_with_substitution(pattern, user_input, context_concepts)
+        elif is_greeting:
+            # Greeting pattern - keep structure, adapt to context
+            return self._adapt_greeting(pattern, user_input, context_concepts)
+        elif is_question:
+            # Question pattern - keep interrogative structure, adapt content
+            return self._adapt_question(pattern, user_input, context_concepts)
+        else:
+            # Statement pattern - use as inspiration for topic-relevant statement
+            return self._adapt_statement(pattern, user_input, context_concepts)
+    
+    def _adapt_with_substitution(
+        self, 
+        pattern: ResponsePattern, 
+        user_input: str,
+        context_concepts: set
+    ) -> str:
+        """Pattern is relevant - use it with minor concept substitution."""
+        # For now, use pattern mostly as-is since it's already relevant
+        # Future: Could use BNN to find similar but context-appropriate phrases
+        return pattern.response_text
+    
+    def _adapt_greeting(
+        self,
+        pattern: ResponsePattern,
+        user_input: str, 
+        context_concepts: set
+    ) -> str:
+        """Adapt greeting pattern to be context-appropriate."""
+        # Extract greeting structure
+        if "hello" in pattern.response_text.lower():
+            greeting_base = "Hello!"
+        elif "hi" in pattern.response_text.lower():
+            greeting_base = "Hi there!"
+        else:
+            greeting_base = "Greetings!"
+        
+        # Add context-appropriate follow-up
+        if "help" in context_concepts or "learn" in context_concepts:
+            return f"{greeting_base} I'd be happy to help you. What would you like to know?"
+        elif "can" in context_concepts or "do" in context_concepts:
+            return f"{greeting_base} I can discuss various topics. What interests you?"
+        else:
+            return f"{greeting_base} How can I assist you today?"
+    
+    def _adapt_question(
+        self,
+        pattern: ResponsePattern,
+        user_input: str,
+        context_concepts: set
+    ) -> str:
+        """Adapt question pattern to maintain conversational flow."""
+        # Check if user is making an acknowledgment first
+        user_lower = user_input.lower()
+        if any(word in user_lower for word in ["interesting", "cool", "nice", "great", "okay", "ok"]):
+            return "I'm glad you found that interesting! What else would you like to know?"
+        
+        # Extract question type from pattern
+        pattern_lower = pattern.response_text.lower()
+        
+        # Common question starters
+        if pattern_lower.startswith("what"):
+            # "What about..." type questions
+            # Filter to meaningful concepts only
+            meaningful_concepts = {c for c in context_concepts 
+                                  if len(c) > 3 and 
+                                  c not in {"that's", "what's", "it's", "there's", "do?", "can?", "you?"} and
+                                  "?" not in c}
+            if meaningful_concepts:
+                concept = list(meaningful_concepts)[0]  # Pick first meaningful concept
+                return f"What would you like to know about {concept}?"
+            return "What would you like to know more about?"
+        
+        elif pattern_lower.startswith("how"):
+            return "How can I help you with that?"
+        
+        elif pattern_lower.startswith("do you") or pattern_lower.startswith("did you"):
+            return "Do you have a specific question I can help with?"
+        
+        else:
+            # Generic question - keep conversational
+            return "Is there something specific you'd like to know?"
+    
+    def _adapt_statement(
+        self,
+        pattern: ResponsePattern,
+        user_input: str,
+        context_concepts: set
+    ) -> str:
+        """Adapt statement pattern to address user's actual query."""
+        # Check what user is asking about
+        user_lower = user_input.lower()
+        
+        # Capability questions
+        if any(phrase in user_lower for phrase in ["what can you", "what do you", "can you help"]):
+            return "I can help answer questions and discuss various topics. What would you like to explore?"
+        
+        # Interest/preference questions  
+        if any(phrase in user_lower for phrase in ["what about", "how about", "do you like"]):
+            if context_concepts:
+                concept = list(context_concepts)[0]
+                return f"That's an interesting topic. I'd be happy to discuss {concept} with you."
+            return "That's an interesting question. Could you tell me more?"
+        
+        # General acknowledgment
+        if any(word in user_lower for word in ["interesting", "cool", "nice", "great", "okay", "ok", "thanks"]):
+            # User is acknowledging - ask what they want to explore
+            if context_concepts:
+                # Filter out generic words
+                meaningful_concepts = {c for c in context_concepts 
+                                      if len(c) > 3 and c not in {"that's", "what's", "it's", "there's"}}
+                if meaningful_concepts:
+                    concept = list(meaningful_concepts)[0]
+                    return f"I'm glad you found that interesting! Would you like to know more about {concept}?"
+            return "I'm glad you found that interesting! What else would you like to know?"
+        
+        # Default: Use pattern's sentiment but make it generic
+        if "!" in pattern.response_text:
+            # Enthusiastic pattern
+            return "I'd be happy to help with that!"
+        else:
+            # Neutral pattern
+            return "I can help with that. What would you like to know?"
+    
+    def _filter_assumptive_responses(
+        self,
+        patterns: List[Tuple[ResponsePattern, float]]
+    ) -> List[Tuple[ResponsePattern, float]]:
+        """
+        Deprioritize responses that assume prior conversation context.
+        
+        These patterns come from other conversations and make assumptive statements
+        like "i do too" or "have you decided" that don't make sense without context.
+        
+        Instead of filtering them out completely (which can leave us with no matches),
+        we penalize their scores heavily.
+        
+        Args:
+            patterns: Candidate patterns with scores
+            
+        Returns:
+            Patterns with assumptive ones penalized (but not removed)
+        """
+        # Phrases that assume prior context
+        assumptive_starts = [
+            'i do too',
+            'i did too',
+            'i would too',
+            'i will too',
+            'me too',
+            'me neither',
+            'i agree',
+            'i disagree',
+            'have you decided',
+            'did you decide',
+            'have you thought',
+            'did you think',
+            'as i said',
+            'as i mentioned',
+            'as we discussed',
+            'like i said',
+            'like i told you',
+            'remember when',
+            'do you recall',
+            'you said',
+            'you told me',
+            'you mentioned',
+            "you're right",  # Assumes prior statement
+            "that's what i",  # Assumes prior discussion
+        ]
+        
+        # Phrases that are off-topic additions
+        off_topic_patterns = [
+            'i just got these shoes',
+            'i just bought',
+            'i recently got',
+        ]
+        
+        reranked = []
+        for pattern, score in patterns:
+            response_lower = pattern.response_text.lower().strip()
+            
+            # Check if response starts with assumptive phrase
+            penalty = 1.0
+            for phrase in assumptive_starts:
+                if response_lower.startswith(phrase):
+                    penalty = 0.3  # Heavy penalty (70% reduction)
+                    break
+            
+            # Check if response contains off-topic additions - REMOVE these entirely
+            has_offtopic = False
+            for phrase in off_topic_patterns:
+                if phrase in response_lower:
+                    has_offtopic = True
+                    break
+            
+            # Remove off-topic, penalize assumptive, keep others
+            if not has_offtopic:
+                reranked.append((pattern, score * penalty))
+        
+        # Re-sort by penalized scores
+        reranked.sort(key=lambda x: x[1], reverse=True)
+        
+        return reranked
     
     def _score_by_query_relevance(
         self,

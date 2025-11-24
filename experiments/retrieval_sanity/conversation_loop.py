@@ -48,7 +48,8 @@ class ConversationLoop:
         self,
         history_window: int = 10,
         composition_mode: str = "best_match",
-        use_grammar: bool = False
+        use_grammar: bool = False,
+        learning_mode: str = "conservative"
     ):
         """
         Initialize conversation system.
@@ -57,6 +58,10 @@ class ConversationLoop:
             history_window: Number of turns to keep in history
             composition_mode: How to compose responses (best_match, weighted_blend, adaptive)
             use_grammar: Enable grammar-guided composition (experimental)
+            learning_mode: Learning strictness (conservative, moderate, eager)
+                - conservative: Only learn from highly engaging interactions (default)
+                - moderate: Learn from reasonably positive interactions
+                - eager: Learn from most interactions (for teaching/debugging)
         """
         print("🧠 Initializing Pure Neuro-Symbolic Conversation System...")
         print()
@@ -101,7 +106,8 @@ class ConversationLoop:
         self.learner = ResponseLearner(
             composer=self.composer,
             fragment_store=self.fragment_store,
-            learning_rate=0.1
+            learning_rate=0.1,
+            learning_mode=learning_mode
         )
         
         # Initialize conversation history
@@ -149,6 +155,7 @@ class ConversationLoop:
         print(f"  History window: {self.history.max_turns} turns")
         print(f"  Composition mode: {self.composer.composition_mode}")
         print(f"  Learning rate: {self.learner.learning_rate}")
+        print(f"  Learning mode: {self.learner.learning_mode}")
         
         # Show syntax stage status
         if hasattr(self.composer, 'syntax_stage') and self.composer.syntax_stage:

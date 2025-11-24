@@ -1,14 +1,18 @@
 """
 Response Learner - Learning from Conversation Outcomes
 
-Observes conversation outcomes and updates response patterns through plasticity.
-Evaluates success signals from conversation state (topic strength, novelty, etc.).
+REFACTORED: Now uses GeneralPurposeLearner architecture.
+This module provides backward-compatible wrapper around PragmaticLearner.
 
-This is how the system LEARNS to communicate - no programming, pure adaptation!
+The actual learning logic is in:
+- general_purpose_learner.py: Universal learning algorithm
+- pragmatic_learner.py: Specialized for conversational responses
+
+This file maintains the old interface for compatibility.
 """
 
 from dataclasses import dataclass
-from typing import Optional, Dict
+from typing import Optional, Dict, TYPE_CHECKING
 import numpy as np
 
 from .response_composer import ResponseComposer, ComposedResponse
@@ -16,10 +20,17 @@ from .response_fragments import ResponseFragmentStore
 from .conversation_state import ConversationState
 from .plasticity import PlasticityController
 
+# Import new architecture (always available in this codebase)
+from .pragmatic_learner import PragmaticLearner
+from .general_purpose_learner import OutcomeSignals as GPLOutcomeSignals
+
+# Feature flag for gradual migration
+NEW_ARCHITECTURE_AVAILABLE = True
+
 
 @dataclass
 class OutcomeSignals:
-    """Conversation outcome signals for learning"""
+    """Conversation outcome signals for learning (legacy interface)"""
     topic_maintained: bool      # Did topic continue?
     novelty_score: float        # New information provided?
     engagement_score: float     # User engaged or confused?
@@ -31,8 +42,8 @@ class ResponseLearner:
     """
     Learns successful response patterns through interaction.
     
-    Observes conversation outcomes and applies plasticity updates
-    to improve future responses.
+    REFACTORED: Now delegates to PragmaticLearner (specialized GeneralPurposeLearner).
+    Maintains backward compatibility with existing code.
     
     Key insight: Use the SAME learning mechanisms as semantic understanding!
     """
@@ -42,7 +53,8 @@ class ResponseLearner:
         composer: ResponseComposer,
         fragment_store: ResponseFragmentStore,
         plasticity_controller: Optional[PlasticityController] = None,
-        learning_rate: float = 0.1
+        learning_rate: float = 0.1,
+        learning_mode: str = "conservative"
     ):
         """
         Initialize response learner.
@@ -52,11 +64,41 @@ class ResponseLearner:
             fragment_store: Store to update with learned patterns
             plasticity_controller: Optional plasticity controller for embeddings
             learning_rate: How quickly to adapt (0.0-1.0)
+            learning_mode: Learning strictness
+                - "conservative": Only learn from highly engaging interactions (default)
+                - "moderate": Learn from reasonably positive interactions
+                - "eager": Learn from most interactions (for teaching/debugging)
         """
         self.composer = composer
         self.fragments = fragment_store
         self.plasticity = plasticity_controller
         self.learning_rate = learning_rate
+        self.learning_mode = learning_mode
+        
+        # Use new architecture if available
+        if NEW_ARCHITECTURE_AVAILABLE:
+            self._core_learner = PragmaticLearner(
+                pattern_store=fragment_store,
+                learning_rate=learning_rate,
+                learning_mode=learning_mode
+            )
+        else:
+            self._core_learner = None
+        
+        # Set thresholds based on learning mode (legacy path)
+        if learning_mode == "conservative":
+            self.success_threshold = 0.4
+            self.engagement_threshold = 0.7
+        elif learning_mode == "moderate":
+            self.success_threshold = 0.2
+            self.engagement_threshold = 0.5
+        elif learning_mode == "eager":
+            self.success_threshold = 0.0
+            self.engagement_threshold = 0.3
+        else:
+            # Default to conservative
+            self.success_threshold = 0.4
+            self.engagement_threshold = 0.7
         
         # Track learning progress
         self.interaction_count = 0
@@ -72,6 +114,9 @@ class ResponseLearner:
         """
         Observe conversation outcome and learn.
         
+        Now delegates to PragmaticLearner if available (new architecture),
+        otherwise uses legacy implementation.
+        
         Args:
             response: Response that was generated
             previous_state: State before response
@@ -81,6 +126,39 @@ class ResponseLearner:
         Returns:
             Outcome signals that were observed
         """
+        # Use new architecture if available
+        if self._core_learner is not None:
+            # Prepare context for new architecture
+            context = {
+                'previous_state': previous_state,
+                'current_state': current_state,
+                'bot_response': response.text
+            }
+            
+            # Call general-purpose learner
+            gpl_signals = self._core_learner.observe_interaction(
+                layer_input=user_input,
+                layer_output=response,
+                context=context
+            )
+            
+            # Convert to legacy format
+            layer_signals = gpl_signals.layer_signals or {}
+            signals = OutcomeSignals(
+                topic_maintained=layer_signals.get('topic_maintained', 0.0) > 0.5,
+                novelty_score=layer_signals.get('novelty', 0.5),
+                engagement_score=layer_signals.get('engagement', 0.5),
+                coherence_score=layer_signals.get('coherence', 0.5),
+                overall_success=gpl_signals.overall_success
+            )
+            
+            # Track progress (sync with core learner)
+            self.interaction_count = self._core_learner.interaction_count
+            self.success_history = self._core_learner.success_history
+            
+            return signals
+        
+        # LEGACY PATH: Original implementation
         # Evaluate conversation outcome
         signals = self._evaluate_outcome(
             response,
@@ -323,42 +401,91 @@ class ResponseLearner:
         
         This is how the system learns NEW vocabulary and syntax!
         
-        When user says something interesting/engaging, we can:
-        1. Use their phrasing as a response pattern
-        2. Associate it with the context (our previous response)
+        Two learning modes:
+        1. Conversation flow: Bot says X → User says Y (mimics dialogue patterns)
+        2. Factual recall: User's statement → Echo it back (learns facts)
         
         Args:
             signals: Outcome signals from interaction
             user_input: What the user said
             bot_response: What we said that prompted their response
         """
-        # Only extract from highly positive interactions
-        if signals.overall_success < 0.4:
+        # DEBUG: Log why patterns aren't extracted
+        word_count = len(user_input.split())
+        is_question = user_input.strip().endswith('?')
+        
+        if self.learning_mode in ["moderate", "eager"]:
+            print(f"  🔍 Pattern extraction check ({self.learning_mode} mode):")
+            print(f"     Success: {signals.overall_success:.2f} (need > {self.success_threshold})")
+            print(f"     Engagement: {signals.engagement_score:.2f} (need > {self.engagement_threshold})")
+            print(f"     Word count: {word_count} (need 3-20)")
+            print(f"     Is question: {is_question} (must be False)")
+        
+        # Only extract from positive interactions (threshold depends on learning mode)
+        if signals.overall_success < self.success_threshold:
+            if self.learning_mode in ["moderate", "eager"]:
+                print(f"     ❌ Skipped: Low success")
             return
             
-        # Engagement score must be high (user was interested/elaborating)
-        if signals.engagement_score < 0.7:
+        # Engagement score must be reasonable (threshold depends on learning mode)
+        if signals.engagement_score < self.engagement_threshold:
+            if self.learning_mode in ["moderate", "eager"]:
+                print(f"     ❌ Skipped: Low engagement")
             return
             
         # Don't extract very short or very long inputs
-        word_count = len(user_input.split())
         if word_count < 3 or word_count > 20:
+            if self.learning_mode in ["moderate", "eager"]:
+                print(f"     ❌ Skipped: Word count out of range")
             return
             
         # Don't extract questions (those aren't good responses)
-        if user_input.strip().endswith('?'):
+        if is_question:
+            if self.learning_mode in ["moderate", "eager"]:
+                print(f"     ❌ Skipped: Is a question")
             return
             
-        # Extract pattern: use bot's previous response as trigger context
-        # and user's engaging reply as the new response
-        self.fragments.add_pattern(
-            trigger_context=bot_response,
-            response_text=user_input,
-            success_score=0.7,  # Start higher since it was engaging
-            intent="learned"
-        )
+        # Extract pattern with appropriate trigger-response mapping
+        import time
         
-        print(f"  🎓 Learned new pattern: '{user_input[:50]}...'")
+        # Check if user input looks like a factual statement (contains "is", "are", "have", etc.)
+        factual_markers = ['is', 'are', 'was', 'were', 'have', 'has', 'contain', 'include']
+        user_lower = user_input.lower()
+        is_factual = any(marker in user_lower.split() for marker in factual_markers)
+        
+        if is_factual:
+            # FACTUAL LEARNING: Store user's statement as potential response
+            # Extract key topic from statement for trigger
+            words = user_input.split()
+            # Use first 1-3 words as trigger topic (e.g., "Apples" from "Apples are red")
+            if len(words) >= 3:
+                topic = ' '.join(words[:min(3, len(words))])
+            else:
+                topic = words[0] if words else "general"
+            
+            fragment_id = f"learned_fact_{int(time.time() * 1000)}"
+            self.fragments.add_pattern(
+                fragment_id=fragment_id,
+                trigger_context=topic,  # Short topic as trigger
+                response_text=user_input,  # Full statement as response
+                intent="learned",
+                success_score=0.7
+            )
+            
+            print(f"  ✅ 🎓 Learned fact: '{user_input[:40]}...' (trigger: '{topic}')")
+        else:
+            # CONVERSATIONAL LEARNING: Store as dialogue flow pattern
+            # Bot says X → User might respond with Y
+            fragment_id = f"learned_conv_{int(time.time() * 1000)}"
+            self.fragments.add_pattern(
+                fragment_id=fragment_id,
+                trigger_context=bot_response,
+                response_text=user_input,
+                intent="learned",
+                success_score=0.7
+            )
+            
+            print(f"  ✅ 🎓 Learned response: '{user_input[:40]}...'")
             
     def get_learning_stats(self) -> Dict:
         """
