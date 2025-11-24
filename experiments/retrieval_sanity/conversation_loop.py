@@ -30,6 +30,7 @@ from pipeline.response_composer import ResponseComposer
 from pipeline.response_learner import ResponseLearner
 from pipeline.conversation_history import ConversationHistory
 from pipeline.conversation_state import ConversationState
+from pipeline.context_encoder import ConversationContextEncoder
 
 
 class ConversationLoop:
@@ -103,6 +104,13 @@ class ConversationLoop:
         # Initialize conversation history
         print("  📜 Initializing conversation history (sliding window)...")
         self.history = ConversationHistory(max_turns=history_window)
+        
+        # Initialize context encoder for multi-turn understanding
+        print("  🧠 Initializing context encoder (multi-turn awareness)...")
+        self.context_encoder = ConversationContextEncoder(
+            semantic_encoder=self.semantic_stage.encoder,
+            max_history_turns=5
+        )
         
         print()
         print("✅ System initialized!")
@@ -215,10 +223,21 @@ class ConversationLoop:
         # 3. OUTPUT PIPELINE: Context → Retrieve patterns → Compose response
         print("  🔍 Retrieving response patterns...")
         
-        # Use user input directly for pattern retrieval (lesson from minimal demo)
-        response = self.composer.compose_response(
-            context=user_input,  # Match against current input, not full history
+        # Build rich context from conversation history
+        history_turns = [(turn.user_input, turn.bot_response) 
+                        for turn in self.history.get_recent_turns(n=5)]
+        active_topics = self.conversation_state.snapshot().topics
+        
+        context_text, context_embedding = self.context_encoder.encode_context(
             user_input=user_input,
+            conversation_history=history_turns,
+            active_topics=active_topics
+        )
+        
+        # Use enriched context for pattern retrieval
+        response = self.composer.compose_response(
+            context=context_text,  # Rich multi-turn context
+            user_input=user_input,  # Still pass raw input for direct matching
             topk=5
         )
         
