@@ -3,9 +3,9 @@
     "fragment_id": "seed_greeting_0",
     "trigger_context": "Hello",
     "response_text": "Hello! How can I help you?",
-    "success_score": 0.5073275442768987,
+    "success_score": 0.5935964731098546,
     "intent": "greeting",
-    "usage_count": 1,
+    "usage_count": 16,
     "embedding_cache": null
   },
   {
@@ -48,9 +48,9 @@
     "fragment_id": "seed_greeting_5",
     "trigger_context": "Good afternoon",
     "response_text": "Good afternoon! How can I assist you?",
-    "success_score": 0.5,
+    "success_score": 0.5278536015836528,
     "intent": "greeting",
-    "usage_count": 0,
+    "usage_count": 7,
     "embedding_cache": null
   },
   {
@@ -120,9 +120,9 @@
     "fragment_id": "seed_farewell_13",
     "trigger_context": "Goodbye",
     "response_text": "Goodbye! It was nice talking with you.",
-    "success_score": 0.5,
+    "success_score": 0.5770439659724912,
     "intent": "farewell",
-    "usage_count": 0,
+    "usage_count": 15,
     "embedding_cache": null
   },
   {
@@ -165,9 +165,9 @@
     "fragment_id": "seed_confusion_18",
     "trigger_context": "I don't understand",
     "response_text": "I'm not sure I understand. Could you rephrase that?",
-    "success_score": 0.5,
+    "success_score": 0.5472073377840708,
     "intent": "confusion",
-    "usage_count": 0,
+    "usage_count": 11,
     "embedding_cache": null
   },
   {
@@ -255,9 +255,9 @@
     "fragment_id": "seed_acknowledgment_28",
     "trigger_context": "makes sense",
     "response_text": "Yes, that makes sense to me.",
-    "success_score": 0.5,
+    "success_score": 0.542605916080227,
     "intent": "acknowledgment",
-    "usage_count": 0,
+    "usage_count": 10,
     "embedding_cache": null
   },
   {
@@ -318,9 +318,9 @@
     "fragment_id": "seed_question_detail_35",
     "trigger_context": "tell me more",
     "response_text": "Can you tell me more about that?",
-    "success_score": 0.5,
+    "success_score": 0.5215327413924157,
     "intent": "question_detail",
-    "usage_count": 0,
+    "usage_count": 10,
     "embedding_cache": null
   },
   {
@@ -345,18 +345,18 @@
     "fragment_id": "seed_question_detail_38",
     "trigger_context": "how so",
     "response_text": "How so? I'm curious to understand.",
-    "success_score": 0.5,
+    "success_score": 0.5020731164576336,
     "intent": "question_detail",
-    "usage_count": 0,
+    "usage_count": 1,
     "embedding_cache": null
   },
   {
     "fragment_id": "seed_question_detail_39",
     "trigger_context": "in what way",
     "response_text": "In what way? Could you give an example?",
-    "success_score": 0.506435490697883,
+    "success_score": 0.5490441773653177,
     "intent": "question_detail",
-    "usage_count": 1,
+    "usage_count": 15,
     "embedding_cache": null
   },
   {
@@ -561,9 +561,9 @@
     "fragment_id": "seed_agreement_62",
     "trigger_context": "exactly",
     "response_text": "Exactly! You've got it.",
-    "success_score": 0.5,
+    "success_score": 0.5396707268275935,
     "intent": "agreement",
-    "usage_count": 0,
+    "usage_count": 10,
     "embedding_cache": null
   },
   {
@@ -885,9 +885,9 @@
     "fragment_id": "seed_clarify_98",
     "trigger_context": "do you want",
     "response_text": "Do you want to know about...?",
-    "success_score": 0.5070266184667584,
+    "success_score": 0.5520462020901634,
     "intent": "clarify",
-    "usage_count": 1,
+    "usage_count": 14,
     "embedding_cache": null
   },
   {
@@ -903,9 +903,9 @@
     "fragment_id": "seed_meta_100",
     "trigger_context": "this conversation",
     "response_text": "I'm finding this conversation interesting.",
-    "success_score": 0.5,
+    "success_score": 0.5025164849172957,
     "intent": "meta",
-    "usage_count": 0,
+    "usage_count": 1,
     "embedding_cache": null
   },
   {
@@ -966,72 +966,72 @@
     "fragment_id": "pattern_statement_107",
     "trigger_context": "Hello there! Hello there! How are you doing today?",
     "response_text": "I'm doing well, thanks for asking!",
-    "success_score": 0.8545230157285778,
+    "success_score": 0.9045230157285779,
     "intent": "statement",
-    "usage_count": 28,
+    "usage_count": 33,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_interest_108",
     "trigger_context": "How are you doing today? How are you doing today? What can you tell me about neural networks?",
     "response_text": "Neural networks are fascinating computational models inspired by biological brains.",
-    "success_score": 0.6440237298748956,
+    "success_score": 0.7477203388350194,
     "intent": "interest",
-    "usage_count": 6,
+    "usage_count": 24,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_greeting_109",
     "trigger_context": "What can you tell me about neural networks? What can you tell me about neural networks? That's interesting. How do they learn?",
     "response_text": "They learn by adjusting connection weights based on feedback from their outputs.",
-    "success_score": 0.893113864855493,
+    "success_score": 1.0,
     "intent": "greeting",
-    "usage_count": 31,
+    "usage_count": 72,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_statement_110",
     "trigger_context": "That's interesting. How do they learn? That's interesting. How do they learn? Can you explain backpropagation?",
     "response_text": "Backpropagation is an algorithm that calculates gradients to update network weights efficiently.",
-    "success_score": 0.7677592017423809,
+    "success_score": 1.0,
     "intent": "statement",
-    "usage_count": 18,
+    "usage_count": 67,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_greeting_111",
     "trigger_context": "Can you explain backpropagation? Can you explain backpropagation? What about Bayesian networks?",
     "response_text": "Bayesian networks represent probabilistic relationships between variables using directed graphs.",
-    "success_score": 0.6850889518129338,
+    "success_score": 0.7134961961552723,
     "intent": "greeting",
-    "usage_count": 9,
+    "usage_count": 12,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_greeting_112",
     "trigger_context": "What about Bayesian networks? What about Bayesian networks? How do they differ from neural networks?",
     "response_text": "Bayesian networks model explicit probability distributions, while neural networks learn implicit patterns.",
-    "success_score": 0.7615407535589939,
+    "success_score": 0.845837608001275,
     "intent": "greeting",
-    "usage_count": 17,
+    "usage_count": 28,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_greeting_113",
     "trigger_context": "How do they differ from neural networks? How do they differ from neural networks? That makes sense. What are some applications?",
     "response_text": "They're used in medical diagnosis, spam filtering, and recommendation systems.",
-    "success_score": 0.6868648938357254,
+    "success_score": 0.7068648938357254,
     "intent": "greeting",
-    "usage_count": 11,
+    "usage_count": 13,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_agreement_114",
     "trigger_context": "That makes sense. What are some applications? That makes sense. What are some applications? Are there hybrid approaches?",
     "response_text": "Yes! Neuro-symbolic systems combine neural learning with symbolic reasoning.",
-    "success_score": 0.6950003649345267,
+    "success_score": 0.7303426393826998,
     "intent": "agreement",
-    "usage_count": 10,
+    "usage_count": 15,
     "embedding_cache": null
   },
   {
@@ -1056,27 +1056,27 @@
     "fragment_id": "pattern_statement_117",
     "trigger_context": "Can you give an example? Can you give an example? How does attention work in transformers?",
     "response_text": "Attention mechanisms let models focus on relevant parts of the input when processing each element.",
-    "success_score": 0.7081560034231984,
+    "success_score": 0.7602365298244266,
     "intent": "statement",
-    "usage_count": 11,
+    "usage_count": 17,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_greeting_118",
     "trigger_context": "How does attention work in transformers? How does attention work in transformers? What's self-attention?",
     "response_text": "Self-attention compares each element with every other element to capture relationships.",
-    "success_score": 0.6496935769613433,
+    "success_score": 0.6589847673723155,
     "intent": "greeting",
-    "usage_count": 7,
+    "usage_count": 8,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_greeting_119",
     "trigger_context": "What's self-attention? What's self-attention? Is that computationally expensive?",
     "response_text": "Yes, it scales quadratically with sequence length, which can be a bottleneck.",
-    "success_score": 0.7499386610925278,
+    "success_score": 0.7799386610925279,
     "intent": "greeting",
-    "usage_count": 16,
+    "usage_count": 19,
     "embedding_cache": null
   },
   {
@@ -1110,9 +1110,9 @@
     "fragment_id": "pattern_statement_123",
     "trigger_context": "Do they have issues with long sequences? Do they have issues with long sequences? How do LSTMs help with that?",
     "response_text": "LSTMs use gating mechanisms to selectively remember or forget information over long periods.",
-    "success_score": 0.65,
+    "success_score": 0.6539851511582468,
     "intent": "statement",
-    "usage_count": 5,
+    "usage_count": 6,
     "embedding_cache": null
   },
   {
@@ -1128,18 +1128,18 @@
     "fragment_id": "pattern_greeting_125",
     "trigger_context": "What about GRUs? What about GRUs? Which is better?",
     "response_text": "It depends on the task - LSTMs have more parameters, while GRUs are faster to train.",
-    "success_score": 0.6454963626808929,
+    "success_score": 0.649543025131598,
     "intent": "greeting",
-    "usage_count": 5,
+    "usage_count": 6,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_greeting_126",
     "trigger_context": "Which is better? Which is better? Can you explain embeddings?",
     "response_text": "Embeddings map discrete items like words into continuous vector spaces that capture semantic relationships.",
-    "success_score": 0.676195264546492,
+    "success_score": 0.6892828330577859,
     "intent": "greeting",
-    "usage_count": 10,
+    "usage_count": 14,
     "embedding_cache": null
   },
   {
@@ -1164,27 +1164,27 @@
     "fragment_id": "pattern_greeting_129",
     "trigger_context": "What's the difference between Word2Vec and BERT? What's the difference between Word2Vec and BERT? Why is context important?",
     "response_text": "Context helps disambiguate word meanings - 'bank' means different things in different sentences.",
-    "success_score": 0.63,
+    "success_score": 0.7256238950321287,
     "intent": "greeting",
-    "usage_count": 3,
+    "usage_count": 16,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_agreement_130",
     "trigger_context": "Why is context important? Why is context important? How does BERT capture context?",
     "response_text": "BERT uses bidirectional transformers to consider both left and right context simultaneously.",
-    "success_score": 0.63,
+    "success_score": 0.7051422815984965,
     "intent": "agreement",
-    "usage_count": 3,
+    "usage_count": 16,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_statement_131",
     "trigger_context": "How does BERT capture context? How does BERT capture context? What's masked language modeling?",
     "response_text": "It's a training approach where random tokens are masked and the model learns to predict them.",
-    "success_score": 0.6435370016529592,
+    "success_score": 0.6621003478245528,
     "intent": "statement",
-    "usage_count": 5,
+    "usage_count": 8,
     "embedding_cache": null
   },
   {
@@ -1200,36 +1200,36 @@
     "fragment_id": "pattern_statement_133",
     "trigger_context": "Are there alternatives to masking? Are there alternatives to masking? Which approach is better?",
     "response_text": "Each has strengths - masked models are better for understanding, autoregressive for generation.",
-    "success_score": 0.626759173745206,
+    "success_score": 0.696300671465909,
     "intent": "statement",
-    "usage_count": 3,
+    "usage_count": 14,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_statement_134",
     "trigger_context": "Which approach is better? Which approach is better? Can they be combined?",
     "response_text": "Some models like T5 unify both approaches using a text-to-text framework.",
-    "success_score": 0.6356453846928416,
+    "success_score": 0.6586987905347825,
     "intent": "statement",
-    "usage_count": 4,
+    "usage_count": 7,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_statement_135",
     "trigger_context": "Can they be combined? Can they be combined? What's transfer learning?",
     "response_text": "Transfer learning uses knowledge from one task to improve performance on related tasks.",
-    "success_score": 0.6288726190119428,
+    "success_score": 0.6462603405592973,
     "intent": "statement",
-    "usage_count": 4,
+    "usage_count": 6,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_statement_136",
     "trigger_context": "What's transfer learning? What's transfer learning? How does fine-tuning work?",
     "response_text": "Fine-tuning adapts a pre-trained model to a specific task by continuing training on task-specific data.",
-    "success_score": 0.7100000000000001,
+    "success_score": 0.7482721795185207,
     "intent": "statement",
-    "usage_count": 11,
+    "usage_count": 15,
     "embedding_cache": null
   },
   {
@@ -1245,9 +1245,9 @@
     "fragment_id": "pattern_greeting_138",
     "trigger_context": "Is it always necessary? Is it always necessary? What's few-shot learning?",
     "response_text": "It's when models learn new tasks from just a few examples, often by pattern matching.",
-    "success_score": 0.6427884396246966,
+    "success_score": 0.6489537078072735,
     "intent": "greeting",
-    "usage_count": 5,
+    "usage_count": 6,
     "embedding_cache": null
   },
   {
@@ -1290,9 +1290,9 @@
     "fragment_id": "pattern_statement_143",
     "trigger_context": "What about retrieval-augmented generation? What about retrieval-augmented generation? Why is that useful?",
     "response_text": "It grounds responses in factual information and reduces hallucination.",
-    "success_score": 0.65,
+    "success_score": 0.6540322955200943,
     "intent": "statement",
-    "usage_count": 5,
+    "usage_count": 6,
     "embedding_cache": null
   },
   {
@@ -1308,9 +1308,9 @@
     "fragment_id": "pattern_statement_145",
     "trigger_context": "How is relevance determined? How is relevance determined? This has been really helpful!",
     "response_text": "I'm glad I could help explain these concepts!",
-    "success_score": 0.6388967980489212,
+    "success_score": 0.7305702654001173,
     "intent": "statement",
-    "usage_count": 4,
+    "usage_count": 20,
     "embedding_cache": null
   },
   {
@@ -2775,9 +2775,9 @@
     "fragment_id": "pattern_interest_308",
     "trigger_context": "What can you tell me about neural networks?",
     "response_text": "Neural networks are fascinating computational models inspired by biological brains.",
-    "success_score": 0.6,
+    "success_score": 0.6338564624447911,
     "intent": "interest",
-    "usage_count": 0,
+    "usage_count": 6,
     "embedding_cache": null
   },
   {
@@ -2793,9 +2793,9 @@
     "fragment_id": "pattern_explain_310",
     "trigger_context": "Can you explain backpropagation?",
     "response_text": "Backpropagation is an algorithm that calculates gradients to update network weights efficiently.",
-    "success_score": 0.6,
+    "success_score": 0.6221258082513488,
     "intent": "explain",
-    "usage_count": 0,
+    "usage_count": 5,
     "embedding_cache": null
   },
   {
@@ -2811,18 +2811,18 @@
     "fragment_id": "pattern_greeting_312",
     "trigger_context": "How do they differ from neural networks?",
     "response_text": "Bayesian networks model explicit probability distributions, while neural networks learn implicit patterns.",
-    "success_score": 0.6,
+    "success_score": 0.6290314529222322,
     "intent": "greeting",
-    "usage_count": 0,
+    "usage_count": 4,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_greeting_313",
     "trigger_context": "That makes sense. What are some applications?",
     "response_text": "They're used in medical diagnosis, spam filtering, and recommendation systems.",
-    "success_score": 0.6,
+    "success_score": 0.6083729018284483,
     "intent": "greeting",
-    "usage_count": 0,
+    "usage_count": 1,
     "embedding_cache": null
   },
   {
@@ -2847,9 +2847,9 @@
     "fragment_id": "pattern_greeting_316",
     "trigger_context": "Can you give an example?",
     "response_text": "Knowledge graphs enhanced with neural embeddings enable both logical inference and similarity matching.",
-    "success_score": 0.6,
+    "success_score": 0.6618026378635263,
     "intent": "greeting",
-    "usage_count": 0,
+    "usage_count": 11,
     "embedding_cache": null
   },
   {
@@ -2964,9 +2964,9 @@
     "fragment_id": "pattern_greeting_329",
     "trigger_context": "Why is context important?",
     "response_text": "Context helps disambiguate word meanings - 'bank' means different things in different sentences.",
-    "success_score": 0.6,
+    "success_score": 0.6374454698757273,
     "intent": "greeting",
-    "usage_count": 0,
+    "usage_count": 6,
     "embedding_cache": null
   },
   {
@@ -3036,18 +3036,18 @@
     "fragment_id": "pattern_greeting_337",
     "trigger_context": "Is it always necessary?",
     "response_text": "Not always - few-shot learning and prompting can sometimes achieve good results without fine-tuning.",
-    "success_score": 0.6,
+    "success_score": 0.6129084121739347,
     "intent": "greeting",
-    "usage_count": 0,
+    "usage_count": 2,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_greeting_338",
     "trigger_context": "What's few-shot learning?",
     "response_text": "It's when models learn new tasks from just a few examples, often by pattern matching.",
-    "success_score": 0.6,
+    "success_score": 0.6040366388060951,
     "intent": "greeting",
-    "usage_count": 0,
+    "usage_count": 1,
     "embedding_cache": null
   },
   {
@@ -3081,9 +3081,9 @@
     "fragment_id": "pattern_explain_342",
     "trigger_context": "What about retrieval-augmented generation?",
     "response_text": "RAG systems retrieve relevant documents and condition generation on that information.",
-    "success_score": 0.6,
+    "success_score": 0.6115618548968913,
     "intent": "explain",
-    "usage_count": 0,
+    "usage_count": 2,
     "embedding_cache": null
   },
   {
@@ -3108,8 +3108,458 @@
     "fragment_id": "pattern_statement_345",
     "trigger_context": "This has been really helpful!",
     "response_text": "I'm glad I could help explain these concepts!",
+    "success_score": 0.6565045076077405,
+    "intent": "statement",
+    "usage_count": 17,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_question_info_346",
+    "trigger_context": "Hello! Can you help me learn about machine learning?",
+    "response_text": "Hello! I'd be happy to help you learn about machine learning. What would you like to know?",
+    "success_score": 0.6058882279650368,
+    "intent": "question_info",
+    "usage_count": 1,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_greeting_347",
+    "trigger_context": "What are transformers in deep learning?",
+    "response_text": "Transformers are neural network architectures that use attention mechanisms to process sequential data without recurrence.",
+    "success_score": 0.6,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_greeting_348",
+    "trigger_context": "How do they work?",
+    "response_text": "They work by using self-attention to weigh the importance of different parts of the input when making predictions.",
+    "success_score": 0.6,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_greeting_349",
+    "trigger_context": "What's the difference between CNN and RNN?",
+    "response_text": "CNNs (Convolutional Neural Networks) use spatial filters for grid-like data like images, while RNNs (Recurrent Neural Networks) process sequential data with temporal connections.",
+    "success_score": 0.6,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_350",
+    "trigger_context": "When should I use each one?",
+    "response_text": "Use CNNs for image and spatial data tasks, and RNNs for time series, text, or sequential data processing.",
     "success_score": 0.6,
     "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_technical_explain_351",
+    "trigger_context": "What about LSTMs?",
+    "response_text": "LSTMs (Long Short-Term Memory networks) are a type of RNN designed to remember long-term dependencies using gates.",
+    "success_score": 0.6,
+    "intent": "technical_explain",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_352",
+    "trigger_context": "Can you explain backpropagation in detail?",
+    "response_text": "Backpropagation calculates gradients of the loss with respect to weights by applying the chain rule backwards through the network layers.",
+    "success_score": 0.6023768670107801,
+    "intent": "statement",
+    "usage_count": 1,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_explain_353",
+    "trigger_context": "What's the purpose of gradient descent?",
+    "response_text": "Gradient descent uses these gradients to iteratively update weights in the direction that reduces the loss function.",
+    "success_score": 0.6,
+    "intent": "explain",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_explain_354",
+    "trigger_context": "What are GANs?",
+    "response_text": "GANs (Generative Adversarial Networks) consist of two networks - a generator and discriminator - that compete to create realistic synthetic data.",
+    "success_score": 0.6,
+    "intent": "explain",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_greeting_355",
+    "trigger_context": "How do they train?",
+    "response_text": "The generator tries to create realistic data to fool the discriminator, while the discriminator learns to distinguish real from fake data.",
+    "success_score": 0.6040881453451534,
+    "intent": "greeting",
+    "usage_count": 1,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_disagreement_356",
+    "trigger_context": "Are neural networks always deep?",
+    "response_text": "No, neural networks can be shallow with just one or two layers, though deep networks often perform better on complex tasks.",
+    "success_score": 0.6161774518609154,
+    "intent": "disagreement",
+    "usage_count": 3,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_disagreement_357",
+    "trigger_context": "Do they always require lots of data?",
+    "response_text": "Not always - techniques like transfer learning, few-shot learning, and data augmentation can work with limited data.",
+    "success_score": 0.6,
+    "intent": "disagreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_358",
+    "trigger_context": "How do I choose between supervised and unsupervised learning?",
+    "response_text": "Choose supervised learning when you have labeled data and a clear prediction target, and unsupervised learning for pattern discovery without labels.",
+    "success_score": 0.6161872648366141,
+    "intent": "statement",
+    "usage_count": 4,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_359",
+    "trigger_context": "What's an example of unsupervised learning?",
+    "response_text": "Clustering customer segments, dimensionality reduction with PCA, or anomaly detection are common unsupervised learning tasks.",
+    "success_score": 0.6031474174994558,
+    "intent": "statement",
+    "usage_count": 2,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_360",
+    "trigger_context": "What about reinforcement learning?",
+    "response_text": "Reinforcement learning trains agents through trial and error, learning from rewards and penalties in an environment.",
+    "success_score": 0.6044046495859546,
+    "intent": "statement",
+    "usage_count": 1,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_361",
+    "trigger_context": "Can you give an example?",
+    "response_text": "Game-playing AI like AlphaGo, robotic control systems, and recommendation systems often use reinforcement learning.",
+    "success_score": 0.6,
+    "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_technical_explain_362",
+    "trigger_context": "What are optimization algorithms?",
+    "response_text": "Optimization algorithms like SGD, Adam, and RMSprop determine how model weights are updated during training.",
+    "success_score": 0.6079903256308511,
+    "intent": "technical_explain",
+    "usage_count": 2,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_363",
+    "trigger_context": "Which optimizer should I use?",
+    "response_text": "Adam is a good default choice for most tasks, combining momentum and adaptive learning rates for stable training.",
+    "success_score": 0.6025017245861723,
+    "intent": "statement",
+    "usage_count": 1,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_364",
+    "trigger_context": "What's overfitting?",
+    "response_text": "Overfitting occurs when a model learns the training data too well, including noise, and performs poorly on new data.",
+    "success_score": 0.6,
+    "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_365",
+    "trigger_context": "How can I prevent it?",
+    "response_text": "Use techniques like dropout, regularization, early stopping, and cross-validation to prevent overfitting.",
+    "success_score": 0.6,
+    "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_366",
+    "trigger_context": "What's transfer learning?",
+    "response_text": "Transfer learning uses knowledge learned on one task to improve performance on a related task, often with less data.",
+    "success_score": 0.6,
+    "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_technical_explain_367",
+    "trigger_context": "When is it useful?",
+    "response_text": "It's especially useful when you have limited labeled data for your target task but can leverage models pre-trained on large datasets.",
+    "success_score": 0.6,
+    "intent": "technical_explain",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_greeting_368",
+    "trigger_context": "What's the vanishing gradient problem?",
+    "response_text": "Vanishing gradients occur in deep networks when gradients become extremely small during backpropagation, preventing early layers from learning.",
+    "success_score": 0.6,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_369",
+    "trigger_context": "How do you solve it?",
+    "response_text": "Solutions include using ReLU activations, skip connections (like in ResNets), batch normalization, and careful weight initialization.",
+    "success_score": 0.6,
+    "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_greeting_370",
+    "trigger_context": "What's batch normalization?",
+    "response_text": "Batch normalization normalizes layer inputs across mini-batches, stabilizing training and allowing higher learning rates.",
+    "success_score": 0.6059102719003989,
+    "intent": "greeting",
+    "usage_count": 1,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_greeting_371",
+    "trigger_context": "What are embeddings?",
+    "response_text": "Embeddings map high-dimensional discrete data (like words) to dense low-dimensional continuous vectors that capture semantic meaning.",
+    "success_score": 0.6,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_technical_explain_372",
+    "trigger_context": "How are they learned?",
+    "response_text": "Embeddings can be learned through techniques like Word2Vec, GloVe, or as part of end-to-end neural network training.",
+    "success_score": 0.6,
+    "intent": "technical_explain",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_373",
+    "trigger_context": "What's attention mechanism?",
+    "response_text": "Attention mechanisms allow models to focus on relevant parts of input by assigning different weights to different positions.",
+    "success_score": 0.6,
+    "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_374",
+    "trigger_context": "Why is it important?",
+    "response_text": "Attention helps models handle long sequences better and provides interpretability by showing what the model focuses on.",
+    "success_score": 0.6,
+    "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_greeting_375",
+    "trigger_context": "I don't understand the concept",
+    "response_text": "Let me explain differently: attention is like highlighting important words in a sentence while reading - focusing on what matters most.",
+    "success_score": 0.6,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_greeting_376",
+    "trigger_context": "Could you clarify that?",
+    "response_text": "Think of it as a weighted average - instead of treating all inputs equally, attention gives more importance to relevant parts.",
+    "success_score": 0.6,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_greeting_377",
+    "trigger_context": "Can you give me a practical example?",
+    "response_text": "In machine translation, when translating 'the cat sat', attention helps the model focus on 'cat' when generating the corresponding word in the target language.",
+    "success_score": 0.6,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_378",
+    "trigger_context": "That's helpful, thank you!",
+    "response_text": "You're welcome! Feel free to ask if you have more questions.",
+    "success_score": 0.6,
+    "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_379",
+    "trigger_context": "How does that work in practice?",
+    "response_text": "In practice, you'd implement it by computing attention scores, applying softmax, and using those weights to combine input representations.",
+    "success_score": 0.6,
+    "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_380",
+    "trigger_context": "What's a convolutional layer?",
+    "response_text": "A convolutional layer applies learnable filters across spatial dimensions to detect local patterns like edges or textures in images.",
+    "success_score": 0.6052915011999879,
+    "intent": "statement",
+    "usage_count": 1,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_381",
+    "trigger_context": "What's pooling?",
+    "response_text": "Pooling reduces spatial dimensions by aggregating neighboring values, commonly using max pooling or average pooling operations.",
+    "success_score": 0.6,
+    "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_382",
+    "trigger_context": "What's dropout?",
+    "response_text": "Dropout randomly sets a fraction of neurons to zero during training, forcing the network to learn robust features and preventing overfitting.",
+    "success_score": 0.6,
+    "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_383",
+    "trigger_context": "How does cross-validation work?",
+    "response_text": "Cross-validation splits data into multiple folds, training on some and validating on others, rotating to assess model performance reliably.",
+    "success_score": 0.6,
+    "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_greeting_384",
+    "trigger_context": "What's a learning rate?",
+    "response_text": "The learning rate controls how much model weights change during each update - too high causes instability, too low slows learning.",
+    "success_score": 0.6,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_385",
+    "trigger_context": "How do I tune it?",
+    "response_text": "Start with a standard value like 0.001, then use learning rate schedules or adaptive optimizers like Adam to adjust automatically.",
+    "success_score": 0.6,
+    "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_greeting_386",
+    "trigger_context": "That makes sense now",
+    "response_text": "Great! I'm glad that clarified things for you.",
+    "success_score": 0.6,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_learned_387",
+    "trigger_context": "It's when models learn new tasks from just a few examples, often by pattern matching.",
+    "response_text": "This is really interesting",
+    "success_score": 0.7,
+    "intent": "learned",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_greeting_388",
+    "trigger_context": "This is really interesting",
+    "response_text": "I'm happy you find it interesting! Machine learning has many fascinating aspects.",
+    "success_score": 0.6,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_389",
+    "trigger_context": "Exactly what I was looking for",
+    "response_text": "Excellent! I'm glad I could provide what you needed.",
+    "success_score": 0.6,
+    "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_greeting_390",
+    "trigger_context": "I disagree - that seems too complicated",
+    "response_text": "I understand your concern. Machine learning can seem complex, but breaking it into smaller concepts makes it more approachable.",
+    "success_score": 0.6,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_explain_391",
+    "trigger_context": "You're right, I see your point",
+    "response_text": "I'm glad that makes sense. Feel free to ask about specific parts you'd like explained more simply.",
+    "success_score": 0.6,
+    "intent": "explain",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_392",
+    "trigger_context": "Thanks for all the explanations",
+    "response_text": "You're very welcome! I enjoyed explaining these concepts to you.",
+    "success_score": 0.6,
+    "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_statement_393",
+    "trigger_context": "This has been very helpful",
+    "response_text": "I'm glad I could help! Don't hesitate to come back if you have more questions.",
+    "success_score": 0.6,
+    "intent": "statement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_greeting_394",
+    "trigger_context": "Goodbye for now",
+    "response_text": "Goodbye! Best of luck with your machine learning journey.",
+    "success_score": 0.6,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "pattern_farewell_395",
+    "trigger_context": "See you next time",
+    "response_text": "See you! Happy learning!",
+    "success_score": 0.6,
+    "intent": "farewell",
     "usage_count": 0,
     "embedding_cache": null
   }

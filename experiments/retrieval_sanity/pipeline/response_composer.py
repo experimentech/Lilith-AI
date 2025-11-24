@@ -95,23 +95,67 @@ class ResponseComposer:
         Returns:
             ComposedResponse with text and metadata
         """
-        # 1. Retrieve relevant response patterns
-        patterns = self.fragments.retrieve_patterns(context, topk=topk)
+        # 1. Retrieve relevant response patterns (based on trigger context)
+        patterns = self.fragments.retrieve_patterns(context, topk=topk * 3)  # Get more candidates
         
         if not patterns:
             # Fallback if no patterns found
             return self._fallback_response()
+        
+        # 2. Score patterns by semantic relevance to user query
+        # This is the KEY fix: match response content to user's actual question!
+        if user_input:
+            patterns = self._score_by_query_relevance(patterns, user_input, topk=topk)
+        else:
+            patterns = patterns[:topk]
+        
+        if not patterns:
+            return self._fallback_response()
+        
+        # 2b. Check if best pattern has sufficient relevance
+        # If not, provide a graceful fallback instead of hallucinating
+        best_pattern, best_score = patterns[0]
+        if best_score < 0.70:  # Confidence threshold - reject weak matches
+            return self._fallback_response_low_confidence(user_input, best_pattern, best_score)
+        
+        # 2c. Additional check: is user asking about specific topic not in training data?
+        # Check for specific technical terms that aren't well-covered
+        uncovered_terms = ['transformer', 'cnn', 'rnn', 'gan', 'lstm', 'gru', 'vae', 
+                          'resnet', 'bert', 'gpt', 'diffusion', 'reinforcement']
+        user_lower = user_input.lower()
+        if any(term in user_lower for term in uncovered_terms):
+            # Check if response actually addresses that term
+            response_lower = best_pattern.response_text.lower()
+            query_terms = set(user_lower.split())
+            response_terms = set(response_lower.split())
             
-        # 2. Get PMFlow activation signature from working memory
+            # If the specific term isn't in the response, it's probably not a good match
+            uncovered_in_query = [t for t in uncovered_terms if t in user_lower]
+            if uncovered_in_query and not any(t in response_lower for t in uncovered_in_query):
+                return self._fallback_response_low_confidence(user_input, best_pattern, best_score)
+            
+        # 3. For high-relevance patterns, use top match directly
+        # (Additional weighting can destroy semantic relevance order)
+        if user_input and best_score > 0.75:
+            # High confidence - use best pattern directly
+            return ComposedResponse(
+                text=best_pattern.response_text,
+                fragment_ids=[best_pattern.fragment_id],
+                composition_weights=[1.0],
+                coherence_score=best_score,
+                primary_pattern=best_pattern
+            )
+            
+        # 4. For medium-relevance patterns, apply gentle PMFlow weighting
         activation_signature = self._get_activation_signature()
         
-        # 3. Weight patterns by activation + success scores
+        # 5. Weight patterns by activation + success scores
         weighted_patterns = self._weight_patterns(
             patterns, 
             activation_signature
         )
         
-        # 4. Apply coherence constraints from working memory
+        # 6. Apply coherence constraints from working memory
         coherent_patterns = self._filter_by_coherence(
             weighted_patterns,
             self.state
@@ -121,7 +165,7 @@ class ResponseComposer:
             # Use original patterns if coherence filtering too strict
             coherent_patterns = weighted_patterns
             
-        # 5. Compose final response
+        # 7. Compose final response
         response = self._compose_from_patterns(
             coherent_patterns,
             context,
@@ -144,6 +188,90 @@ class ResponseComposer:
             activation_sig[topic.signature] = topic.strength
             
         return activation_sig
+    
+    def _score_by_query_relevance(
+        self,
+        patterns: List[Tuple[ResponsePattern, float]],
+        user_query: str,
+        topk: int = 5,
+        min_relevance: float = 0.35
+    ) -> List[Tuple[ResponsePattern, float]]:
+        """
+        Score patterns by semantic relevance between user query and response content.
+        
+        This is THE KEY to fixing off-topic responses!
+        
+        Instead of just matching trigger contexts, we check if the RESPONSE CONTENT
+        is actually relevant to what the user is asking about.
+        
+        Args:
+            patterns: Candidate patterns with trigger-based scores
+            user_query: User's actual input query
+            topk: Number of relevant patterns to return
+            min_relevance: Minimum semantic similarity threshold
+            
+        Returns:
+            Patterns scored by query-response semantic relevance
+        """
+        # Encode user query
+        try:
+            query_emb = self.fragments.encoder.encode(user_query)
+            if hasattr(query_emb, 'cpu'):
+                query_emb = query_emb.cpu().numpy()
+            query_emb = query_emb.flatten()
+            query_norm = query_emb / (np.linalg.norm(query_emb) + 1e-8)
+        except Exception:
+            # If encoding fails, return original patterns
+            return patterns[:topk]
+        
+        # Score each pattern by semantic similarity between query and response content
+        relevance_scored = []
+        for pattern, trigger_score in patterns:
+            try:
+                # Encode the RESPONSE TEXT (not trigger context!)
+                response_emb = self.fragments.encoder.encode(pattern.response_text)
+                if hasattr(response_emb, 'cpu'):
+                    response_emb = response_emb.cpu().numpy()
+                response_emb = response_emb.flatten()
+                response_norm = response_emb / (np.linalg.norm(response_emb) + 1e-8)
+                
+                # Semantic similarity between user query and response content
+                relevance = float(np.dot(query_norm, response_norm))
+                
+                # Also encode trigger context for comparison
+                trigger_emb = self.fragments.encoder.encode(pattern.trigger_context)
+                if hasattr(trigger_emb, 'cpu'):
+                    trigger_emb = trigger_emb.cpu().numpy()
+                trigger_emb = trigger_emb.flatten()
+                trigger_norm = trigger_emb / (np.linalg.norm(trigger_emb) + 1e-8)
+                
+                trigger_relevance = float(np.dot(query_norm, trigger_norm))
+                
+                # Combined score: max of response relevance and trigger relevance
+                # This allows both "answers to queries" and "contextual responses"
+                combined_relevance = max(relevance, trigger_relevance * 0.7)
+                
+                # Filter out low-relevance patterns
+                if combined_relevance >= min_relevance:
+                    relevance_scored.append((pattern, combined_relevance))
+                    
+            except Exception:
+                # If encoding fails, use original score but penalize
+                if trigger_score > min_relevance:
+                    relevance_scored.append((pattern, trigger_score * 0.5))
+        
+        # Sort by relevance descending
+        relevance_scored.sort(key=lambda x: x[1], reverse=True)
+        
+        # Return top-k most relevant
+        result = relevance_scored[:topk]
+        
+        # Debug: print selected pattern
+        if result:
+            best_pattern, best_score = result[0]
+            print(f"     → Selected: '{best_pattern.response_text[:50]}...' (intent: {best_pattern.intent}, relevance: {best_score:.3f})")
+        
+        return result
         
     def _weight_patterns(
         self,
@@ -155,34 +283,39 @@ class ResponseComposer:
         
         This is where neural (PMFlow) meets symbolic (patterns)!
         
+        IMPORTANT: For semantically-scored patterns, we apply gentle boosting
+        to preserve relevance order while still rewarding successful patterns.
+        
         Args:
-            patterns: Retrieved patterns with similarity scores
+            patterns: Retrieved patterns with similarity/relevance scores
             activation_signature: Current working memory activations
             
         Returns:
-            Patterns weighted by: similarity * success * activation
+            Patterns weighted by: relevance + success_boost + activation_boost
         """
         weighted = []
         
-        for pattern, similarity in patterns:
-            # Base weight from retrieval similarity
-            weight = similarity
+        for pattern, base_score in patterns:
+            # Start with base score (relevance or similarity)
+            weight = base_score
             
-            # Boost by learned success score
-            weight *= pattern.success_score
+            # Apply gentle success boost (additive, not multiplicative)
+            # This prevents destroying relevance order
+            success_boost = (pattern.success_score - 0.5) * 0.2  # -0.1 to +0.1 range
+            weight += success_boost
             
-            # Boost by activation if pattern relates to active topics
-            # (This is a simplified version - could be more sophisticated)
-            activation_boost = 1.0
+            # Apply gentle activation boost
+            activation_boost = 0.0
             if activation_signature:
-                # Use max activation as boost
-                activation_boost = max(activation_signature.values()) + 0.5
+                # Small boost from working memory
+                max_activation = max(activation_signature.values())
+                activation_boost = max_activation * 0.1  # Small boost
                 
-            weight *= activation_boost
+            weight += activation_boost
             
             weighted.append((pattern, weight))
-            
-        # Sort by weight descending
+        
+        # Sort by weight descending (but order should be mostly preserved)
         weighted.sort(key=lambda x: x[1], reverse=True)
         
         return weighted
@@ -827,3 +960,53 @@ class ResponseComposer:
             coherence_score=0.0,
             primary_pattern=None
         )
+    
+    def _fallback_response_low_confidence(
+        self, 
+        user_input: str,
+        best_pattern: ResponsePattern,
+        best_score: float
+    ) -> ComposedResponse:
+        """
+        Graceful fallback when best pattern has low relevance to user query.
+        
+        Instead of hallucinating or giving off-topic responses, we acknowledge
+        limitation and optionally ask for clarification.
+        
+        Args:
+            user_input: User's query
+            best_pattern: Best pattern found (but with low relevance)
+            best_score: Relevance score (below threshold)
+        
+        Returns:
+            Graceful fallback response
+        """
+        # Analyze query to provide contextual fallback
+        user_lower = user_input.lower()
+        
+        # Check for question markers
+        is_question = any(q in user_lower for q in ['what', 'how', 'why', 'when', 'where', 'who', 'can', 'could', 'would', 'should', 'is', 'are', 'do', 'does', '?'])
+        
+        # Check for technical terms
+        is_technical = any(tech in user_lower for tech in ['neural', 'network', 'algorithm', 'learning', 'model', 'training', 'data', 'transformer', 'cnn', 'rnn', 'gan', 'attention'])
+        
+        # Generate contextual fallback
+        if is_question and is_technical:
+            fallback_text = "I don't have specific information about that topic yet. Could you ask about something related to what we've discussed, or rephrase your question?"
+        elif is_question:
+            fallback_text = "I'm not sure how to answer that. Could you rephrase or ask about something else?"
+        elif is_technical:
+            fallback_text = "That's an interesting topic, but I don't have enough information about it in my learned patterns. Could we discuss something related?"
+        else:
+            fallback_text = "I'm not quite sure how to respond to that. Could you elaborate or try rephrasing?"
+        
+        print(f"     ⚠️  Low confidence ({best_score:.3f}) - using graceful fallback")
+        
+        return ComposedResponse(
+            text=fallback_text,
+            fragment_ids=["low_confidence_fallback"],
+            composition_weights=[1.0],
+            coherence_score=0.3,
+            primary_pattern=None
+        )
+
