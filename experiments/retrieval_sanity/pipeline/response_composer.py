@@ -132,8 +132,11 @@ class ResponseComposer:
                 intent_hint = intent_scores[0][0]  # Top intent label
         
         # 2. Database queries patterns matching intent + keywords
+        # Brain insight: Match USER'S CURRENT INPUT to trigger patterns!
+        # (Don't use enriched context - that includes previous turns)
+        retrieval_query = user_input if user_input else context
         patterns = self.fragments.retrieve_patterns(
-            context, 
+            retrieval_query,  # Use current input for trigger matching!
             topk=topk * 3,
             intent_hint=intent_hint
         )

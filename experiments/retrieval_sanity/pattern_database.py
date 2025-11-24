@@ -160,7 +160,8 @@ class PatternDatabase:
         keywords: Optional[List[str]] = None,
         topics: Optional[List[str]] = None,
         min_success: float = 0.0,
-        limit: int = 10
+        limit: int = 10,
+        keyword_source: Optional[str] = None  # 'trigger', 'response', or None for both
     ) -> List[Dict]:
         """
         Query patterns based on semantic features.
@@ -171,6 +172,7 @@ class PatternDatabase:
             topics: Filter by topics (OR logic)
             min_success: Minimum success score
             limit: Maximum results
+            keyword_source: Filter keywords by source ('trigger' or 'response')
             
         Returns:
             List of pattern dictionaries
@@ -187,6 +189,11 @@ class PatternDatabase:
             placeholders = ','.join('?' * len(keywords))
             where_clauses.append(f"pk.keyword IN ({placeholders})")
             params.extend([kw.lower() for kw in keywords])
+            
+            # Filter by keyword source (trigger vs response)
+            if keyword_source:
+                where_clauses.append("pk.source = ?")
+                params.append(keyword_source)
         
         # Join with topics if needed
         if topics:

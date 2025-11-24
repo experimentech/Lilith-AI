@@ -110,10 +110,11 @@ class DatabaseBackedFragmentStore:
         
         # Try intent-based retrieval first if we have an intent hint
         if intent_hint:
-            # Query by intent + keywords
+            # Query by intent + keywords (TRIGGER keywords only!)
             pattern_rows = self.db.query_patterns(
                 intent=intent_hint,
                 keywords=sorted_keywords if sorted_keywords else None,
+                keyword_source='trigger',  # Match user input to trigger patterns!
                 min_success=min_score,
                 limit=topk * 3  # Get more candidates for scoring
             )
@@ -125,13 +126,16 @@ class DatabaseBackedFragmentStore:
         if sorted_keywords:
             # Brain strategy: Start with MOST distinctive keyword (highest IDF)
             # This gives us fewer, more relevant candidates
-            # Then expand if needed
+            # CRITICAL: Match user input to TRIGGER keywords only!
+            # (Don't match response keywords - that retrieves patterns where someone
+            #  ELSE said these words, not patterns activated by these words)
             pattern_rows = []
             
-            # Try top keyword first (most distinctive)
+            # Try top keyword first (most distinctive) - TRIGGER ONLY
             if sorted_keywords:
                 pattern_rows = self.db.query_patterns(
-                    keywords=[sorted_keywords[0]],  # Just the most distinctive keyword!
+                    keywords=[sorted_keywords[0]],
+                    keyword_source='trigger',  # Only match trigger keywords!
                     min_success=min_score,
                     limit=topk * 3
                 )
@@ -140,9 +144,10 @@ class DatabaseBackedFragmentStore:
             if pattern_rows:
                 return self._score_patterns(pattern_rows, keywords, topk)
             
-            # If top keyword didn't work, try all keywords (fallback)
+            # If top keyword didn't work, try all keywords (trigger only, fallback)
             pattern_rows = self.db.query_patterns(
                 keywords=sorted_keywords,
+                keyword_source='trigger',  # Still trigger only!
                 min_success=min_score,
                 limit=topk * 5
             )
