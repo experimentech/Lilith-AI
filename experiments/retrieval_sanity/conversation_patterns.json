@@ -3,9 +3,9 @@
     "fragment_id": "seed_greeting_0",
     "trigger_context": "Hello",
     "response_text": "Hello! How can I help you?",
-    "success_score": 0.5111487794763003,
+    "success_score": 0.5162093918053959,
     "intent": "greeting",
-    "usage_count": 3,
+    "usage_count": 4,
     "embedding_cache": null
   },
   {
@@ -120,9 +120,9 @@
     "fragment_id": "seed_farewell_13",
     "trigger_context": "Goodbye",
     "response_text": "Goodbye! It was nice talking with you.",
-    "success_score": 0.5040730985952974,
+    "success_score": 0.5081641105183524,
     "intent": "farewell",
-    "usage_count": 1,
+    "usage_count": 2,
     "embedding_cache": null
   },
   {
@@ -1038,18 +1038,18 @@
     "fragment_id": "pattern_disagreement_115",
     "trigger_context": "Do they always require lots of data?",
     "response_text": "Not always - techniques like transfer learning, few-shot learning, and data augmentation can work with limited data.",
-    "success_score": 0.6216958413999557,
+    "success_score": 0.6275267658012926,
     "intent": "disagreement",
-    "usage_count": 4,
+    "usage_count": 5,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_statement_116",
     "trigger_context": "How do I choose between supervised and unsupervised learning?",
     "response_text": "Choose supervised learning when you have labeled data and a clear prediction target, and unsupervised learning for pattern discovery without labels.",
-    "success_score": 0.6160314765903294,
+    "success_score": 0.6183047250288976,
     "intent": "statement",
-    "usage_count": 6,
+    "usage_count": 7,
     "embedding_cache": null
   },
   {
@@ -1137,9 +1137,9 @@
     "fragment_id": "pattern_greeting_126",
     "trigger_context": "What's the vanishing gradient problem?",
     "response_text": "Vanishing gradients occur in deep networks when gradients become extremely small during backpropagation, preventing early layers from learning.",
-    "success_score": 0.60785308589069,
+    "success_score": 0.6098403245656009,
     "intent": "greeting",
-    "usage_count": 2,
+    "usage_count": 3,
     "embedding_cache": null
   },
   {
@@ -2082,9 +2082,9 @@
     "fragment_id": "learned_csv_69",
     "trigger_context": "i really love how rain clears the air.",
     "response_text": "me too. it always smells so fresh after it rains.",
-    "success_score": 0.6081387389044741,
+    "success_score": 0.6120358533494983,
     "intent": "statement",
-    "usage_count": 2,
+    "usage_count": 3,
     "embedding_cache": null
   },
   {
@@ -2280,9 +2280,9 @@
     "fragment_id": "learned_csv_89",
     "trigger_context": "i hope that it does rain.",
     "response_text": "you like the rain?",
-    "success_score": 0.6111573534550383,
+    "success_score": 0.6170950869571221,
     "intent": "statement",
-    "usage_count": 2,
+    "usage_count": 3,
     "embedding_cache": null
   },
   {
@@ -2361,9 +2361,9 @@
     "fragment_id": "learned_csv_96",
     "trigger_context": "i really want to go to the beach this weekend.",
     "response_text": "that sounds like fun. what's the weather going to be like?",
-    "success_score": 0.6377555981238143,
+    "success_score": 0.6415922281503552,
     "intent": "question_info",
-    "usage_count": 9,
+    "usage_count": 10,
     "embedding_cache": null
   },
   {
@@ -2451,9 +2451,9 @@
     "fragment_id": "learned_csv_105",
     "trigger_context": "i really wish the weather would just stay the same.",
     "response_text": "i do too. that way we can have our activities planned ahead of time.",
-    "success_score": 0.6360671682181238,
+    "success_score": 0.6391015363309334,
     "intent": "statement",
-    "usage_count": 9,
+    "usage_count": 10,
     "embedding_cache": null
   },
   {
@@ -2469,18 +2469,18 @@
     "fragment_id": "learned_csv_106",
     "trigger_context": "i do too. that way we can have our activities planned ahead of time.",
     "response_text": "yeah, that would make things a lot easier.",
-    "success_score": 0.6291840521675621,
+    "success_score": 0.6332012159166199,
     "intent": "greeting",
-    "usage_count": 7,
+    "usage_count": 8,
     "embedding_cache": null
   },
   {
     "fragment_id": "pattern_learned_275",
     "trigger_context": "i do too. that way we can have our activities planned ahead of time.",
     "response_text": "i would like to take a trip to the beach this weekend.",
-    "success_score": 0.7065645861664714,
+    "success_score": 0.7090915301468635,
     "intent": "learned",
-    "usage_count": 2,
+    "usage_count": 3,
     "embedding_cache": null
   },
   {
@@ -2559,9 +2559,9 @@
     "fragment_id": "learned_csv_114",
     "trigger_context": "the weather in california is unpredictable, so you never know.",
     "response_text": "that is true. the weather is constantly changing.",
-    "success_score": 0.6166393290992052,
+    "success_score": 0.6208167541474467,
     "intent": "statement",
-    "usage_count": 4,
+    "usage_count": 5,
     "embedding_cache": null
   },
   {
@@ -2766,9 +2766,9 @@
     "fragment_id": "learned_csv_134",
     "trigger_context": "oh, i just wanted to see if you wanted to hang out tomorrow.",
     "response_text": "sure, what did you want to do?",
-    "success_score": 0.6297465625015971,
+    "success_score": 0.6369109859363713,
     "intent": "question_info",
-    "usage_count": 7,
+    "usage_count": 9,
     "embedding_cache": null
   },
   {
@@ -3828,9 +3828,9 @@
     "fragment_id": "learned_csv_255",
     "trigger_context": "really? what kind of shoes are they?",
     "response_text": "these are called all star chuck taylors.",
-    "success_score": 0.6131638443081562,
+    "success_score": 0.6201585239599023,
     "intent": "statement",
-    "usage_count": 2,
+    "usage_count": 3,
     "embedding_cache": null
   },
   {
@@ -4035,18 +4035,18 @@
     "fragment_id": "learned_csv_276",
     "trigger_context": "thanks. i found these new shoes earlier at the store.",
     "response_text": "i think that those are some really nice shoes. what kind are they?",
-    "success_score": 0.6072294127790857,
+    "success_score": 0.610237656373271,
     "intent": "question_info",
-    "usage_count": 2,
+    "usage_count": 3,
     "embedding_cache": null
   },
   {
     "fragment_id": "learned_csv_277",
     "trigger_context": "i think that those are some really nice shoes. what kind are they?",
     "response_text": "these are chucks.",
-    "success_score": 0.6112960308941348,
+    "success_score": 0.6152576324099561,
     "intent": "statement",
-    "usage_count": 2,
+    "usage_count": 3,
     "embedding_cache": null
   },
   {
@@ -4062,9 +4062,9 @@
     "fragment_id": "learned_csv_279",
     "trigger_context": "your shoes look really nice. how much did you get them for?",
     "response_text": "they only cost me about forty dollars.",
-    "success_score": 0.6057993765873144,
+    "success_score": 0.6115933954998681,
     "intent": "greeting",
-    "usage_count": 2,
+    "usage_count": 4,
     "embedding_cache": null
   },
   {
@@ -4170,9 +4170,9 @@
     "fragment_id": "pattern_learned_463",
     "trigger_context": "yeah, that would make things a lot easier.",
     "response_text": "i didn't know you knew how to draw and paint.",
-    "success_score": 0.7020508623475706,
+    "success_score": 0.7040820407206645,
     "intent": "learned",
-    "usage_count": 1,
+    "usage_count": 2,
     "embedding_cache": null
   },
   {

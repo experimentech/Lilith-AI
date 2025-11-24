@@ -91,7 +91,8 @@ class ConversationLoop:
             fragment_store=self.fragment_store,
             conversation_state=self.conversation_state,
             composition_mode=composition_mode,
-            use_grammar=use_grammar
+            use_grammar=use_grammar,
+            semantic_encoder=self.semantic_stage.encoder  # Enable BNN intent clustering
         )
         
         print("  🎓 Initializing response learner (plasticity updates)...")
@@ -116,6 +117,23 @@ class ConversationLoop:
         print("✅ System initialized!")
         print()
         self._print_system_info()
+    
+    def build_intent_clusters(self):
+        """Build BNN intent clusters from learned patterns."""
+        print()
+        print("🎯 Building BNN intent clusters...")
+        clusters = self.composer.cluster_patterns()
+        
+        if clusters:
+            print()
+            print("✅ Intent clustering complete!")
+            stats = self.composer.intent_classifier.get_stats()
+            print(f"   Total clusters: {stats['total_clusters']}")
+            print(f"   Largest cluster: {stats['largest_cluster']}")
+            print(f"   Most coherent: {stats['most_coherent']}")
+            print()
+        
+        return clusters
         
     def _print_system_info(self):
         """Print system configuration"""

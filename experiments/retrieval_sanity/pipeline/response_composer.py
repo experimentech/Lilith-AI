@@ -17,6 +17,7 @@ import numpy as np
 
 from .response_fragments import ResponseFragmentStore, ResponsePattern
 from .conversation_state import ConversationState
+from .bnn_intent_classifier import BNNIntentClassifier
 
 # Optional: Import grammar stage for sophisticated composition
 try:
@@ -51,7 +52,8 @@ class ResponseComposer:
         fragment_store: ResponseFragmentStore,
         conversation_state: ConversationState,
         composition_mode: str = "weighted_blend",
-        use_grammar: bool = False
+        use_grammar: bool = False,
+        semantic_encoder = None
     ):
         """
         Initialize response composer.
@@ -65,10 +67,17 @@ class ResponseComposer:
                 - "grammar_guided": Use grammatical templates (requires syntax stage)
                 - "adaptive": Choose based on confidence
             use_grammar: Enable grammar-guided composition
+            semantic_encoder: BNN encoder for intent clustering (optional)
         """
         self.fragments = fragment_store
         self.state = conversation_state
         self.composition_mode = composition_mode
+        
+        # Initialize BNN intent classifier if encoder provided
+        self.intent_classifier = None
+        if semantic_encoder is not None:
+            self.intent_classifier = BNNIntentClassifier(semantic_encoder)
+            print("  🎯 BNN intent clustering enabled!")
         
         # Initialize syntax stage if available and requested
         self.syntax_stage = None
@@ -77,12 +86,29 @@ class ResponseComposer:
             print("  📝 BNN-based syntax stage enabled!")
         elif use_grammar and not GRAMMAR_AVAILABLE:
             print("  ⚠️  Syntax stage not available, falling back to standard composition")
+    
+    def cluster_patterns(self):
+        """Build intent clusters from learned patterns using BNN embeddings."""
+        if self.intent_classifier is None:
+            print("  ⚠️  Intent classifier not available - skipping clustering")
+            return
+        
+        print("  🎯 Clustering patterns by semantic intent...")
+        clusters = self.intent_classifier.cluster_patterns(self.fragments.patterns)
+        
+        stats = self.intent_classifier.get_stats()
+        print(f"  ✅ Created {stats['total_clusters']} intent clusters")
+        print(f"     Avg cluster size: {stats['avg_cluster_size']:.1f}")
+        print(f"     Avg coherence: {stats['avg_coherence']:.3f}")
+        
+        return clusters
         
     def compose_response(
         self, 
         context: str,
         user_input: str = "",
-        topk: int = 5
+        topk: int = 5,
+        use_intent_filtering: bool = True
     ) -> ComposedResponse:
         """
         Generate response through learned composition.
@@ -91,12 +117,45 @@ class ResponseComposer:
             context: Current conversation context (from semantic stage)
             user_input: Raw user input (for direct references)
             topk: Number of patterns to consider
+            use_intent_filtering: Use BNN intent classification to filter patterns
             
         Returns:
             ComposedResponse with text and metadata
         """
-        # 1. Retrieve relevant response patterns (based on trigger context)
-        patterns = self.fragments.retrieve_patterns(context, topk=topk * 3)  # Get more candidates
+        # 1a. Optional: Filter by intent first (speeds up retrieval)
+        if use_intent_filtering and self.intent_classifier is not None and user_input:
+            # Classify user input intent
+            intent_scores = self.intent_classifier.classify_intent(user_input, topk=3)
+            
+            if intent_scores and intent_scores[0][1] > 0.5:  # Reasonable confidence
+                # Get patterns from top intent clusters (use top 2 for coverage)
+                candidate_pattern_ids = set()
+                for intent_label, score in intent_scores[:2]:
+                    if score > 0.4:  # Include secondary intents too
+                        patterns_in_cluster = self.intent_classifier.get_patterns_by_intent(
+                            intent_label, 
+                            self.fragments.patterns
+                        )
+                        candidate_pattern_ids.update(p.fragment_id for p in patterns_in_cluster)
+                
+                # Temporarily filter fragment store to intent cluster
+                original_patterns = self.fragments.patterns
+                self.fragments.patterns = {
+                    pid: p for pid, p in original_patterns.items() 
+                    if pid in candidate_pattern_ids
+                }
+                
+                # Retrieve from filtered set
+                patterns = self.fragments.retrieve_patterns(context, topk=topk * 3)
+                
+                # Restore full pattern set
+                self.fragments.patterns = original_patterns
+            else:
+                # Low intent confidence - use all patterns
+                patterns = self.fragments.retrieve_patterns(context, topk=topk * 3)
+        else:
+            # Standard retrieval across all patterns
+            patterns = self.fragments.retrieve_patterns(context, topk=topk * 3)
         
         if not patterns:
             # Fallback if no patterns found
