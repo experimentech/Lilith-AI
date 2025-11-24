@@ -225,15 +225,19 @@ class ConversationalTrainer:
             # Get current context from recent turns
             recent = self.loop.history.get_recent_turns(n=3)
             if recent:
-                context = " ".join([t.user_input for t in recent])
+                # Use the actual user question/statement as context, not all history
+                context = recent[-1].user_input if recent else turn.user_text
             else:
                 context = turn.user_text
             
+            # Classify intent based on the BOT response, not user input
+            intent = self._classify_intent(turn.bot_text)
+            
             # Learn this as a successful response pattern
             self._learn_pattern(
-                trigger=context,
-                response=turn.bot_text,
-                intent=self._classify_intent(turn.bot_text)
+                trigger=context,  # What user said
+                response=turn.bot_text,  # How bot responded
+                intent=intent  # Intent of the bot's response
             )
             
             # Learn syntax pattern if grammar enabled
@@ -268,21 +272,56 @@ class ConversationalTrainer:
         )
     
     def _classify_intent(self, text: str) -> str:
-        """Simple intent classification."""
+        """
+        Improved intent classification using semantic patterns.
+        
+        Uses both structural cues and semantic analysis to determine intent.
+        """
         text_lower = text.lower()
         
+        # Question detection (structural)
         if '?' in text:
-            return "question"
-        elif any(word in text_lower for word in ['hello', 'hi', 'hey', 'greetings']):
+            # Distinguish question types
+            if any(word in text_lower for word in ['what', 'how', 'why', 'when', 'where', 'who']):
+                return "question_info"  # Seeking information
+            elif any(word in text_lower for word in ['can you', 'could you', 'would you']):
+                return "question_request"  # Requesting action
+            else:
+                return "question"  # Generic question
+        
+        # Greeting detection
+        if any(word in text_lower for word in ['hello', 'hi', 'hey', 'greetings', 'good morning', 'good afternoon']):
             return "greeting"
-        elif any(word in text_lower for word in ['bye', 'goodbye', 'see you']):
+        
+        # Farewell detection
+        if any(word in text_lower for word in ['bye', 'goodbye', 'see you', 'farewell', 'take care']):
             return "farewell"
-        elif any(word in text_lower for word in ['yes', 'correct', 'exactly', 'right']):
+        
+        # Agreement/confirmation
+        if text_lower.startswith(('yes', 'yeah', 'correct', 'exactly', 'right', 'agreed', 'absolutely')):
             return "agreement"
-        elif any(word in text_lower for word in ['interesting', 'fascinating', 'cool']):
+        
+        # Disagreement/negation
+        if text_lower.startswith(('no', 'not', 'incorrect', 'wrong')):
+            return "disagreement"
+        
+        # Explanation/elaboration (contains connectors and reasoning words)
+        if any(word in text_lower for word in ['because', 'since', 'therefore', 'thus', 'so ', 'which', 'that ']):
+            return "explain"
+        
+        # Interest/engagement
+        if any(word in text_lower for word in ['interesting', 'fascinating', 'cool', 'wow', 'amazing', 'great']):
             return "interest"
-        else:
+        
+        # Capability/description (common in informative responses)
+        if any(pattern in text_lower for pattern in ['are ', 'is ', 'can ', 'will ', 'do ', 'does ']):
+            # Check if it's describing something (typical in technical explanations)
+            if any(word in text_lower for word in ['system', 'model', 'network', 'algorithm', 'process', 'method']):
+                return "technical_explain"
             return "statement"
+        
+        # Default to statement
+        return "statement"
     
     def save_learned_patterns(self, output_path: str | None = None):
         """Save learned patterns to disk."""

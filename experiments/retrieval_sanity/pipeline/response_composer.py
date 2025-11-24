@@ -339,10 +339,16 @@ class ResponseComposer:
                 # Try blending
                 blended = self._blend_patterns(primary_pattern, secondary_pattern)
                 if blended:
-                    response_text = blended
-                    fragment_ids.append(secondary_pattern.fragment_id)
-                    weights.append(secondary_weight)
-                    print(f"  🎨 Blended {primary_pattern.intent} + {secondary_pattern.intent}")
+                    # Validate the blended response
+                    if self._validate_response(blended):
+                        response_text = blended
+                        fragment_ids.append(secondary_pattern.fragment_id)
+                        weights.append(secondary_weight)
+                        print(f"  🎨 Blended {primary_pattern.intent} + {secondary_pattern.intent}")
+                    else:
+                        # Blend failed validation, use primary only
+                        print(f"  ⚠️  Blend rejected (validation failed), using primary only")
+                        should_blend = False
         
         # If all weights are low (no good match), try composing from fragments
         if not should_blend and primary_weight < 1.5 and len(weighted_patterns) >= 3:
@@ -399,8 +405,8 @@ class ResponseComposer:
         """
         Blend two patterns into a novel response.
         
-        Strategy: Use BNN syntax stage if available for grammatically-guided blending.
-        This creates NEW utterances from learned fragments!
+        Strategy: Check compatibility first, then use BNN syntax stage if available
+        for grammatically-guided blending. This creates NEW utterances from learned fragments!
         
         Args:
             primary: Main pattern
@@ -409,6 +415,10 @@ class ResponseComposer:
         Returns:
             Blended text or None if blending not appropriate
         """
+        # Check if patterns are compatible for blending
+        if not self._should_blend(primary, secondary):
+            return None
+        
         # If BNN syntax stage is available, use it for intelligent composition!
         if self.syntax_stage:
             return self._blend_with_syntax_bnn(primary, secondary)
@@ -417,6 +427,170 @@ class ResponseComposer:
         # Don't blend if patterns end with questions (creates awkward double-question)
         if primary.response_text.strip().endswith('?') and secondary.response_text.strip().endswith('?'):
             return None
+    
+    def _should_blend(self, primary: ResponsePattern, secondary: ResponsePattern) -> bool:
+        """
+        Check if two patterns are compatible for blending.
+        
+        Prevents nonsensical combinations like "I'm doing well" + "medical diagnosis"
+        
+        Args:
+            primary: Primary pattern
+            secondary: Secondary pattern
+            
+        Returns:
+            True if patterns can be blended coherently
+        """
+        # Define incompatible intent pairs
+        incompatible_pairs = {
+            ('greeting', 'technical_explain'),  # "Hello" + technical content
+            ('greeting', 'explain'),            # "Hi" + explanation
+            ('farewell', 'question_info'),      # "Goodbye" + question
+            ('farewell', 'technical_explain'),  # "Bye" + technical
+            ('agreement', 'greeting'),          # "Yes" + "Hello"
+            ('disagreement', 'greeting'),       # "No" + "Hello"
+            ('statement', 'greeting'),          # Statement + greeting is awkward
+        }
+        
+        # Check if this pair is explicitly incompatible
+        intent_pair = (primary.intent, secondary.intent)
+        intent_pair_reverse = (secondary.intent, primary.intent)
+        
+        if intent_pair in incompatible_pairs or intent_pair_reverse in incompatible_pairs:
+            return False
+        
+        # Don't blend if both patterns are very short (likely fragments)
+        if len(primary.response_text.split()) < 3 and len(secondary.response_text.split()) < 3:
+            return False
+        
+        # Don't blend if combined length would be too long (over 25 words)
+        total_words = len(primary.response_text.split()) + len(secondary.response_text.split())
+        if total_words > 25:
+            return False
+        
+        # Check semantic compatibility using embeddings if available
+        if hasattr(primary, 'embedding_cache') and hasattr(secondary, 'embedding_cache'):
+            if primary.embedding_cache and secondary.embedding_cache:
+                # Calculate cosine similarity between embeddings
+                import numpy as np
+                emb1 = np.array(primary.embedding_cache)
+                emb2 = np.array(secondary.embedding_cache)
+                
+                # Normalize
+                norm1 = np.linalg.norm(emb1)
+                norm2 = np.linalg.norm(emb2)
+                
+                if norm1 > 0 and norm2 > 0:
+                    similarity = np.dot(emb1, emb2) / (norm1 * norm2)
+                    
+                    # If patterns are too dissimilar semantically, don't blend
+                    if similarity < 0.3:  # Threshold for semantic compatibility
+                        return False
+        
+        # Define compatible intent pairs that work well together
+        compatible_pairs = {
+            ('question_info', 'explain'),       # Question + explanation
+            ('question_info', 'technical_explain'),  # Question + technical answer
+            ('acknowledgment', 'interest'),     # "I see" + "That's interesting"
+            ('interest', 'question_info'),      # "Interesting!" + "How does..."
+            ('agreement', 'explain'),           # "Yes" + explanation
+            ('agreement', 'technical_explain'), # "Yes" + technical detail
+            ('explain', 'technical_explain'),   # Explanation + more detail
+            ('statement', 'explain'),           # Statement + elaboration
+            ('statement', 'technical_explain'), # Statement + technical detail
+        }
+        
+        # If it's a known good pair, allow it
+        if intent_pair in compatible_pairs or intent_pair_reverse in compatible_pairs:
+            return True
+        
+        # Same intent types usually blend well
+        if primary.intent == secondary.intent:
+            return True
+        
+        # Default: be conservative, don't blend unless we're sure
+        return False
+    
+    def _validate_response(self, response: str) -> bool:
+        """
+        Validate a composed response for quality and coherence.
+        
+        Rejects responses that are:
+        - Too short or degenerate
+        - Have obvious grammar errors
+        - Contain repetitive content
+        
+        Args:
+            response: Composed response text
+            
+        Returns:
+            True if response passes validation
+        """
+        if not response or not response.strip():
+            return False
+        
+        words = response.split()
+        
+        # Reject if too short (less than 3 words, likely degenerate)
+        if len(words) < 3:
+            return False
+        
+        # Reject if too long (over 40 words, likely rambling)
+        if len(words) > 40:
+            return False
+        
+        # Check for repetitive content (same word repeated)
+        # "Yes, Yes." or "Hello. Hello!" or "I'm doing well, I'm doing well"
+        if len(words) >= 2:
+            # Check for immediate repetition
+            for i in range(len(words) - 1):
+                word1 = words[i].strip('.,!?').lower()
+                word2 = words[i + 1].strip('.,!?').lower()
+                if word1 == word2 and len(word1) > 2:  # Allow "a a" but not "hello hello"
+                    return False
+            
+            # Check for phrase repetition across sentences
+            # Split by punctuation and check if phrases repeat
+            parts = [p.strip() for p in response.replace('!', '.').replace('?', '.').replace(',', '.').split('.') if p.strip()]
+            if len(parts) >= 2:
+                # Check if any two parts are identical or very similar
+                for i in range(len(parts)):
+                    for j in range(i + 1, len(parts)):
+                        # Compare normalized versions (lowercase, no punctuation)
+                        norm_i = parts[i].lower().strip('.,!?\'\"')
+                        norm_j = parts[j].lower().strip('.,!?\'\"')
+                        if norm_i == norm_j:
+                            return False
+                        # Also check if one is a substring of the other (high overlap)
+                        if len(norm_i) > 5 and len(norm_j) > 5:
+                            if norm_i in norm_j or norm_j in norm_i:
+                                return False
+        
+        # Check for obvious sentence fragments
+        # If it starts with a lowercase letter and isn't a continuation word
+        if response[0].islower() and not response.startswith(('and', 'but', 'or', 'so')):
+            return False
+        
+        # Check for multiple sentences - first should end with punctuation
+        sentences = [s.strip() for s in response.replace('!', '.').replace('?', '.').split('.') if s.strip()]
+        if len(sentences) > 1:
+            # Each sentence should start with capital
+            for sentence in sentences:
+                if sentence and not sentence[0].isupper():
+                    return False
+        
+        # Check for obvious grammar errors - multiple punctuation
+        if '..' in response or '!!' in response or '??' in response:
+            return False
+        
+        # Check for mismatched quotes or parentheses
+        if response.count('"') % 2 != 0:
+            return False
+        if response.count('(') != response.count(')'):
+            return False
+        
+        # All checks passed
+        return True
             
         # Choose connector based on pattern types
         connectors = {
