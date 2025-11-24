@@ -108,7 +108,7 @@ class ResponseComposer:
         context: str,
         user_input: str = "",
         topk: int = 5,
-        use_intent_filtering: bool = True
+        use_intent_filtering: bool = False  # Disabled: BNN intent classification unreliable on user inputs
     ) -> ComposedResponse:
         """
         Generate response through learned composition.
@@ -122,40 +122,21 @@ class ResponseComposer:
         Returns:
             ComposedResponse with text and metadata
         """
-        # 1a. Optional: Filter by intent first (speeds up retrieval)
+        # 1. Classify intent using BNN if available
+        intent_hint = None
         if use_intent_filtering and self.intent_classifier is not None and user_input:
-            # Classify user input intent
-            intent_scores = self.intent_classifier.classify_intent(user_input, topk=3)
+            # BNN extracts semantic intent
+            intent_scores = self.intent_classifier.classify_intent(user_input, topk=1)
             
             if intent_scores and intent_scores[0][1] > 0.5:  # Reasonable confidence
-                # Get patterns from top intent clusters (use top 2 for coverage)
-                candidate_pattern_ids = set()
-                for intent_label, score in intent_scores[:2]:
-                    if score > 0.4:  # Include secondary intents too
-                        patterns_in_cluster = self.intent_classifier.get_patterns_by_intent(
-                            intent_label, 
-                            self.fragments.patterns
-                        )
-                        candidate_pattern_ids.update(p.fragment_id for p in patterns_in_cluster)
-                
-                # Temporarily filter fragment store to intent cluster
-                original_patterns = self.fragments.patterns
-                self.fragments.patterns = {
-                    pid: p for pid, p in original_patterns.items() 
-                    if pid in candidate_pattern_ids
-                }
-                
-                # Retrieve from filtered set
-                patterns = self.fragments.retrieve_patterns(context, topk=topk * 3)
-                
-                # Restore full pattern set
-                self.fragments.patterns = original_patterns
-            else:
-                # Low intent confidence - use all patterns
-                patterns = self.fragments.retrieve_patterns(context, topk=topk * 3)
-        else:
-            # Standard retrieval across all patterns
-            patterns = self.fragments.retrieve_patterns(context, topk=topk * 3)
+                intent_hint = intent_scores[0][0]  # Top intent label
+        
+        # 2. Database queries patterns matching intent + keywords
+        patterns = self.fragments.retrieve_patterns(
+            context, 
+            topk=topk * 3,
+            intent_hint=intent_hint
+        )
         
         if not patterns:
             # Fallback if no patterns found

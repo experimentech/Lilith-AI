@@ -18,6 +18,10 @@ def test_conversation_quality():
     
     conv = ConversationLoop()
     
+    # NOTE: Intent clustering disabled - BNN classification unreliable on user inputs
+    # The BNN was classifying greetings as "question_detail" and weather questions as "confusion"
+    # Keyword-only retrieval works better for now
+    
     # Test scenarios based on what's in Conversation.csv
     test_scenarios = [
         {
