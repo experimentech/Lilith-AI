@@ -279,20 +279,31 @@ def extract_keywords(text: str, source: str = "trigger") -> List[Tuple[str, str,
     """
     Extract keywords from text, filtering stopwords.
     
+    Brain-inspired: Keep conversational signals (greetings, farewells, polite words)
+    that are often filtered as stopwords in document retrieval but are CRITICAL
+    for dialogue pattern matching.
+    
     Returns:
         List of (keyword, source, weight) tuples
     """
+    # Content stopwords only - NOT conversational signals!
     stopwords = {
         'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
         'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should',
-        'can', 'could', 'may', 'might', 'must', 'i', 'you', 'he', 'she', 'it',
-        'we', 'they', 'them', 'this', 'that', 'these', 'those', 'to', 'of', 'in',
+        'can', 'could', 'may', 'might', 'must', 
+        'it', 'them', 'this', 'that', 'these', 'those', 'to', 'of', 'in',
         'on', 'at', 'by', 'for', 'with', 'about', 'as', 'from', 'up', 'down',
         'out', 'off', 'over', 'under', 'again', 'then', 'once', 'here', 'there',
-        'when', 'where', 'why', 'how', 'all', 'both', 'each', 'few', 'more',
+        'when', 'where', 'why', 'all', 'both', 'each', 'few', 'more',
         'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own',
         'same', 'so', 'than', 'too', 'very', 's', 't', 'just', 'don', 'm', 'll', 've'
     }
+    
+    # KEEP these conversational signals (removed from stopwords):
+    # - 'hi', 'hello', 'hey', 'goodbye', 'bye' (greetings/farewells)
+    # - 'thanks', 'thank' (gratitude)
+    # - 'i', 'you', 'we', 'he', 'she' (personal pronouns matter in conversation!)
+    # - 'how' (questions: "how are you?", "how's it going?")
     
     words = text.lower().split()
     keywords = []
@@ -301,8 +312,8 @@ def extract_keywords(text: str, source: str = "trigger") -> List[Tuple[str, str,
         # Remove punctuation
         word = ''.join(c for c in word if c.isalnum())
         
-        # Skip stopwords and short words
-        if word and len(word) > 2 and word not in stopwords:
+        # Skip stopwords and short words (but keep conversational signals!)
+        if word and len(word) > 1 and word not in stopwords:  # Reduced from >2 to >1 for "hi"
             keywords.append((word, source, 1.0))
     
     return keywords

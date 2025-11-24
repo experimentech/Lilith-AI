@@ -128,7 +128,14 @@ class DatabaseBackedFragmentStore:
         context_keywords: List[str],
         topk: int
     ) -> List[Tuple[ResponsePattern, float]]:
-        """Score retrieved patterns by keyword overlap + success."""
+        """
+        Score retrieved patterns by keyword overlap + success.
+        
+        Brain-inspired improvements:
+        1. Match user input to TRIGGER patterns (what activates response)
+        2. Weight trigger matches > response matches (70/30)
+        3. Boost EXACT trigger matches (brain recognizes familiar patterns strongly)
+        """
         scored_patterns = []
         context_keywords_set = set(context_keywords)
         
@@ -142,22 +149,43 @@ class DatabaseBackedFragmentStore:
                 usage_count=row['usage_count']
             )
             
-            # Get pattern keywords from database
+            # Get pattern keywords SEPARATED by source (trigger vs response)
             cursor = self.db.conn.cursor()
             cursor.execute("""
-                SELECT keyword FROM pattern_keywords 
+                SELECT keyword, source FROM pattern_keywords 
                 WHERE pattern_id = ?
             """, (row['id'],))
-            pattern_keywords = set(kw_row[0] for kw_row in cursor.fetchall())
             
-            # Calculate keyword overlap score
+            trigger_keywords = set()
+            response_keywords = set()
+            for kw_row in cursor.fetchall():
+                if kw_row[1] == 'trigger':
+                    trigger_keywords.add(kw_row[0])
+                else:
+                    response_keywords.add(kw_row[0])
+            
+            # Calculate keyword overlap scores
             if context_keywords_set:
-                overlap = len(context_keywords_set & pattern_keywords)
-                overlap_score = overlap / max(len(context_keywords_set), 1)
+                # TRIGGER match (primary): Does user input match what activates this pattern?
+                trigger_overlap = len(context_keywords_set & trigger_keywords)
+                trigger_score = trigger_overlap / max(len(context_keywords_set), 1)
+                
+                # EXACT trigger match bonus: If ALL user keywords match trigger, strong signal!
+                # This helps "Hi" match "Hi" even if other patterns match "how you"
+                if trigger_keywords and context_keywords_set.issubset(trigger_keywords):
+                    trigger_score *= 1.5  # 50% boost for exact matches
+                
+                # RESPONSE match (secondary): Topic coherence for multi-turn conversations
+                response_overlap = len(context_keywords_set & response_keywords)
+                response_score = response_overlap / max(len(context_keywords_set), 1)
+                
+                # Brain-like: Weight trigger matching more heavily (70/30)
+                overlap_score = (trigger_score * 0.7) + (response_score * 0.3)
             else:
                 overlap_score = 0.5  # Neutral score when no keywords
             
-            # Combine with success score (weight overlap more heavily)
+            # Combine with success score
+            # Overlap 60%, success 40% (pattern has proven useful)
             combined_score = (overlap_score * 0.6) + (pattern.success_score * 0.4)
             
             scored_patterns.append((pattern, combined_score))
