@@ -205,21 +205,29 @@ class DatabaseBackedFragmentStore:
         
         return fragment_id
     
-    def update_success(self, fragment_id: str, new_score: float):
+    def update_success(self, fragment_id: str, feedback: float, plasticity_rate: float = 0.1):
         """
-        Update pattern success score.
+        Update pattern success score based on feedback.
         
         Args:
             fragment_id: Pattern identifier
-            new_score: New success score
+            feedback: Feedback signal (-1.0 to 1.0)
+            plasticity_rate: How quickly to update
         """
         # Get pattern ID from fragment_id
         cursor = self.db.conn.cursor()
-        cursor.execute("SELECT id FROM patterns WHERE fragment_id = ?", (fragment_id,))
+        cursor.execute("SELECT id, success_score FROM patterns WHERE fragment_id = ?", (fragment_id,))
         row = cursor.fetchone()
         
         if row:
-            self.db.update_success(row['id'], new_score)
+            pattern_id = row['id']
+            current_score = row['success_score']
+            
+            # Update with moving average
+            new_score = current_score + plasticity_rate * feedback
+            new_score = max(0.0, min(1.0, new_score))  # Clip to [0, 1]
+            
+            self.db.update_success(pattern_id, new_score)
     
     def get_stats(self) -> Dict:
         """Get storage statistics."""

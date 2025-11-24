@@ -81,9 +81,11 @@ class ConversationLoop:
         
         # Initialize response generation components
         print("  📚 Loading response fragment store (learned patterns)...")
-        self.fragment_store = ResponseFragmentStore(
+        # Use database-backed store for 25x faster retrieval
+        from pipeline.database_fragment_store import DatabaseBackedFragmentStore
+        self.fragment_store = DatabaseBackedFragmentStore(
             semantic_encoder=self.semantic_stage.encoder,
-            storage_path="conversation_patterns.json"
+            storage_path="conversation_patterns.db"
         )
         
         print("  ✍️  Initializing response composer (PMFlow-guided)...")
@@ -160,9 +162,12 @@ class ConversationLoop:
         # Show fragment store stats
         stats = self.fragment_store.get_stats()
         print(f"  Response patterns: {stats['total_patterns']}")
-        print(f"    - Seed patterns: {stats['seed_patterns']}")
-        print(f"    - Learned patterns: {stats['learned_patterns']}")
-        print(f"    - Average success: {stats['average_success']:.2f}")
+        if 'seed_patterns' in stats:
+            print(f"    - Seed patterns: {stats['seed_patterns']}")
+            print(f"    - Learned patterns: {stats['learned_patterns']}")
+        if 'total_keywords' in stats:
+            print(f"    - Unique keywords: {stats['total_keywords']}")
+        print(f"    - Average success: {stats.get('average_success', stats.get('avg_success', 0.0)):.2f}")
         print("═" * 80)
         print()
     
