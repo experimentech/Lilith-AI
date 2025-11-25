@@ -105,7 +105,11 @@ class ConceptStore:
             concept_id of created or merged concept
         """
         # Generate embedding for the term
-        embedding = self.encoder.encode(term)
+        embedding = self.encoder.encode(term.split())
+        
+        # Convert torch tensor to numpy if needed
+        if hasattr(embedding, 'cpu'):
+            embedding = embedding.cpu().detach().numpy().flatten()
         
         # Check for existing similar concept
         existing = self._find_similar_concept(embedding, threshold=0.90)
@@ -179,7 +183,11 @@ class ConceptStore:
         for concept in self.concepts.values():
             # Re-encode if embedding not cached
             if concept.embedding is None:
-                concept.embedding = self.encoder.encode(concept.term)
+                embedding = self.encoder.encode(concept.term.split())
+                # Convert torch tensor to numpy if needed
+                if hasattr(embedding, 'cpu'):
+                    embedding = embedding.cpu().detach().numpy().flatten()
+                concept.embedding = embedding
             
             # Cosine similarity
             similarity = self._cosine_similarity(query_embedding, concept.embedding)

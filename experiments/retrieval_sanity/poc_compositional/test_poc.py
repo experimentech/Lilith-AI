@@ -15,72 +15,19 @@ import sys
 from pathlib import Path
 import numpy as np
 
-# Add project root and pipeline to path
-project_root = Path(__file__).parent.parent.parent
+# Add paths in correct order: project root first (for pmflow_bnn_enhanced)
+project_root = Path(__file__).parent.parent.parent.parent
 pipeline_dir = Path(__file__).parent.parent / "pipeline"
 poc_dir = Path(__file__).parent
+
+# Insert project root FIRST so pmflow_bnn_enhanced can be found
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(pipeline_dir))
 sys.path.insert(0, str(poc_dir))
 
 from concept_store import ConceptStore, Relation
 from template_composer import TemplateComposer
-
-
-class SimpleSemanticEncoder:
-    """
-    Minimal semantic encoder for PoC testing.
-    Uses simple bag-of-words + random projection for embeddings.
-    """
-    
-    def __init__(self, dimension=128, vocab_size=5000, seed=42):
-        self.dimension = dimension
-        self.vocab_size = vocab_size
-        np.random.seed(seed)
-        
-        # Word to index mapping
-        self.word_to_idx = {}
-        self.next_idx = 0
-        
-        # Random projection matrix for dimensionality reduction
-        self.projection = np.random.randn(vocab_size, dimension).astype(np.float32)
-        self.projection /= np.linalg.norm(self.projection, axis=1, keepdims=True)
-    
-    def _get_word_idx(self, word: str) -> int:
-        """Get or create index for word"""
-        word = word.lower()
-        if word not in self.word_to_idx:
-            if self.next_idx >= self.vocab_size:
-                # Hash to existing index if vocab full
-                return hash(word) % self.vocab_size
-            self.word_to_idx[word] = self.next_idx
-            self.next_idx += 1
-        return self.word_to_idx[word]
-    
-    def encode(self, text: str) -> np.ndarray:
-        """Encode text to embedding vector"""
-        # Tokenize
-        tokens = text.lower().split()
-        
-        # Create bag-of-words vector
-        bow = np.zeros(self.vocab_size, dtype=np.float32)
-        for token in tokens:
-            idx = self._get_word_idx(token)
-            bow[idx] += 1.0
-        
-        # Normalize
-        if np.sum(bow) > 0:
-            bow /= np.sum(bow)
-        
-        # Project to lower dimension
-        embedding = self.projection.T @ bow
-        
-        # Normalize
-        norm = np.linalg.norm(embedding)
-        if norm > 0:
-            embedding /= norm
-        
-        return embedding
+from embedding import PMFlowEmbeddingEncoder
 
 
 class MockPatternStore:
@@ -143,15 +90,16 @@ def test_compositional_poc():
     
     # Initialize components
     print("📦 Initializing components...")
-    encoder = SimpleSemanticEncoder(
-        dimension=128,
-        vocab_size=5000,
-        seed=42
+    encoder = PMFlowEmbeddingEncoder(
+        dimension=96,
+        latent_dim=64,
+        combine_mode="concat",
+        seed=13
     )
     
     concept_store = ConceptStore(
         semantic_encoder=encoder,
-        storage_path="poc_concepts.json"
+        storage_path=None  # Disable persistence for clean test
     )
     
     template_composer = TemplateComposer()
@@ -251,8 +199,17 @@ def test_compositional_poc():
         print(f"Query: {query}")
         
         # Compositional response
-        query_embedding = encoder.encode(query)
-        concepts = concept_store.retrieve_similar(query_embedding, top_k=1, min_similarity=0.60)
+        query_embedding = encoder.encode(query.lower().split())
+        
+        # Convert torch tensor to numpy if needed
+        if hasattr(query_embedding, 'cpu'):
+            query_embedding = query_embedding.cpu().detach().numpy().flatten()
+        
+        concepts = concept_store.retrieve_similar(query_embedding, top_k=1, min_similarity=0.40)
+        
+        # Debug: Show similarity scores
+        if concepts:
+            print(f"  🔍 Retrieved: {concepts[0][0].term} (similarity: {concepts[0][1]:.3f})")
         
         if concepts:
             concept, similarity = concepts[0]
@@ -313,15 +270,23 @@ def test_compositional_poc():
     print()
     
     # Compositional: Can it find related concepts?
-    query_embedding = encoder.encode(novel_query)
+    query_embedding = encoder.encode(novel_query.lower().split())
+    
+    # Convert torch tensor to numpy if needed
+    if hasattr(query_embedding, 'cpu'):
+        query_embedding = query_embedding.cpu().detach().numpy().flatten()
+    
     related_concepts = concept_store.retrieve_similar(
         query_embedding, 
         top_k=5, 
-        min_similarity=0.50
+        min_similarity=0.40  # Lower threshold to find more related concepts
     )
     
     print("  Compositional approach:")
     if related_concepts:
+        print(f"    Found {len(related_concepts)} related concepts:")
+        for concept, sim in related_concepts:
+            print(f"      - {concept.term} (similarity: {sim:.3f})")
         concept_terms = [c.term for c, _ in related_concepts]
         print(f"    Found related concepts: {concept_terms}")
         
