@@ -88,7 +88,7 @@ def main():
         print(f"   Total accessible: {counts['total']}")
     
     print()
-    print("Type 'quit' to exit")
+    print("Type '/quit' or '/exit' to exit")
     print("Commands: '/stats', '/reset', '/help'")
     print("Feedback: '/+' (upvote), '/-' (downvote), '/?' (show last pattern ID)")
     print("=" * 60)
@@ -109,15 +109,15 @@ def main():
         if not user_input:
             continue
         
-        if user_input.lower() == 'quit':
-            print("\nGoodbye!")
-            break
-        
         # Commands must start with '/'
         if user_input.startswith('/'):
             command = user_input[1:].lower()
             
-            if command == 'stats':
+            if command in ['quit', 'exit']:
+                print("\nGoodbye!")
+                break
+            
+            elif command == 'stats':
                 counts = fragment_store.get_pattern_count()
                 print(f"\n📊 Statistics:")
                 if not user_identity.is_teacher():
@@ -129,7 +129,8 @@ def main():
             
             elif command == 'help':
                 print("\n📖 Commands:")
-                print("   quit     - Exit the program")
+                print("   /quit    - Exit the program")
+                print("   /exit    - Exit the program")
                 print("   /stats   - Show pattern statistics")
                 print("   /reset   - Reset your data (with backup)")
                 print("   /+       - Upvote last response")

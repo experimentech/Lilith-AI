@@ -60,7 +60,7 @@ Choose `1` for Teacher mode - writes directly to base knowledge that all users c
 
 ## Interactive Commands
 
-While chatting, you can use these commands (all commands except `quit` start with `/`):
+While chatting, you can use these commands (all commands start with `/`):
 
 | Command | What it does |
 |---------|-------------|
@@ -70,7 +70,7 @@ While chatting, you can use these commands (all commands except `quit` start wit
 | `/-` | Downvote last response (suppresses it) |
 | `/?` | Show last pattern ID |
 | `/reset` | Reset your data with backup |
-| `quit` | Exit |
+| `/quit` or `/exit` | Exit the program |
 
 ## Testing Scenarios
 
