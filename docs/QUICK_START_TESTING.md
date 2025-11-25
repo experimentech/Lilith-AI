@@ -60,16 +60,16 @@ Choose `1` for Teacher mode - writes directly to base knowledge that all users c
 
 ## Interactive Commands
 
-While chatting, you can use these commands:
+While chatting, you can use these commands (all commands except `quit` start with `/`):
 
 | Command | What it does |
 |---------|-------------|
-| `help` | Show all commands |
-| `stats` | Display pattern statistics |
-| `+` | Upvote last response (makes it more likely) |
-| `-` | Downvote last response (suppresses it) |
-| `?` | Show last pattern ID |
-| `reset` | Reset your data with backup |
+| `/help` | Show all commands |
+| `/stats` | Display pattern statistics |
+| `/+` | Upvote last response (makes it more likely) |
+| `/-` | Downvote last response (suppresses it) |
+| `/?` | Show last pattern ID |
+| `/reset` | Reset your data with backup |
 | `quit` | Exit |
 
 ## Testing Scenarios

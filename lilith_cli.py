@@ -89,8 +89,8 @@ def main():
     
     print()
     print("Type 'quit' to exit")
-    print("Commands: 'stats', 'reset', 'help'")
-    print("Feedback: '+' (upvote), '-' (downvote), '?' (show last pattern ID)")
+    print("Commands: '/stats', '/reset', '/help'")
+    print("Feedback: '/+' (upvote), '/-' (downvote), '/?' (show last pattern ID)")
     print("=" * 60)
     print()
     
@@ -113,69 +113,78 @@ def main():
             print("\nGoodbye!")
             break
         
-        if user_input.lower() == 'stats':
-            counts = fragment_store.get_pattern_count()
-            print(f"\n📊 Statistics:")
-            if not user_identity.is_teacher():
-                print(f"   Your patterns: {counts['user']}")
-            print(f"   Base patterns: {counts['base']}")
-            print(f"   Total: {counts['total']}")
-            print()
-            continue
-        
-        if user_input.lower() == 'help':
-            print("\n📖 Commands:")
-            print("   quit     - Exit the program")
-            print("   stats    - Show pattern statistics")
-            print("   reset    - Reset your data (with backup)")
-            print("   +        - Upvote last response (if wrong, improves it)")
-            print("   -        - Downvote last response (if wrong, suppresses it)")
-            print("   ?        - Show last pattern ID")
-            print()
-            continue
-        
-        if user_input.lower() == 'reset':
-            if user_identity.is_teacher():
-                print("\n⚠️  Cannot reset in teacher mode")
+        # Commands must start with '/'
+        if user_input.startswith('/'):
+            command = user_input[1:].lower()
+            
+            if command == 'stats':
+                counts = fragment_store.get_pattern_count()
+                print(f"\n📊 Statistics:")
+                if not user_identity.is_teacher():
+                    print(f"   Your patterns: {counts['user']}")
+                print(f"   Base patterns: {counts['base']}")
+                print(f"   Total: {counts['total']}")
                 print()
                 continue
             
-            print("\n⚠️  This will reset your personal patterns")
-            confirm = input("Create backup and reset? (yes/no): ").strip().lower()
-            if confirm == 'yes':
-                backup = fragment_store.reset_user_data(keep_backup=True)
-                print(f"✅ Reset complete. Backup: {backup.name if backup else 'none'}")
+            elif command == 'help':
+                print("\n📖 Commands:")
+                print("   quit     - Exit the program")
+                print("   /stats   - Show pattern statistics")
+                print("   /reset   - Reset your data (with backup)")
+                print("   /+       - Upvote last response")
+                print("   /-       - Downvote last response")
+                print("   /?       - Show last pattern ID")
+                print()
+                continue
+            
+            elif command == 'reset':
+                if user_identity.is_teacher():
+                    print("\n⚠️  Cannot reset in teacher mode")
+                    print()
+                    continue
+                
+                print("\n⚠️  This will reset your personal patterns")
+                confirm = input("Create backup and reset? (yes/no): ").strip().lower()
+                if confirm == 'yes':
+                    backup = fragment_store.reset_user_data(keep_backup=True)
+                    print(f"✅ Reset complete. Backup: {backup.name if backup else 'none'}")
+                else:
+                    print("❌ Reset cancelled")
+                print()
+                continue
+            
+            elif command == '+':
+                if last_pattern_id:
+                    fragment_store.upvote(last_pattern_id)
+                    print("\n👍 Upvoted!")
+                else:
+                    print("\n⚠️  No recent response to upvote")
+                print()
+                continue
+            
+            elif command == '-':
+                if last_pattern_id:
+                    fragment_store.downvote(last_pattern_id)
+                    print("\n👎 Downvoted!")
+                else:
+                    print("\n⚠️  No recent response to downvote")
+                print()
+                continue
+            
+            elif command == '?':
+                if last_pattern_id:
+                    print(f"\n📋 Last pattern ID: {last_pattern_id}")
+                else:
+                    print("\n⚠️  No recent response")
+                print()
+                continue
+            
             else:
-                print("❌ Reset cancelled")
-            print()
-            continue
-        
-        if user_input == '+':
-            if last_pattern_id:
-                fragment_store.upvote(last_pattern_id)
+                print(f"\n⚠️  Unknown command: /{command}")
+                print("   Type '/help' for available commands")
                 print()
-            else:
-                print("\n⚠️  No recent response to upvote")
-                print()
-            continue
-        
-        if user_input == '-':
-            if last_pattern_id:
-                fragment_store.downvote(last_pattern_id)
-                print()
-            else:
-                print("\n⚠️  No recent response to downvote")
-                print()
-            continue
-        
-        if user_input == '?':
-            if last_pattern_id:
-                print(f"\n📋 Last pattern ID: {last_pattern_id}")
-                print()
-            else:
-                print("\n⚠️  No recent response")
-                print()
-            continue
+                continue
         
         # Generate response
         turn += 1
