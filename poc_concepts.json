@@ -1,0 +1,79 @@
+{
+  "concept_0000": {
+    "concept_id": "concept_0000",
+    "term": "machine learning",
+    "properties": [
+      "branch of artificial intelligence",
+      "enables computers to learn from data",
+      "without explicit programming"
+    ],
+    "relations": [],
+    "confidence": 0.89,
+    "source": "taught",
+    "usage_count": 2
+  },
+  "concept_0001": {
+    "concept_id": "concept_0001",
+    "term": "deep learning",
+    "properties": [
+      "uses neural networks with many layers",
+      "learns hierarchical representations",
+      "excels at image recognition"
+    ],
+    "relations": [],
+    "confidence": 0.89,
+    "source": "taught",
+    "usage_count": 2
+  },
+  "concept_0002": {
+    "concept_id": "concept_0002",
+    "term": "supervised learning",
+    "properties": [
+      "uses labeled training data",
+      "learns to map inputs to outputs",
+      "requires known examples"
+    ],
+    "relations": [],
+    "confidence": 0.89,
+    "source": "taught",
+    "usage_count": 2
+  },
+  "concept_0003": {
+    "concept_id": "concept_0003",
+    "term": "unsupervised learning",
+    "properties": [
+      "finds patterns in unlabeled data",
+      "discovers hidden structure",
+      "no predefined labels"
+    ],
+    "relations": [],
+    "confidence": 0.89,
+    "source": "taught",
+    "usage_count": 2
+  },
+  "concept_0004": {
+    "concept_id": "concept_0004",
+    "term": "reinforcement learning",
+    "properties": [
+      "trains agents through trial and error",
+      "uses rewards and penalties",
+      "learns to maximize rewards"
+    ],
+    "relations": [],
+    "confidence": 0.89,
+    "source": "taught",
+    "usage_count": 2
+  },
+  "concept_0005": {
+    "concept_id": "concept_0005",
+    "term": "ML",
+    "properties": [
+      "artificial intelligence technique",
+      "data-driven approach"
+    ],
+    "relations": [],
+    "confidence": 0.89,
+    "source": "taught",
+    "usage_count": 2
+  }
+}
