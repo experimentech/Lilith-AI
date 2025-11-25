@@ -133,7 +133,11 @@ class ResponseLearner:
                 'previous_state': previous_state,
                 'current_state': current_state,
                 'bot_response': response.text,
-                'previous_user_input': getattr(previous_state, 'last_user_input', '')  # For teaching detection
+                'previous_user_input': getattr(previous_state, 'last_user_input', ''),  # For teaching detection
+                # Add response metadata for reliable teaching detection
+                'is_fallback': response.is_fallback,
+                'is_low_confidence': response.is_low_confidence,
+                'confidence': response.confidence
             }
             
             # Call general-purpose learner

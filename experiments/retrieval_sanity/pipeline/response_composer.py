@@ -42,6 +42,9 @@ class ComposedResponse:
     composition_weights: List[float]   # How much each pattern contributed
     coherence_score: float             # How well it fits working memory
     primary_pattern: Optional[ResponsePattern] = None   # Main pattern used (can be None for fallback)
+    confidence: float = 1.0            # Retrieval confidence (for teaching detection)
+    is_fallback: bool = False          # Whether this was a fallback response
+    is_low_confidence: bool = False    # Whether best pattern was below threshold
     
 
 class ResponseComposer:
@@ -1502,7 +1505,10 @@ class ResponseComposer:
                     fragment_ids=[f"external_{source}"],
                     composition_weights=[confidence],
                     coherence_score=confidence,
-                    primary_pattern=None  # No pattern yet - will be learned
+                    primary_pattern=None,  # No pattern yet - will be learned
+                    confidence=confidence,
+                    is_fallback=True,  # Triggered by fallback
+                    is_low_confidence=False  # But knowledge was found
                 )
         
         # Standard fallback if no external knowledge found
@@ -1511,7 +1517,10 @@ class ResponseComposer:
             fragment_ids=["fallback"],
             composition_weights=[1.0],
             coherence_score=0.0,
-            primary_pattern=None
+            primary_pattern=None,
+            confidence=0.0,
+            is_fallback=True,
+            is_low_confidence=True
         )
     
     def _fallback_response_low_confidence(
@@ -1546,7 +1555,10 @@ class ResponseComposer:
                     fragment_ids=[f"external_{source}"],
                     composition_weights=[confidence],
                     coherence_score=confidence,
-                    primary_pattern=None  # No pattern yet - will be learned
+                    primary_pattern=None,  # No pattern yet - will be learned
+                    confidence=confidence,
+                    is_fallback=True,  # Triggered by fallback
+                    is_low_confidence=False  # But knowledge was found
                 )
         
         # Standard graceful fallback if no external knowledge found
@@ -1576,6 +1588,9 @@ class ResponseComposer:
             fragment_ids=["low_confidence_fallback"],
             composition_weights=[1.0],
             coherence_score=0.3,
-            primary_pattern=None
+            primary_pattern=None,
+            confidence=best_score,
+            is_fallback=True,
+            is_low_confidence=True
         )
 

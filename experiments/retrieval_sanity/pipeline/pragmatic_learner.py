@@ -234,9 +234,8 @@ class PragmaticExtractor(LayerSpecificExtractor):
         is_question = user_input.strip().endswith('?')
         
         # TEACHING DETECTION: Check if this is a teaching scenario
-        bot_used_fallback = bot_response and any(marker in bot_response.lower() for marker in [
-            "don't have", "not sure", "don't know", "rephrase", "something else", "not quite sure"
-        ])
+        # Use metadata instead of string matching for reliability
+        bot_used_fallback = context.get('is_fallback', False) if context else False
         
         factual_markers = ['is', 'are', 'was', 'were', 'have', 'has', 'contain', 'include']
         user_lower = user_input.lower()
@@ -286,8 +285,9 @@ class PragmaticExtractor(LayerSpecificExtractor):
                 topic = words[0] if words else "general"
             
             # TEACHING BOOST: If this follows a fallback, it's high-value teaching
-            # Give it higher initial confidence
-            initial_confidence = 0.85 if bot_used_fallback else 0.7
+            # Give it MUCH higher initial confidence to prevent override by weak patterns
+            # Taught patterns are gold standard - protect them!
+            initial_confidence = 0.90 if bot_used_fallback else 0.7
             
             if bot_used_fallback:
                 print(f"  🎓 TEACHING DETECTED: Topic='{topic}', Teaching='{user_input[:60]}...'")
