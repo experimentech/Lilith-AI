@@ -20,6 +20,13 @@ import numpy as np
 import json
 from pathlib import Path
 
+# Optional: Import fuzzy matching for typo tolerance
+try:
+    from .fuzzy_matcher import FuzzyMatcher
+    FUZZY_MATCHING_AVAILABLE = True
+except ImportError:
+    FUZZY_MATCHING_AVAILABLE = False
+
 
 @dataclass
 class ResponsePattern:
@@ -43,17 +50,30 @@ class ResponseFragmentStore:
     This is the core of symmetric neuro-symbolic processing!
     """
     
-    def __init__(self, semantic_encoder, storage_path: str = "response_patterns.json"):
+    def __init__(self, semantic_encoder, storage_path: str = "response_patterns.json", enable_fuzzy_matching: bool = True):
         """
         Initialize response fragment store.
         
         Args:
             semantic_encoder: SemanticStage encoder for embeddings
             storage_path: JSON file path for response patterns
+            enable_fuzzy_matching: Enable typo-tolerant fuzzy matching
         """
         self.encoder = semantic_encoder
         self.storage_path = Path(storage_path)
         self.patterns: Dict[str, ResponsePattern] = {}
+        
+        # Initialize fuzzy matcher if available and requested
+        self.fuzzy_matcher = None
+        if enable_fuzzy_matching and FUZZY_MATCHING_AVAILABLE:
+            self.fuzzy_matcher = FuzzyMatcher(
+                edit_distance_threshold=0.75,
+                token_overlap_threshold=0.6,
+                enable_phonetic=False  # Disabled for performance
+            )
+            print("  🔍 Fuzzy matching enabled for typo tolerance!")
+        elif enable_fuzzy_matching and not FUZZY_MATCHING_AVAILABLE:
+            print("  ⚠️  Fuzzy matching not available")
         
         # Load existing patterns if available
         self._load_patterns()
@@ -352,7 +372,12 @@ class ResponseFragmentStore:
         return scored_patterns[:topk]
     
     def _fallback_text_matching(self, context: str, topk: int) -> List[Tuple[ResponsePattern, float]]:
-        """Simple text-based fallback matching"""
+        """
+        Text-based fallback matching with fuzzy matching support.
+        
+        Uses fuzzy matching for typo tolerance if available,
+        otherwise falls back to exact word overlap.
+        """
         context_lower = context.lower()
         context_words = set(context_lower.split())
         
@@ -361,7 +386,18 @@ class ResponseFragmentStore:
             trigger_lower = pattern.trigger_context.lower()
             trigger_words = set(trigger_lower.split())
             
-            # Jaccard similarity
+            # Try fuzzy matching first if available
+            if self.fuzzy_matcher:
+                is_match, fuzzy_score = self.fuzzy_matcher.fuzzy_match(
+                    context_lower, 
+                    trigger_lower,
+                    min_similarity=0.65
+                )
+                if is_match:
+                    scored_patterns.append((pattern, fuzzy_score))
+                    continue
+            
+            # Fallback to Jaccard similarity (exact word overlap)
             if trigger_words:
                 overlap = len(context_words & trigger_words)
                 similarity = overlap / len(trigger_words | context_words)
