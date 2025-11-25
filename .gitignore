@@ -57,6 +57,11 @@ chatlog
 *.sqlite
 *.sqlite3
 
+# User data directories
+data/users/
+data/test/
+data/demo/
+
 # Pattern stores (generated at runtime)
 *_patterns.json
 response_patterns.json

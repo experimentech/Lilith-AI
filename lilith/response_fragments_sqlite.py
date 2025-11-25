@@ -347,25 +347,49 @@ class ResponseFragmentStoreSQLite:
         conn.close()
     
     def get_stats(self) -> Dict:
-        """Get database statistics."""
+        """Get comprehensive database statistics."""
         conn = self._get_connection()
         
+        # Total patterns
         cursor = conn.execute("SELECT COUNT(*) FROM response_patterns")
         total = cursor.fetchone()[0]
         
-        cursor = conn.execute("SELECT AVG(success_score) FROM response_patterns")
-        avg_score = cursor.fetchone()[0] or 0.0
+        # By intent with detailed stats
+        cursor = conn.execute("""
+            SELECT intent, COUNT(*) as count, AVG(success_score) as avg_score
+            FROM response_patterns 
+            GROUP BY intent 
+            ORDER BY count DESC
+        """)
+        by_intent = {}
+        for row in cursor:
+            by_intent[row[0]] = {
+                'count': row[1],
+                'avg_score': row[2]
+            }
         
-        cursor = conn.execute("SELECT intent, COUNT(*) FROM response_patterns GROUP BY intent")
-        by_intent = {row[0]: row[1] for row in cursor.fetchall()}
+        # Overall stats
+        cursor = conn.execute("""
+            SELECT 
+                AVG(success_score) as avg_score,
+                MIN(success_score) as min_score,
+                MAX(success_score) as max_score,
+                AVG(usage_count) as avg_usage
+            FROM response_patterns
+        """)
+        stats_row = cursor.fetchone()
         
         conn.close()
         
         return {
             'total_patterns': total,
-            'avg_success_score': avg_score,
+            'avg_success_score': stats_row[0] or 0.0,
+            'min_success_score': stats_row[1] or 0.0,
+            'max_success_score': stats_row[2] or 0.0,
+            'avg_usage_count': stats_row[3] or 0.0,
             'by_intent': by_intent
         }
+
     
     @property
     def patterns(self) -> Dict[str, ResponsePattern]:
@@ -396,3 +420,57 @@ class ResponseFragmentStoreSQLite:
             patterns_dict[pattern.fragment_id] = pattern
         
         return patterns_dict
+    
+    def prune_low_quality_patterns(self, threshold: float = 0.1) -> int:
+        """
+        Remove patterns with very low success scores.
+        
+        Args:
+            threshold: Minimum success score to keep (default 0.1)
+            
+        Returns:
+            Number of patterns pruned
+        """
+        conn = self._get_connection()
+        
+        # Count patterns to be deleted
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM response_patterns WHERE success_score < ?",
+            (threshold,)
+        )
+        count = cursor.fetchone()[0]
+        
+        # Delete them
+        conn.execute(
+            "DELETE FROM response_patterns WHERE success_score < ?",
+            (threshold,)
+        )
+        conn.commit()
+        conn.close()
+        
+        return count
+    
+    def apply_temporal_decay(self, half_life_days: int = 30):
+        """
+        Apply exponential decay to patterns based on age.
+        
+        Patterns that haven't been updated recently lose confidence.
+        This helps outdated information naturally fade away.
+        
+        Args:
+            half_life_days: Days for pattern to decay to 50% score
+        """
+        conn = self._get_connection()
+        
+        # Decay = 0.5 ^ (days_since_update / half_life)
+        conn.execute("""
+            UPDATE response_patterns
+            SET success_score = success_score * 
+                pow(0.5, (julianday('now') - julianday(updated_at)) / ?)
+            WHERE julianday('now') - julianday(updated_at) > ?
+        """, (half_life_days, half_life_days))
+        
+        conn.commit()
+        conn.close()
+
+
