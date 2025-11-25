@@ -97,6 +97,8 @@ def main():
     # Conversation loop
     turn = 0
     last_pattern_id = None
+    last_user_input = None  # Track last query for learning
+    last_response_text = None  # Track last response for learning
     
     while True:
         # Get user input
@@ -157,8 +159,25 @@ def main():
             
             elif command == '+':
                 if last_pattern_id:
-                    fragment_store.upvote(last_pattern_id)
-                    print("\n👍 Upvoted!")
+                    # Check if this was an external knowledge response
+                    if last_pattern_id.startswith('external_'):
+                        # Learn this Wikipedia response as a new pattern
+                        if last_user_input and last_response_text:
+                            print("\n📚 Learning from external knowledge...")
+                            new_pattern_id = fragment_store.add_pattern(
+                                trigger_context=last_user_input,
+                                response_text=last_response_text,
+                                success_score=0.8,  # High initial score for Wikipedia
+                                intent="learned_knowledge"
+                            )
+                            print(f"✅ Learned new pattern: {new_pattern_id}")
+                            print(f"   Next time you ask '{last_user_input[:50]}...', I'll remember!")
+                        else:
+                            print("\n⚠️  Cannot learn - missing context")
+                    else:
+                        # Regular upvote for existing pattern
+                        fragment_store.upvote(last_pattern_id)
+                        print("\n👍 Upvoted!")
                 else:
                     print("\n⚠️  No recent response to upvote")
                 print()
@@ -190,6 +209,10 @@ def main():
         # Generate response
         turn += 1
         response = composer.compose_response(context=user_input, user_input=user_input)
+        
+        # Track last interaction for learning
+        last_user_input = user_input
+        last_response_text = response.text
         
         # Track pattern ID if response came from learned patterns
         if response.fragment_ids:
