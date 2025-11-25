@@ -293,16 +293,47 @@ class ConversationLoop:
         if hasattr(self, '_previous_response') and self._previous_response is not None:
             # User's current input is their reaction to our previous response
             current_snapshot = self.conversation_state.snapshot()
-            self.learner.observe_interaction(
+            
+            # Get previous user input from history for teaching detection
+            recent_turns = self.history.get_recent_turns(n=2)
+            prev_user_input = recent_turns[-2].user_input if len(recent_turns) >= 2 else ""
+            
+            # Prepare context with previous user question
+            learning_context = {
+                'bot_response': self._previous_response.text,
+                'previous_user_input': prev_user_input
+            }
+            
+            # Apply learning and get outcome signals (includes automatic engagement detection)
+            signals = self.learner.observe_interaction(
                 response=self._previous_response,
                 previous_state=self._previous_state,
                 current_state=self.conversation_state,
                 user_input=user_input
             )
+            
+            # AUTOMATIC SUCCESS DETECTION: Record outcome for pattern boosting
+            # Success > 0.0 means the conversation is going well
+            outcome_success = signals.overall_success > 0.0
+            
+            # Update history with calculated success
+            self.history.update_last_success(signals.overall_success)
+            
+            # Print automatic success detection (if enabled via verbose mode)
+            if getattr(self, 'verbose_learning', False):
+                print(f"  📊 Auto success: {signals.overall_success:+.2f} "
+                      f"(engagement={signals.engagement_score:.2f}, "
+                      f"topic={'✓' if signals.topic_maintained else '✗'})")
+            
+            # Record in success tracker for future pattern boosting
+            if hasattr(self, '_previous_user_input') and self._previous_response.primary_pattern:
+                if hasattr(self.composer, 'record_conversation_outcome'):
+                    self.composer.record_conversation_outcome(outcome_success)
         
         # Store for next iteration
         self._previous_response = response
         self._previous_state = self.conversation_state
+        self._previous_user_input = user_input
         
         return response.text
         

@@ -13,10 +13,11 @@ from conversation_loop import ConversationLoop
 def main():
     print("Testing ConversationLoop initialization and processing...\n")
     
-    # Create loop
+    # Create loop with grammar enabled (hybrid adaptation + refinement)
     loop = ConversationLoop(
         history_window=5,
-        composition_mode="best_match"
+        composition_mode="best_match",
+        use_grammar=True  # Enable grammar refinement
     )
     
     # Test conversation with quality assessment

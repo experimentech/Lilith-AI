@@ -349,6 +349,76 @@ class SyntaxStage:
         # This would be more sophisticated in practice
         pass  # TODO: Implement full plasticity like semantic stage
     
+    def check_and_correct(self, text: str) -> str:
+        """
+        Grammar refinement pass - check adapted text for grammatical issues.
+        
+        This is used AFTER pattern adaptation to fix grammatical errors
+        while preserving the contextual meaning.
+        
+        Args:
+            text: Adapted response text to refine
+            
+        Returns:
+            Grammatically refined text
+        """
+        # Simple grammar fixes for common errors
+        refined = text
+        
+        # Fix common word order issues
+        # "discuss think" → "think about", "discuss you?" → "discuss that?"
+        refined = refined.replace("discuss think", "think about")
+        refined = refined.replace("discuss what", "discuss that")
+        refined = refined.replace("discuss you?", "discuss that?")
+        refined = refined.replace("discuss it?", "discuss that?")
+        
+        # Fix interrogative + pronoun combinations
+        refined = refined.replace(" you? with", " that with")
+        refined = refined.replace(" it? with", " that with")
+        
+        # Fix verb agreement
+        # "I is" → "I am", "they is" → "they are"
+        refined = refined.replace(" I is ", " I am ")
+        refined = refined.replace(" they is ", " they are ")
+        refined = refined.replace(" we is ", " we are ")
+        refined = refined.replace(" you is ", " you are ")
+        
+        # Fix double words
+        import re
+        refined = re.sub(r'\b(\w+)\s+\1\b', r'\1', refined)
+        
+        # Fix punctuation in middle of sentence (e.g., "movies?" → "movies")
+        refined = re.sub(r'([a-z])\?(?=\s+with|about)', r'\1', refined)
+        refined = re.sub(r'([a-z])!(?=\s+with|about)', r'\1', refined)
+        
+        # Fix spacing before punctuation
+        refined = re.sub(r'\s+([?.!,;:])', r'\1', refined)
+        refined = re.sub(r'([?.!])\s*([?.!])', r'\1', refined)  # Remove double punctuation
+        
+        # Capitalize first letter
+        if refined and refined[0].islower():
+            refined = refined[0].upper() + refined[1:]
+        
+        # Future: Use BNN to learn common corrections
+        # For now, use rule-based fixes for demonstrable improvement
+        
+        return refined
+    
+    def learn_correction(self, incorrect: str, correct: str):
+        """
+        Learn from grammar corrections for future refinement.
+        
+        When a correction is made, this can be used to improve
+        the check_and_correct() method over time.
+        
+        Args:
+            incorrect: The incorrect text
+            correct: The corrected version
+        """
+        # Future: Store correction patterns and learn via BNN
+        # For now, this is a placeholder for the learning mechanism
+        pass
+    
     def _generalize_template(self, tokens: List[str], pos_tags: List[str]) -> str:
         """Create generalized template from example."""
         parts = []

@@ -69,20 +69,31 @@ class ConversationContextEncoder:
         # 1. Build textual context with recency weighting
         context_parts = []
         
-        # Add recent history (most recent first for prominence)
+        # Extract key topics/entities from recent history
         recent_history = conversation_history[-self.max_history_turns:] if conversation_history else []
         
         if recent_history:
-            # Only include last 2-3 turns to avoid context being too long
-            for i, (user_text, bot_text) in enumerate(reversed(recent_history[-3:])):
-                # More recent turns get more weight in text representation
-                if i == 0:  # Most recent exchange
-                    context_parts.append(f"Previous: {user_text} → {bot_text}")
-                elif i == 1:  # Second most recent
-                    context_parts.append(f"Earlier: {user_text}")
+            # Extract topics from recent turns (for topic continuity)
+            recent_topics = []
+            for user_text, bot_text in reversed(recent_history[-2:]):
+                # Extract key nouns/topics (simple heuristic: capitalize words, longer words)
+                words = user_text.split()
+                key_words = [w for w in words if len(w) > 4 and not w.lower() in 
+                           ['about', 'that', 'this', 'what', 'which', 'where', 'when', 'how']]
+                recent_topics.extend(key_words[:2])  # Take up to 2 key words per turn
+            
+            # Add topics to context (for continuity)
+            if recent_topics:
+                # Use most recent topic
+                context_parts.append(recent_topics[0])
         
         # Add current input (most important)
-        context_parts.append(f"Current: {user_input}")
+        context_parts.append(user_input)
+        
+        # Build query: "topic current_input" for better matching
+        # Example: "machine learning What are the main types?"
+        # This helps match patterns about "machine learning types"
+        context_text = " ".join(context_parts)
         
         # 2. Build semantic embedding context
         # Combine embeddings with recency weighting

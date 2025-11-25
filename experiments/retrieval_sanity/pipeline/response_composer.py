@@ -169,9 +169,12 @@ class ResponseComposer:
                 intent_hint = intent_scores[0][0]  # Top intent label
         
         # 2. RETRIEVE PATTERNS - Choose method based on configuration  
-        # For keyword matching, use clean user_input
-        # For semantic matching, we'll use context to boost topic-relevant patterns
-        retrieval_query = user_input if user_input else context
+        # MULTI-TURN COHERENCE: Use enriched context (includes history + topics)
+        # instead of just raw user_input for better topic continuity
+        # 
+        # Context format: "Previous: X → Y | Earlier: Z | Current: user_input"
+        # This helps resolve pronouns and maintain topic threads
+        retrieval_query = context  # Use rich context, not just user_input
         
         if use_semantic_retrieval and hasattr(self.fragments, 'retrieve_patterns_hybrid'):
             # NEW PATH: BNN embedding + keyword hybrid (OPEN BOOK EXAM)
@@ -222,7 +225,17 @@ class ResponseComposer:
         # If not, provide a graceful fallback instead of hallucinating
         best_pattern, best_score = patterns[0]
         
-        if best_score < 0.80:  # Confidence threshold - reject weak matches
+        # ADAPTIVE CONFIDENCE THRESHOLD
+        # Lower threshold for newly learned patterns (teaching scenarios)
+        # Higher threshold for established patterns (prevent hallucination)
+        if best_pattern.usage_count < 5:
+            # Newly learned pattern - use lower threshold to give it a chance
+            confidence_threshold = 0.65
+        else:
+            # Established pattern - use stricter threshold
+            confidence_threshold = 0.80
+        
+        if best_score < confidence_threshold:
             return self._fallback_response_low_confidence(user_input, best_pattern, best_score)
         
         # 2d. Additional check: is user asking about specific topic not in training data?
@@ -251,6 +264,15 @@ class ResponseComposer:
                 context,
                 activation_signature=self._get_activation_signature()
             )
+            
+            # GRAMMAR REFINEMENT: Use syntax stage to fix grammatical errors
+            # This is the hybrid approach: adaptation for context + grammar for correctness
+            if self.syntax_stage:
+                refined_text = self.syntax_stage.check_and_correct(adapted_text)
+                # Learn if correction was made
+                if refined_text != adapted_text:
+                    self.syntax_stage.learn_correction(adapted_text, refined_text)
+                adapted_text = refined_text
             
             response = ComposedResponse(
                 text=adapted_text,
@@ -547,9 +569,17 @@ class ResponseComposer:
         
         # Interest/preference questions  
         if any(phrase in user_lower for phrase in ["what about", "how about", "do you like"]):
-            if context_concepts:
-                concept = list(context_concepts)[0]
-                return f"That's an interesting topic. I'd be happy to discuss {concept} with you."
+            # Extract topic from user's question
+            # "Do you like movies?" → movies
+            # "What about the weather?" → weather
+            user_words = set(user_input.lower().split())
+            stop_and_question_words = {'do', 'you', 'like', 'what', 'about', 'how', 'the', 'a', 'an', 
+                                       '?', 'that', 'this', 'think', 'weather', 'today'}
+            topic_words = user_words - stop_and_question_words
+            
+            if topic_words:
+                topic = list(topic_words)[0]
+                return f"That's an interesting topic. I'd be happy to discuss {topic} with you."
             return "That's an interesting question. Could you tell me more?"
         
         # General acknowledgment

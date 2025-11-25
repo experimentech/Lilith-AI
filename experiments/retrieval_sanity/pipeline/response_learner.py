@@ -132,7 +132,8 @@ class ResponseLearner:
             context = {
                 'previous_state': previous_state,
                 'current_state': current_state,
-                'bot_response': response.text
+                'bot_response': response.text,
+                'previous_user_input': getattr(previous_state, 'last_user_input', '')  # For teaching detection
             }
             
             # Call general-purpose learner

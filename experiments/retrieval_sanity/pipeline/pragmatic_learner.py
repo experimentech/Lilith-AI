@@ -85,10 +85,26 @@ class PragmaticEvaluator(LayerSpecificEvaluator):
             coherence_score
         )
         
+        # TEACHING DETECTION: Boost confidence for factual statements after fallback
+        bot_response = context.get('bot_response', '') if context else ''
+        bot_used_fallback = bot_response and any(marker in bot_response.lower() for marker in [
+            "don't have", "not sure", "don't know", "rephrase", "something else", "not quite sure"
+        ])
+        
+        factual_markers = ['is', 'are', 'was', 'were', 'have', 'has', 'contain', 'include']
+        is_factual = user_input and any(marker in user_input.lower().split() for marker in factual_markers)
+        
+        # If user provides factual info after fallback, this is high-confidence teaching
+        is_teaching = bot_used_fallback and is_factual and len(user_input.split()) > 10
+        final_confidence = 0.85 if is_teaching else engagement_score
+        
+        if is_teaching:
+            print(f"  🎓 TEACHING DETECTED: confidence boosted to {final_confidence:.2f}")
+        
         return OutcomeSignals(
             layer_name="pragmatic",
             overall_success=overall_success,
-            confidence=engagement_score,
+            confidence=final_confidence,
             layer_signals={
                 "topic_maintained": 1.0 if topic_maintained else 0.0,
                 "novelty": novelty_score,
@@ -217,8 +233,26 @@ class PragmaticExtractor(LayerSpecificExtractor):
         word_count = len(user_input.split())
         is_question = user_input.strip().endswith('?')
         
-        # Don't extract very short or very long inputs
-        if word_count < 3 or word_count > 20:
+        # TEACHING DETECTION: Check if this is a teaching scenario
+        bot_used_fallback = bot_response and any(marker in bot_response.lower() for marker in [
+            "don't have", "not sure", "don't know", "rephrase", "something else", "not quite sure"
+        ])
+        
+        factual_markers = ['is', 'are', 'was', 'were', 'have', 'has', 'contain', 'include']
+        user_lower = user_input.lower()
+        is_factual = any(marker in user_lower.split() for marker in factual_markers)
+        is_teaching = bot_used_fallback and is_factual
+        
+        # Don't extract very short inputs
+        if word_count < 3:
+            return None
+        
+        # Don't extract very long inputs UNLESS it's teaching
+        if word_count > 20 and not is_teaching:
+            return None
+        
+        # Allow longer teaching statements (up to 50 words)
+        if is_teaching and word_count > 50:
             return None
         
         # Don't extract questions (those aren't good responses)
@@ -226,25 +260,43 @@ class PragmaticExtractor(LayerSpecificExtractor):
             return None
         
         # Check if user input looks like a factual statement
-        factual_markers = ['is', 'are', 'was', 'were', 'have', 'has', 'contain', 'include']
-        user_lower = user_input.lower()
-        is_factual = any(marker in user_lower.split() for marker in factual_markers)
         
         if is_factual:
             # FACTUAL LEARNING: Store user's statement as potential response
             # Extract key topic from statement for trigger
+            # For "X is Y" or "X are Y" patterns, extract just X as the subject/topic
+            
+            # Find the position of factual verbs (is, are, was, were, etc.)
             words = user_input.split()
-            # Use first 1-3 words as trigger topic (e.g., "Apples" from "Apples are red")
-            if len(words) >= 3:
+            factual_verb_pos = -1
+            for i, word in enumerate(words):
+                if word.lower() in factual_markers:
+                    factual_verb_pos = i
+                    break
+            
+            if factual_verb_pos > 0:
+                # Extract everything BEFORE the verb as the topic/subject
+                # E.g., "Episodic memory is..." -> "Episodic memory"
+                # E.g., "The capital of Iceland is..." -> "The capital of Iceland"
+                topic = ' '.join(words[:factual_verb_pos])
+            elif len(words) >= 3:
+                # Fallback to first 1-3 words if no verb found
                 topic = ' '.join(words[:min(3, len(words))])
             else:
                 topic = words[0] if words else "general"
             
-            return (topic, user_input, "learned", 0.7)
+            # TEACHING BOOST: If this follows a fallback, it's high-value teaching
+            # Give it higher initial confidence
+            initial_confidence = 0.85 if bot_used_fallback else 0.7
+            
+            if bot_used_fallback:
+                print(f"  🎓 TEACHING DETECTED: Topic='{topic}', Teaching='{user_input[:60]}...'")
+            
+            return (topic, user_input, "taught" if bot_used_fallback else "learned", initial_confidence)
         else:
             # CONVERSATIONAL LEARNING: Store as dialogue flow pattern
-            # Bot says X → User might respond with Y
-            if bot_response:
+            # But NOT if bot used fallback - that would learn wrong direction
+            if bot_response and not bot_used_fallback:
                 return (bot_response, user_input, "learned", 0.7)
             else:
                 return None
@@ -297,9 +349,12 @@ class PragmaticLearner(GeneralPurposeLearner):
         )
         
         if pattern_data is None:
+            print(f"  ⚠️  Pattern extractor returned None (filtered out)")
             return
         
         trigger, response, intent, initial_success = pattern_data
+        
+        print(f"  ✅ Pattern extracted: Trigger='{trigger[:40]}...', Intent={intent}")
         
         # Generate unique ID
         fragment_id = f"learned_{intent}_{int(time.time() * 1000)}"

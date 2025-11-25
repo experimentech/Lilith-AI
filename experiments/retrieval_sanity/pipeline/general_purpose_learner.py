@@ -213,10 +213,17 @@ class GeneralPurposeLearner(ABC):
         Universal across all layers - only learn from successful operations.
         Thresholds vary by learning_mode.
         """
-        return (
+        should_learn = (
             signals.overall_success >= self.success_threshold and
             signals.confidence >= self.confidence_threshold
         )
+        
+        # Debug logging for teaching scenarios
+        if not should_learn and signals.overall_success > 0.2:
+            print(f"  ⚠️  Not learning: success={signals.overall_success:.2f} (need >={self.success_threshold}), "
+                  f"confidence={signals.confidence:.2f} (need >={self.confidence_threshold})")
+        
+        return should_learn
     
     def _apply_reinforcement(
         self,
