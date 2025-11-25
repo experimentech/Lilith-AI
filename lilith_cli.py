@@ -189,7 +189,7 @@ def main():
         
         # Generate response
         turn += 1
-        response = composer.compose_response(user_input)
+        response = composer.compose_response(context=user_input, user_input=user_input)
         
         # Track pattern ID if response came from learned patterns
         if response.fragment_ids:

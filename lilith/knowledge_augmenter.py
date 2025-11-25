@@ -62,10 +62,16 @@ class WikipediaLookup:
             "What is machine learning?" -> "machine learning"
             "Tell me about Python" -> "Python"
             "Who is Ada Lovelace?" -> "Ada Lovelace"
+            "Do you know what an apple is?" -> "apple"
         """
-        # Remove question words
-        question_words = ['what', 'who', 'where', 'when', 'why', 'how', 'which', 
-                         'is', 'are', 'was', 'were', 'tell', 'me', 'about']
+        # Remove question words and conversational phrases
+        question_words = [
+            'what', 'who', 'where', 'when', 'why', 'how', 'which', 
+            'is', 'are', 'was', 'were', 'am',
+            'do', 'does', 'did', 'can', 'could', 'would', 'should',
+            'tell', 'me', 'about', 'know', 'you', 'your',
+            'a', 'an', 'the',
+        ]
         
         words = query.lower().strip('?!.').split()
         cleaned = [w for w in words if w not in question_words]
@@ -203,7 +209,11 @@ class KnowledgeAugmenter:
         self.lookup_count += 1
         
         # Try Wikipedia first (can add other sources later)
-        wiki_result = self.wikipedia.lookup(query)
+        try:
+            wiki_result = self.wikipedia.lookup(query)
+        except Exception as e:
+            # Silently fail on network errors
+            return None
         
         if wiki_result and wiki_result['confidence'] >= min_confidence:
             self.success_count += 1
