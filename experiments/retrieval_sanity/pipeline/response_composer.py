@@ -218,6 +218,30 @@ class ResponseComposer:
         # Track query for success learning
         self.last_query = user_input if user_input else context
         
+        # PARALLEL MODE: Try both pattern-based AND concept-based approaches
+        if self.composition_mode == "parallel" and self.concept_store is not None:
+            return self._compose_parallel(context, user_input, topk)
+        
+        # Standard pattern-based composition
+        return self._compose_from_patterns_internal(
+            context, user_input, topk, 
+            use_intent_filtering, use_semantic_retrieval, semantic_weight
+        )
+    
+    def _compose_from_patterns_internal(
+        self,
+        context: str,
+        user_input: str,
+        topk: int,
+        use_intent_filtering: bool,
+        use_semantic_retrieval: bool,
+        semantic_weight: float
+    ) -> ComposedResponse:
+        """
+        Internal method for pattern-based composition.
+        Separated to avoid recursion with parallel mode.
+        """
+        
         # 1. Classify intent using BNN if available
         intent_hint = None
         if use_intent_filtering and self.intent_classifier is not None and user_input:
@@ -253,8 +277,7 @@ class ResponseComposer:
             # OLD PATH: Pure keyword matching
             patterns = self.fragments.retrieve_patterns(
                 retrieval_query,
-                topk=topk * 3,
-                intent_hint=intent_hint
+                topk=topk * 3
             )
         
         if not patterns:
@@ -1601,12 +1624,14 @@ class ResponseComposer:
         """
         self.metrics['parallel_uses'] += 1
         
-        # 1. Try pattern-based approach
-        pattern_response = self.compose_response(
+        # 1. Try pattern-based approach (call internal method to avoid recursion)
+        pattern_response = self._compose_from_patterns_internal(
             context,
             user_input,
-            topk=topk,
-            use_semantic_retrieval=True
+            topk,
+            use_intent_filtering=False,
+            use_semantic_retrieval=True,
+            semantic_weight=0.5
         )
         
         # 2. Try concept-based approach
