@@ -41,6 +41,15 @@ try:
 except ImportError:
     KNOWLEDGE_AUGMENTATION_AVAILABLE = False
 
+# Optional: Import modal routing for multi-modal queries
+try:
+    from .modal_classifier import ModalClassifier, Modality
+    from .math_backend import MathBackend
+    MODAL_ROUTING_AVAILABLE = True
+except ImportError:
+    MODAL_ROUTING_AVAILABLE = False
+    Modality = None  # type: ignore
+
 
 @dataclass
 class ComposedResponse:
@@ -53,6 +62,7 @@ class ComposedResponse:
     confidence: float = 1.0            # Retrieval confidence (for teaching detection)
     is_fallback: bool = False          # Whether this was a fallback response
     is_low_confidence: bool = False    # Whether best pattern was below threshold
+    modality: Optional['Modality'] = None  # Query modality (LINGUISTIC, MATH, CODE, etc.)
     
 
 class ResponseComposer:
@@ -74,7 +84,8 @@ class ResponseComposer:
         semantic_encoder = None,
         enable_knowledge_augmentation: bool = True,
         concept_store: Optional['ProductionConceptStore'] = None,
-        enable_compositional: bool = True
+        enable_compositional: bool = True,
+        enable_modal_routing: bool = True
     ):
         """
         Initialize response composer.
@@ -93,6 +104,7 @@ class ResponseComposer:
             enable_knowledge_augmentation: Enable external knowledge lookup (Wikipedia, etc.)
             concept_store: Optional ConceptStore for compositional responses
             enable_compositional: Enable compositional response generation
+            enable_modal_routing: Enable modal routing (math, code, etc.)
         """
         self.fragments = fragment_store
         self.state = conversation_state
@@ -129,19 +141,33 @@ class ResponseComposer:
         elif enable_compositional and not COMPOSITIONAL_AVAILABLE:
             print("  ⚠️  Compositional architecture not available")
         
+        # Initialize modal routing (math, code, etc.)
+        self.modal_classifier = None
+        self.math_backend = None
+        if enable_modal_routing and MODAL_ROUTING_AVAILABLE:
+            self.modal_classifier = ModalClassifier()
+            try:
+                self.math_backend = MathBackend()
+                print("  🔢 Math backend enabled (symbolic computation)!")
+            except RuntimeError as e:
+                print(f"  ⚠️  Math backend not available: {e}")
+        elif enable_modal_routing and not MODAL_ROUTING_AVAILABLE:
+            print("  ⚠️  Modal routing not available")
+        
         # Track metrics for pattern vs concept approaches
         self.metrics = {
             'pattern_count': 0,
             'concept_count': 0,
             'pattern_success': 0,
             'concept_success': 0,
-            'parallel_uses': 0
+            'parallel_uses': 0,
+            'math_count': 0  # NEW: Track math backend usage
         }
         
         # Track last query and response for success learning
         self.last_query = None
         self.last_response = None
-        self.last_approach = None  # 'pattern', 'concept', or 'parallel'
+        self.last_approach = None  # 'pattern', 'concept', 'parallel', or 'math'
     
     def record_conversation_outcome(self, success: bool):
         """
@@ -159,6 +185,11 @@ class ResponseComposer:
             - User changes topic abruptly → False
             - User says "what?" or "huh?" → False
         """
+        # Don't learn math/code responses (prevents database pollution)
+        if self.last_approach == 'math':
+            # Math is exact computation, not linguistic learning
+            return
+        
         # Track success for metrics
         if self.last_approach == 'pattern':
             self.metrics['pattern_success'] += 1 if success else 0
@@ -217,6 +248,19 @@ class ResponseComposer:
         """
         # Track query for success learning
         self.last_query = user_input if user_input else context
+        
+        # MODAL ROUTING: Check if query is mathematical/code/etc.
+        if self.modal_classifier and user_input:
+            modality, confidence = self.modal_classifier.classify(user_input)
+            
+            # Route to math backend if mathematical query
+            if modality == Modality.MATH and self.math_backend and confidence > 0.60:
+                math_response = self._compose_math_response(user_input)
+                if math_response:  # Math computation succeeded
+                    self.last_response = math_response
+                    self.last_approach = 'math'
+                    return math_response
+                # If math backend failed, fall through to linguistic
         
         # PARALLEL MODE: Try both pattern-based AND concept-based approaches
         if self.composition_mode == "parallel" and self.concept_store is not None:
@@ -1602,6 +1646,55 @@ class ResponseComposer:
             is_fallback=False,
             is_low_confidence=similarity < 0.75
         )
+    
+    def _compose_math_response(self, query: str) -> Optional[ComposedResponse]:
+        """
+        Generate response using math backend.
+        
+        Args:
+            query: Mathematical query
+            
+        Returns:
+            ComposedResponse if math computation succeeded, None otherwise
+        """
+        if not self.math_backend:
+            return None
+        
+        result = self.math_backend.compute(query)
+        
+        if result:
+            # Format mathematical response
+            response_text = self._format_math_result(result)
+            
+            # Track math usage
+            self.metrics['math_count'] += 1
+            
+            return ComposedResponse(
+                text=response_text,
+                fragment_ids=["math_computed"],
+                composition_weights=[1.0],
+                coherence_score=1.0,
+                confidence=result.confidence,
+                is_fallback=False,
+                is_low_confidence=False,
+                modality=Modality.MATH if MODAL_ROUTING_AVAILABLE else None
+            )
+        
+        # Math backend couldn't compute
+        return None
+    
+    def _format_math_result(self, result) -> str:
+        """Format mathematical result as natural language"""
+        if result.steps and len(result.steps) > 1:
+            # Show work
+            steps_text = "\n".join(f"{step}" for step in result.steps)
+            return f"{steps_text}"
+        elif result.expression and result.result:
+            # Simple result
+            return f"{result.expression} = {result.result}"
+        else:
+            # Just the result
+            return str(result.result)
     
     def _compose_parallel(
         self,
