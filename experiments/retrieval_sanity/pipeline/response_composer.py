@@ -26,6 +26,13 @@ try:
 except ImportError:
     GRAMMAR_AVAILABLE = False
 
+# Optional: Import knowledge augmentation for external lookups
+try:
+    from .knowledge_augmenter import KnowledgeAugmenter
+    KNOWLEDGE_AUGMENTATION_AVAILABLE = True
+except ImportError:
+    KNOWLEDGE_AUGMENTATION_AVAILABLE = False
+
 
 @dataclass
 class ComposedResponse:
@@ -53,7 +60,8 @@ class ResponseComposer:
         conversation_state: ConversationState,
         composition_mode: str = "weighted_blend",
         use_grammar: bool = False,
-        semantic_encoder = None
+        semantic_encoder = None,
+        enable_knowledge_augmentation: bool = True
     ):
         """
         Initialize response composer.
@@ -68,6 +76,7 @@ class ResponseComposer:
                 - "adaptive": Choose based on confidence
             use_grammar: Enable grammar-guided composition
             semantic_encoder: BNN encoder for intent clustering (optional)
+            enable_knowledge_augmentation: Enable external knowledge lookup (Wikipedia, etc.)
         """
         self.fragments = fragment_store
         self.state = conversation_state
@@ -86,6 +95,14 @@ class ResponseComposer:
             print("  📝 BNN-based syntax stage enabled!")
         elif use_grammar and not GRAMMAR_AVAILABLE:
             print("  ⚠️  Syntax stage not available, falling back to standard composition")
+        
+        # Initialize knowledge augmentation if available and requested
+        self.knowledge_augmenter = None
+        if enable_knowledge_augmentation and KNOWLEDGE_AUGMENTATION_AVAILABLE:
+            self.knowledge_augmenter = KnowledgeAugmenter(enabled=True)
+            print("  🌐 External knowledge augmentation enabled (Wikipedia)!")
+        elif enable_knowledge_augmentation and not KNOWLEDGE_AUGMENTATION_AVAILABLE:
+            print("  ⚠️  Knowledge augmentation not available")
         
         # Track last query and response for success learning
         self.last_query = None
@@ -199,8 +216,8 @@ class ResponseComposer:
             )
         
         if not patterns:
-            # Fallback if no patterns found
-            return self._fallback_response()
+            # Fallback if no patterns found - try external knowledge
+            return self._fallback_response(user_input)
         
         # 2b. Score patterns by semantic relevance to user query
         # SKIP if using hybrid retrieval (already scored by BNN + keywords)
@@ -212,14 +229,14 @@ class ResponseComposer:
             patterns = patterns[:topk]
         
         if not patterns:
-            return self._fallback_response()
+            return self._fallback_response(user_input)
         
         # 2c. Filter out assumptive responses (assume prior conversation context)
         # These patterns come from different conversations and don't fit
         patterns = self._filter_assumptive_responses(patterns)
         
         if not patterns:
-            return self._fallback_response()
+            return self._fallback_response(user_input)
         
         # 2d. Check if best pattern has sufficient relevance
         # If not, provide a graceful fallback instead of hallucinating
@@ -919,7 +936,7 @@ class ResponseComposer:
             Composed response
         """
         if not weighted_patterns:
-            return self._fallback_response()
+            return self._fallback_response("")  # No user input available at this point
             
         if self.composition_mode == "best_match":
             return self._compose_best_match(weighted_patterns)
@@ -1462,12 +1479,33 @@ class ResponseComposer:
         else:
             return f"{clause_a}."
             
-    def _fallback_response(self) -> ComposedResponse:
+    def _fallback_response(self, user_input: str = "") -> ComposedResponse:
         """
         Fallback when no patterns available.
         
-        This should rarely happen after bootstrap seeding.
+        Try external knowledge lookup first, then graceful fallback.
+        
+        Args:
+            user_input: User's query (for knowledge lookup)
         """
+        # Try external knowledge lookup if available
+        if self.knowledge_augmenter and user_input:
+            external_result = self.knowledge_augmenter.lookup(user_input, min_confidence=0.6)
+            
+            if external_result:
+                response_text, confidence, source = external_result
+                
+                # Return external knowledge as response
+                # The teaching mechanism will learn this pattern automatically
+                return ComposedResponse(
+                    text=response_text,
+                    fragment_ids=[f"external_{source}"],
+                    composition_weights=[confidence],
+                    coherence_score=confidence,
+                    primary_pattern=None  # No pattern yet - will be learned
+                )
+        
+        # Standard fallback if no external knowledge found
         return ComposedResponse(
             text="I'm not sure how to respond to that yet. I'm still learning!",
             fragment_ids=["fallback"],
@@ -1485,8 +1523,7 @@ class ResponseComposer:
         """
         Graceful fallback when best pattern has low relevance to user query.
         
-        Instead of hallucinating or giving off-topic responses, we acknowledge
-        limitation and optionally ask for clarification.
+        Try external knowledge lookup first before acknowledging limitation.
         
         Args:
             user_input: User's query
@@ -1494,8 +1531,25 @@ class ResponseComposer:
             best_score: Relevance score (below threshold)
         
         Returns:
-            Graceful fallback response
+            External knowledge if found, otherwise graceful fallback response
         """
+        # Try external knowledge lookup if available
+        if self.knowledge_augmenter:
+            external_result = self.knowledge_augmenter.lookup(user_input, min_confidence=0.6)
+            
+            if external_result:
+                response_text, confidence, source = external_result
+                
+                # Return external knowledge as response
+                return ComposedResponse(
+                    text=response_text,
+                    fragment_ids=[f"external_{source}"],
+                    composition_weights=[confidence],
+                    coherence_score=confidence,
+                    primary_pattern=None  # No pattern yet - will be learned
+                )
+        
+        # Standard graceful fallback if no external knowledge found
         # Analyze query to provide contextual fallback
         user_lower = user_input.lower()
         
