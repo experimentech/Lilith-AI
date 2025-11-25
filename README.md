@@ -58,6 +58,9 @@ python tests/test_conversation.py
 - ✅ **External Knowledge**: Wikipedia integration for unknown topics
 - ✅ **BNN Intent Clustering**: Neural clustering for better understanding
 - ✅ **Fuzzy Matching**: Typo tolerance in query matching
+- ✅ **Multi-Tenant Architecture**: Isolated user databases with shared base knowledge
+- ✅ **SQLite Backend**: Thread-safe concurrent access with ACID guarantees
+- ✅ **Scalable Storage**: Handles concurrent users without data corruption
 
 ## Architecture
 
@@ -70,6 +73,30 @@ Lilith uses a modal routing architecture that classifies queries into different 
 
 The main working code is in `lilith/` with comprehensive tests in `tests/`.
 Research experiments remain in `experiments/` for reference.
+
+### Multi-Tenant Support
+
+Lilith supports multiple concurrent users with isolated storage:
+
+```bash
+# Run as teacher (writes to base knowledge)
+python lilith_cli.py --mode teacher
+
+# Run as user (isolated personal storage)
+python lilith_cli.py --mode user --user alice
+```
+
+See [docs/SQLITE_MIGRATION.md](docs/SQLITE_MIGRATION.md) for details on the SQLite backend and concurrency support.
+
+### Testing
+
+```bash
+# Run all compatible tests
+pytest tests/test_multi_tenant.py tests/test_concurrency.py -v
+
+# Test concurrent access
+python tools/demo_concurrent_access.py
+```
 
 ## Related Projects
 
