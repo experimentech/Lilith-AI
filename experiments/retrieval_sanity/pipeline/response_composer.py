@@ -19,6 +19,14 @@ from .response_fragments import ResponseFragmentStore, ResponsePattern
 from .conversation_state import ConversationState
 from .bnn_intent_classifier import BNNIntentClassifier
 
+# Optional: Import concept store and template composer for compositional responses
+try:
+    from .production_concept_store import ProductionConceptStore
+    from .template_composer import TemplateComposer
+    COMPOSITIONAL_AVAILABLE = True
+except ImportError:
+    COMPOSITIONAL_AVAILABLE = False
+
 # Optional: Import grammar stage for sophisticated composition
 try:
     from .syntax_stage_bnn import SyntaxStage
@@ -64,7 +72,9 @@ class ResponseComposer:
         composition_mode: str = "weighted_blend",
         use_grammar: bool = False,
         semantic_encoder = None,
-        enable_knowledge_augmentation: bool = True
+        enable_knowledge_augmentation: bool = True,
+        concept_store: Optional['ProductionConceptStore'] = None,
+        enable_compositional: bool = True
     ):
         """
         Initialize response composer.
@@ -77,9 +87,12 @@ class ResponseComposer:
                 - "weighted_blend": Blend multiple patterns
                 - "grammar_guided": Use grammatical templates (requires syntax stage)
                 - "adaptive": Choose based on confidence
+                - "parallel": Try both patterns AND concepts, use best
             use_grammar: Enable grammar-guided composition
             semantic_encoder: BNN encoder for intent clustering (optional)
             enable_knowledge_augmentation: Enable external knowledge lookup (Wikipedia, etc.)
+            concept_store: Optional ConceptStore for compositional responses
+            enable_compositional: Enable compositional response generation
         """
         self.fragments = fragment_store
         self.state = conversation_state
@@ -107,9 +120,28 @@ class ResponseComposer:
         elif enable_knowledge_augmentation and not KNOWLEDGE_AUGMENTATION_AVAILABLE:
             print("  ⚠️  Knowledge augmentation not available")
         
+        # Initialize compositional architecture (concepts + templates)
+        self.concept_store = concept_store
+        self.template_composer = None
+        if enable_compositional and COMPOSITIONAL_AVAILABLE and concept_store:
+            self.template_composer = TemplateComposer()
+            print("  🧩 Compositional architecture enabled (concepts + templates)!")
+        elif enable_compositional and not COMPOSITIONAL_AVAILABLE:
+            print("  ⚠️  Compositional architecture not available")
+        
+        # Track metrics for pattern vs concept approaches
+        self.metrics = {
+            'pattern_count': 0,
+            'concept_count': 0,
+            'pattern_success': 0,
+            'concept_success': 0,
+            'parallel_uses': 0
+        }
+        
         # Track last query and response for success learning
         self.last_query = None
         self.last_response = None
+        self.last_approach = None  # 'pattern', 'concept', or 'parallel'
     
     def record_conversation_outcome(self, success: bool):
         """
@@ -127,6 +159,13 @@ class ResponseComposer:
             - User changes topic abruptly → False
             - User says "what?" or "huh?" → False
         """
+        # Track success for metrics
+        if self.last_approach == 'pattern':
+            self.metrics['pattern_success'] += 1 if success else 0
+        elif self.last_approach == 'concept':
+            self.metrics['concept_success'] += 1 if success else 0
+        
+        # Record pattern-based learning if applicable
         if self.last_query and self.last_response and hasattr(self.fragments, 'record_conversation_outcome'):
             # Get the primary pattern ID that was used
             if self.last_response.primary_pattern:
@@ -1481,6 +1520,141 @@ class ResponseComposer:
             return f"{clause_a}, {clause_b}."
         else:
             return f"{clause_a}."
+    
+    def _compose_from_concepts(
+        self,
+        context: str,
+        user_input: str,
+        min_similarity: float = 0.60
+    ) -> Optional[ComposedResponse]:
+        """
+        Generate response using concept store + template composer.
+        
+        This is the compositional architecture: separate facts (concepts)
+        from syntax (templates).
+        
+        Args:
+            context: Current conversation context
+            user_input: Raw user input
+            min_similarity: Minimum concept similarity
+            
+        Returns:
+            ComposedResponse if concepts found, None otherwise
+        """
+        if not self.concept_store or not self.template_composer:
+            return None
+        
+        # 1. Retrieve matching concepts
+        concepts = self.concept_store.retrieve_by_text(
+            user_input,
+            top_k=5,
+            min_similarity=min_similarity
+        )
+        
+        if not concepts:
+            return None
+        
+        # 2. Get best concept
+        best_concept, similarity = concepts[0]
+        
+        # 3. Compose response using template
+        result = self.template_composer.compose_response(
+            user_input,
+            best_concept.term,
+            best_concept.properties,
+            confidence=similarity
+        )
+        
+        if not result:
+            return None
+        
+        # 4. Return ComposedResponse
+        return ComposedResponse(
+            text=result['text'],
+            fragment_ids=[best_concept.concept_id],
+            composition_weights=[similarity],
+            coherence_score=result['confidence'],
+            primary_pattern=None,  # Compositional, not pattern-based
+            confidence=result['confidence'],
+            is_fallback=False,
+            is_low_confidence=similarity < 0.75
+        )
+    
+    def _compose_parallel(
+        self,
+        context: str,
+        user_input: str,
+        topk: int = 5
+    ) -> ComposedResponse:
+        """
+        Parallel implementation: Try BOTH pattern and concept approaches.
+        
+        This allows us to compare approaches and gradually transition.
+        
+        Args:
+            context: Current conversation context
+            user_input: Raw user input
+            topk: Number of patterns to consider
+            
+        Returns:
+            Best response from either approach
+        """
+        self.metrics['parallel_uses'] += 1
+        
+        # 1. Try pattern-based approach
+        pattern_response = self.compose_response(
+            context,
+            user_input,
+            topk=topk,
+            use_semantic_retrieval=True
+        )
+        
+        # 2. Try concept-based approach
+        concept_response = self._compose_from_concepts(
+            context,
+            user_input
+        )
+        
+        # 3. Choose best response
+        if concept_response and not concept_response.is_low_confidence:
+            # Concept-based has good confidence
+            if pattern_response.is_fallback or pattern_response.is_low_confidence:
+                # Pattern-based failed or low confidence, use concept
+                self.metrics['concept_count'] += 1
+                self.last_approach = 'concept'
+                return concept_response
+            else:
+                # Both are good - compare confidence
+                if concept_response.confidence > pattern_response.confidence:
+                    self.metrics['concept_count'] += 1
+                    self.last_approach = 'concept'
+                    return concept_response
+        
+        # Default: Use pattern-based
+        self.metrics['pattern_count'] += 1
+        self.last_approach = 'pattern'
+        return pattern_response
+    
+    def get_metrics(self) -> Dict:
+        """Get metrics comparing pattern vs concept approaches."""
+        total = self.metrics['pattern_count'] + self.metrics['concept_count']
+        
+        if total == 0:
+            return self.metrics
+        
+        return {
+            **self.metrics,
+            'pattern_ratio': self.metrics['pattern_count'] / total,
+            'concept_ratio': self.metrics['concept_count'] / total,
+            'pattern_success_rate': (
+                self.metrics['pattern_success'] / self.metrics['pattern_count']
+                if self.metrics['pattern_count'] > 0 else 0
+            ),
+            'concept_success_rate': (
+                self.metrics['concept_success'] / self.metrics['concept_count']
+                if self.metrics['concept_count'] > 0 else 0
+            )
+        }
             
     def _fallback_response(self, user_input: str = "") -> ComposedResponse:
         """
