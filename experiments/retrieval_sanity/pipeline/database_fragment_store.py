@@ -13,6 +13,8 @@ from pathlib import Path
 from collections import defaultdict
 import sys
 import numpy as np
+import torch
+import torch.nn.functional as F
 
 # Import the database infrastructure
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -391,10 +393,13 @@ class DatabaseBackedFragmentStore:
         context: str,
         topk: int = 5,
         min_score: float = 0.0,
-        semantic_weight: float = 0.3
+        semantic_weight: float = 0.3,
+        use_query_expansion: bool = True
     ) -> List[Tuple[ResponsePattern, float]]:
         """
         Hybrid BNN embedding + keyword retrieval (OPEN BOOK EXAM architecture).
+        
+        Enhanced with PMFlow QueryExpansion for better synonym matching.
         
         This is the key innovation: BNN learns "how to index" patterns,
         database stores "what to retrieve". Like an open book exam where
@@ -408,6 +413,7 @@ class DatabaseBackedFragmentStore:
                 0.0 = pure keywords (current system)
                 1.0 = pure semantic similarity
                 0.3 = hybrid (recommended)
+            use_query_expansion: Use PMFlow query expansion for better synonym matching
         
         Returns:
             List of (ResponsePattern, combined_score) tuples
@@ -416,6 +422,43 @@ class DatabaseBackedFragmentStore:
         # This is the "indexing skill" (open book exam)
         tokens = context.lower().split()
         query_embedding = self.encoder.encode(tokens)  # BNN generates semantic representation
+        
+        # NEW: Query expansion for synonym matching (ML → machine learning)
+        if use_query_expansion and hasattr(self.encoder, 'pm_field'):
+            try:
+                from pmflow_bnn_enhanced import QueryExpansionPMField
+                
+                # Create query expansion module (cached if needed)
+                if not hasattr(self, '_query_expander'):
+                    self._query_expander = QueryExpansionPMField(
+                        self.encoder.pm_field, 
+                        expansion_k=5
+                    )
+                
+                # Get latent representation for expansion
+                if hasattr(self.encoder, '_projection'):
+                    # PMFlowEmbeddingEncoder - use latent space
+                    base_emb = self.encoder.base_encoder.encode(tokens).to(self.encoder.device)
+                    query_latent = base_emb @ self.encoder._projection
+                    
+                    # Expand query to related concepts
+                    expanded_latent, _ = self._query_expander.expand_query(query_latent)
+                    
+                    # Get expanded embedding
+                    pm_output = self.encoder.pm_field(expanded_latent)
+                    if isinstance(pm_output, tuple):
+                        pm_output = pm_output[2]  # Combined multi-scale
+                    
+                    refined = F.normalize(pm_output, p=2, dim=1)
+                    if self.encoder.combine_mode == "concat":
+                        hashed = F.normalize(base_emb, p=2, dim=1)
+                        query_embedding = torch.cat([hashed, refined], dim=1)
+                    else:
+                        query_embedding = refined
+            except (ImportError, AttributeError):
+                # Fall back to standard encoding if expansion not available
+                pass
+        
         query_vec = query_embedding.cpu().detach().numpy().flatten()  # Convert to numpy
         
         # Step 2: Get candidate patterns via keywords (fast filter)

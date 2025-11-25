@@ -12,6 +12,15 @@ from typing import List, Dict, Optional, Tuple
 import numpy as np
 import json
 from pathlib import Path
+import torch
+import torch.nn.functional as F
+
+# Optional: Import PMFlow retrieval extensions
+try:
+    from pmflow_bnn_enhanced import CompositionalRetrievalPMField, SemanticNeighborhoodPMField
+    PMFLOW_EXTENSIONS_AVAILABLE = True
+except ImportError:
+    PMFLOW_EXTENSIONS_AVAILABLE = False
 
 
 @dataclass
@@ -75,6 +84,19 @@ class ConceptStore:
         self.encoder = semantic_encoder
         self.storage_path = Path(storage_path) if storage_path else None
         self.concepts: Dict[str, SemanticConcept] = {}
+        
+        # Initialize PMFlow retrieval extensions if available
+        if PMFLOW_EXTENSIONS_AVAILABLE and hasattr(semantic_encoder, 'pm_field'):
+            self.compositional_retrieval = CompositionalRetrievalPMField(
+                semantic_encoder.pm_field
+            )
+            self.neighborhood = SemanticNeighborhoodPMField(
+                semantic_encoder.pm_field
+            )
+            print("  ✨ PMFlow retrieval extensions enabled (query expansion + hierarchical + attention)")
+        else:
+            self.compositional_retrieval = None
+            self.neighborhood = None
         
         # Load existing concepts if available
         if self.storage_path and self.storage_path.exists():
@@ -162,7 +184,9 @@ class ConceptStore:
         self, 
         query_embedding: np.ndarray, 
         top_k: int = 5,
-        min_similarity: float = 0.60
+        min_similarity: float = 0.60,
+        use_expansion: bool = True,
+        use_hierarchical: bool = True
     ) -> List[Tuple[SemanticConcept, float]]:
         """
         Retrieve concepts by semantic similarity.
@@ -171,6 +195,38 @@ class ConceptStore:
             query_embedding: Query embedding from BNN
             top_k: Maximum number to retrieve
             min_similarity: Minimum similarity threshold
+            use_expansion: Use query expansion (requires query_text via retrieve_by_text)
+            use_hierarchical: Use hierarchical filtering (requires query_text via retrieve_by_text)
+            
+        Returns:
+            List of (concept, similarity_score) tuples
+            
+        Note: PMFlow extensions require working in latent space. Use retrieve_by_text()
+              for full PMFlow enhancement support.
+        """
+        if not self.concepts:
+            return []
+        
+        # Use manual retrieval (PMFlow extensions need latent space access)
+        return self._manual_retrieve_similar(query_embedding, top_k, min_similarity)
+    
+    def retrieve_by_text(
+        self,
+        query_text: str,
+        top_k: int = 5,
+        min_similarity: float = 0.60,
+        use_expansion: bool = True,
+        use_hierarchical: bool = True
+    ) -> List[Tuple[SemanticConcept, float]]:
+        """
+        Retrieve concepts by query text (enables PMFlow enhancements).
+        
+        Args:
+            query_text: Query text to search for
+            top_k: Maximum number to retrieve
+            min_similarity: Minimum similarity threshold
+            use_expansion: Use query expansion for synonym matching
+            use_hierarchical: Use hierarchical filtering for speed
             
         Returns:
             List of (concept, similarity_score) tuples
@@ -178,7 +234,78 @@ class ConceptStore:
         if not self.concepts:
             return []
         
-        # Calculate similarities
+        # Try PMFlow-enhanced retrieval first
+        if self.compositional_retrieval is not None:
+            return self._pmflow_retrieve_by_text(
+                query_text, top_k, min_similarity,
+                use_expansion, use_hierarchical
+            )
+        
+        # Fallback: encode and use manual retrieval
+        tokens = query_text.lower().split()
+        query_embedding = self.encoder.encode(tokens)
+        if hasattr(query_embedding, 'cpu'):
+            query_embedding = query_embedding.cpu().detach().numpy().flatten()
+        
+        return self._manual_retrieve_similar(query_embedding, top_k, min_similarity)
+    
+    def _pmflow_retrieve_by_text(
+        self,
+        query_text: str,
+        top_k: int,
+        min_similarity: float,
+        use_expansion: bool,
+        use_hierarchical: bool
+    ) -> List[Tuple[SemanticConcept, float]]:
+        """Enhanced retrieval using PMFlow compositional extensions."""
+        
+        # Encode query in latent space
+        tokens = query_text.lower().split()
+        
+        # Get base embedding and project to latent
+        base_emb = self.encoder.base_encoder.encode(tokens).to(self.encoder.device)
+        query_latent = base_emb @ self.encoder._projection  # (1, latent_dim)
+        
+        # Prepare concept latents
+        concept_ids = list(self.concepts.keys())
+        concept_latents = []
+        
+        for cid in concept_ids:
+            concept = self.concepts[cid]
+            term_tokens = concept.term.lower().split()
+            term_base = self.encoder.base_encoder.encode(term_tokens).to(self.encoder.device)
+            term_latent = term_base @ self.encoder._projection
+            concept_latents.append(term_latent)
+        
+        # Stack into tensor
+        concept_tensor = torch.cat(concept_latents, dim=0)  # (N, latent_dim)
+        
+        # Use compositional retrieval
+        results = self.compositional_retrieval.retrieve_concepts(
+            query_latent,
+            concept_tensor,
+            expand_query=use_expansion,
+            use_hierarchical=use_hierarchical,
+            min_similarity=min_similarity
+        )
+        
+        # Convert back to (concept, score) tuples
+        concept_results = []
+        for idx, score in results[:top_k]:
+            concept = self.concepts[concept_ids[idx]]
+            concept.usage_count += 1
+            concept_results.append((concept, score))
+        
+        return concept_results
+    
+    def _manual_retrieve_similar(
+        self,
+        query_embedding: np.ndarray,
+        top_k: int,
+        min_similarity: float
+    ) -> List[Tuple[SemanticConcept, float]]:
+        """Fallback: Manual O(N) similarity calculation."""
+        
         results = []
         for concept in self.concepts.values():
             # Re-encode if embedding not cached
@@ -223,16 +350,91 @@ class ConceptStore:
             return results[0][0]
         return None
     
-    def merge_similar_concepts(self, threshold: float = 0.92) -> int:
+    def merge_similar_concepts(self, threshold: float = 0.85) -> int:
         """
         Consolidate concepts that are very similar.
         
         Args:
-            threshold: Similarity threshold for merging
+            threshold: Similarity threshold for merging (default 0.85 based on PoC findings)
             
         Returns:
             Number of concepts merged
         """
+        # Try PMFlow-enhanced consolidation first
+        if self.neighborhood is not None:
+            return self._pmflow_merge_concepts(threshold)
+        
+        # Fallback: Manual O(N²) merging
+        return self._manual_merge_concepts(threshold)
+    
+    def _pmflow_merge_concepts(self, threshold: float) -> int:
+        """Enhanced consolidation using semantic neighborhood (field signatures)."""
+        
+        merged_count = 0
+        concepts_to_remove = set()
+        
+        # Prepare concept latent embeddings (in PMFlow space)
+        concept_ids = list(self.concepts.keys())
+        concept_latents = []
+        
+        for cid in concept_ids:
+            concept = self.concepts[cid]
+            term_tokens = concept.term.lower().split()
+            # Get latent representation (before final projection)
+            term_base = self.encoder.base_encoder.encode(term_tokens).to(self.encoder.device)
+            term_latent = term_base @ self.encoder._projection
+            concept_latents.append(term_latent)
+        
+        concept_tensor = torch.cat(concept_latents, dim=0)  # (N, latent_dim)
+        
+        # For each concept, find neighbors using field signatures
+        for i, cid in enumerate(concept_ids):
+            if cid in concepts_to_remove:
+                continue
+            
+            concept_z = concept_latents[i]  # (1, latent_dim)
+            
+            # Find neighbors with similar gravitational field signatures
+            neighbor_indices, scores = self.neighborhood.find_neighbors(
+                concept_z,
+                concept_tensor,
+                threshold=threshold
+            )
+            
+            # Merge neighbors into this concept
+            for j, score in zip(neighbor_indices.tolist(), scores.tolist()):
+                if j <= i:  # Skip self and already processed
+                    continue
+                
+                neighbor_cid = concept_ids[j]
+                if neighbor_cid in concepts_to_remove:
+                    continue
+                
+                # Merge neighbor into current concept
+                print(f"  🔗 Merging '{self.concepts[neighbor_cid].term}' "
+                      f"into '{self.concepts[cid].term}' "
+                      f"(field similarity: {score:.3f})")
+                
+                self._merge_concept_data(
+                    self.concepts[cid],
+                    self.concepts[neighbor_cid]
+                )
+                
+                concepts_to_remove.add(neighbor_cid)
+                merged_count += 1
+        
+        # Remove merged concepts
+        for cid in concepts_to_remove:
+            del self.concepts[cid]
+        
+        if merged_count > 0:
+            self._save_concepts()
+        
+        return merged_count
+    
+    def _manual_merge_concepts(self, threshold: float) -> int:
+        """Fallback: Brute force O(N²) consolidation."""
+        
         merged_count = 0
         concepts_to_remove = set()
         
@@ -248,9 +450,15 @@ class ConceptStore:
                 
                 # Calculate similarity
                 if concept_a.embedding is None:
-                    concept_a.embedding = self.encoder.encode(concept_a.term)
+                    embedding = self.encoder.encode(concept_a.term.split())
+                    if hasattr(embedding, 'cpu'):
+                        embedding = embedding.cpu().detach().numpy().flatten()
+                    concept_a.embedding = embedding
                 if concept_b.embedding is None:
-                    concept_b.embedding = self.encoder.encode(concept_b.term)
+                    embedding = self.encoder.encode(concept_b.term.split())
+                    if hasattr(embedding, 'cpu'):
+                        embedding = embedding.cpu().detach().numpy().flatten()
+                    concept_b.embedding = embedding
                 
                 similarity = self._cosine_similarity(concept_a.embedding, concept_b.embedding)
                 
@@ -258,22 +466,7 @@ class ConceptStore:
                     # Merge B into A
                     print(f"  🔗 Merging '{concept_b.term}' into '{concept_a.term}' (similarity: {similarity:.3f})")
                     
-                    # Combine properties
-                    for prop in concept_b.properties:
-                        if prop not in concept_a.properties:
-                            concept_a.properties.append(prop)
-                    
-                    # Combine relations
-                    for rel in concept_b.relations:
-                        existing = [r for r in concept_a.relations 
-                                  if r.relation_type == rel.relation_type 
-                                  and r.target == rel.target]
-                        if not existing:
-                            concept_a.relations.append(rel)
-                    
-                    # Update metadata
-                    concept_a.usage_count += concept_b.usage_count
-                    concept_a.confidence = max(concept_a.confidence, concept_b.confidence)
+                    self._merge_concept_data(concept_a, concept_b)
                     
                     # Mark for removal
                     concepts_to_remove.add(concept_b.concept_id)
@@ -287,6 +480,26 @@ class ConceptStore:
             self._save_concepts()
         
         return merged_count
+    
+    def _merge_concept_data(self, target: SemanticConcept, source: SemanticConcept):
+        """Merge source concept data into target concept."""
+        
+        # Combine properties
+        for prop in source.properties:
+            if prop not in target.properties:
+                target.properties.append(prop)
+        
+        # Combine relations
+        for rel in source.relations:
+            existing = [r for r in target.relations 
+                      if r.relation_type == rel.relation_type 
+                      and r.target == rel.target]
+            if not existing:
+                target.relations.append(rel)
+        
+        # Update metadata
+        target.usage_count += source.usage_count
+        target.confidence = max(target.confidence, source.confidence)
     
     def _find_similar_concept(
         self, 
