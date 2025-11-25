@@ -161,13 +161,13 @@ def main():
                 if last_pattern_id:
                     # Check if this was an external knowledge response
                     if last_pattern_id.startswith('external_'):
-                        # Learn this Wikipedia response as a new pattern
+                        # Learn this Wikipedia response with concept extraction
                         if last_user_input and last_response_text:
                             print("\n📚 Learning from external knowledge...")
-                            new_pattern_id = fragment_store.add_pattern(
-                                trigger_context=last_user_input,
+                            new_pattern_id = fragment_store.learn_from_wikipedia(
+                                query=last_user_input,
                                 response_text=last_response_text,
-                                success_score=0.8,  # High initial score for Wikipedia
+                                success_score=0.8,
                                 intent="learned_knowledge"
                             )
                             print(f"✅ Learned new pattern: {new_pattern_id}")

@@ -12,6 +12,13 @@ import numpy as np
 from .response_fragments_sqlite import ResponseFragmentStoreSQLite as ResponseFragmentStore, ResponsePattern
 from .user_auth import UserIdentity, get_user_data_path
 
+# Optional: Import concept store for semantic knowledge extraction
+try:
+    from .production_concept_store import ProductionConceptStore
+    CONCEPT_STORE_AVAILABLE = True
+except ImportError:
+    CONCEPT_STORE_AVAILABLE = False
+
 
 class MultiTenantFragmentStore:
     """
@@ -35,7 +42,8 @@ class MultiTenantFragmentStore:
         encoder,
         user_identity: UserIdentity,
         base_data_path: str = "data",
-        enable_fuzzy_matching: bool = True
+        enable_fuzzy_matching: bool = True,
+        enable_concept_store: bool = True
     ):
         """
         Initialize multi-tenant fragment store.
@@ -45,6 +53,7 @@ class MultiTenantFragmentStore:
             user_identity: User identity information
             base_data_path: Base data directory path
             enable_fuzzy_matching: Enable fuzzy matching
+            enable_concept_store: Enable semantic concept extraction
         """
         self.user_identity = user_identity
         self.encoder = encoder
@@ -79,6 +88,24 @@ class MultiTenantFragmentStore:
             # New users automatically start with empty database
             
             print(f"  👤 User mode: {user_identity.display_name} (isolated storage)")
+        
+        # Concept store (if enabled)
+        if enable_concept_store and CONCEPT_STORE_AVAILABLE:
+            if user_identity.is_teacher():
+                # Teacher: use base concept store
+                concept_db_path = str(Path(base_data_path) / "base" / "concepts.db")
+            else:
+                # User: isolated concept store
+                user_data_path = get_user_data_path(user_identity, base_data_path)
+                concept_db_path = str(Path(user_data_path) / "concepts.db")
+            
+            self.concept_store = ProductionConceptStore(
+                semantic_encoder=encoder,
+                db_path=concept_db_path
+            )
+            print(f"  🧠 Concept store enabled: {concept_db_path}")
+        else:
+            self.concept_store = None
     
     def retrieve_patterns(
         self,
@@ -311,3 +338,63 @@ class MultiTenantFragmentStore:
         
         print(f"  ⚠️  Pattern not found: {fragment_id}")
         return None
+    
+    def learn_from_wikipedia(
+        self,
+        query: str,
+        response_text: str,
+        success_score: float = 0.8,
+        intent: str = "learned_knowledge"
+    ) -> str:
+        """
+        Learn from Wikipedia response with semantic concept extraction.
+        
+        This method:
+        1. Stores the response as a pattern (normal learning)
+        2. Extracts semantic concepts (if concept store enabled)
+        3. Adds concepts to the concept store
+        
+        Args:
+            query: Original user query
+            response_text: Wikipedia response text
+            success_score: Initial confidence (default 0.8)
+            intent: Pattern intent (default "learned_knowledge")
+            
+        Returns:
+            Pattern ID of the learned pattern
+        """
+        # 1. Store as normal pattern
+        pattern_id = self.add_pattern(
+            trigger_context=query,
+            response_text=response_text,
+            success_score=success_score,
+            intent=intent
+        )
+        
+        # 2. Extract and store concepts (if enabled)
+        if self.concept_store:
+            try:
+                from .semantic_extractor import SemanticExtractor
+                
+                extractor = SemanticExtractor()
+                concepts = extractor.extract_concepts(query, response_text)
+                
+                if concepts:
+                    print(f"  🧠 Extracting semantic concepts...")
+                    for concept in concepts:
+                        # Convert to dict format
+                        concept_dict = extractor.concept_to_dict(concept)
+                        
+                        # Add to concept store
+                        concept_id = self.concept_store.add_concept(**concept_dict)
+                        
+                        print(f"     ✓ Learned concept: {concept.term}")
+                        if concept.type_relations:
+                            print(f"       - Type: {concept.type_relations[0]}")
+                        if concept.properties:
+                            print(f"       - Properties: {', '.join(concept.properties[:3])}")
+                
+            except Exception as e:
+                print(f"  ⚠️  Concept extraction failed: {e}")
+        
+        return pattern_id
