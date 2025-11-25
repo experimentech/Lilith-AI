@@ -87,41 +87,196 @@ class ResponseFragmentStoreSQLite:
     
     def _init_database(self):
         """Initialize database with schema and enable WAL mode."""
-        conn = sqlite3.connect(str(self.storage_path))
-        conn.row_factory = sqlite3.Row
+        try:
+            conn = sqlite3.connect(str(self.storage_path))
+            conn.row_factory = sqlite3.Row
+            
+            # Enable WAL mode for better concurrent access
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            
+            # Verify database integrity
+            cursor = conn.execute("PRAGMA integrity_check")
+            integrity = cursor.fetchone()[0]
+            if integrity != "ok":
+                raise sqlite3.DatabaseError(f"Database integrity check failed: {integrity}")
+            
+            # Create schema
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS response_patterns (
+                    fragment_id TEXT PRIMARY KEY,
+                    trigger_context TEXT NOT NULL,
+                    response_text TEXT NOT NULL,
+                    success_score REAL DEFAULT 0.5,
+                    intent TEXT DEFAULT 'general',
+                    usage_count INTEGER DEFAULT 0,
+                    embedding_cache TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Create indexes for efficient querying
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_intent 
+                ON response_patterns(intent)
+            """)
+            
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_success_score 
+                ON response_patterns(success_score DESC)
+            """)
+            
+            conn.commit()
+            conn.close()
+            
+        except sqlite3.DatabaseError as e:
+            print(f"⚠️  Database corruption detected: {e}")
+            print(f"⚠️  Attempting to recover database: {self.storage_path}")
+            self._recover_corrupted_database()
+        except Exception as e:
+            print(f"❌ Failed to initialize database: {e}")
+            raise
+    
+    def _recover_corrupted_database(self):
+        """
+        Attempt to recover from database corruption.
         
-        # Enable WAL mode for better concurrent access
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
+        Recovery strategy:
+        1. Backup corrupted database
+        2. Try to dump recoverable data
+        3. Create fresh database
+        4. Restore what we can
+        """
+        import shutil
+        from datetime import datetime
         
-        # Create schema
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS response_patterns (
-                fragment_id TEXT PRIMARY KEY,
-                trigger_context TEXT NOT NULL,
-                response_text TEXT NOT NULL,
-                success_score REAL DEFAULT 0.5,
-                intent TEXT DEFAULT 'general',
-                usage_count INTEGER DEFAULT 0,
-                embedding_cache TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        backup_path = self.storage_path.with_suffix(f'.corrupted.{datetime.now().strftime("%Y%m%d_%H%M%S")}.db')
         
-        # Create indexes for efficient querying
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_intent 
-            ON response_patterns(intent)
-        """)
+        try:
+            # Backup corrupted database
+            shutil.copy2(self.storage_path, backup_path)
+            print(f"  💾 Backed up corrupted database to: {backup_path}")
+            
+            # Try to dump recoverable data
+            recoverable_patterns = []
+            try:
+                conn = sqlite3.connect(str(self.storage_path))
+                cursor = conn.execute("SELECT * FROM response_patterns")
+                for row in cursor:
+                    try:
+                        recoverable_patterns.append(dict(row))
+                    except:
+                        pass  # Skip corrupted rows
+                conn.close()
+                print(f"  ✅ Recovered {len(recoverable_patterns)} patterns")
+            except Exception as e:
+                print(f"  ⚠️  Could not recover data: {e}")
+            
+            # Remove corrupted database
+            self.storage_path.unlink()
+            
+            # Create fresh database
+            conn = sqlite3.connect(str(self.storage_path))
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            
+            # Create schema
+            conn.execute("""
+                CREATE TABLE response_patterns (
+                    fragment_id TEXT PRIMARY KEY,
+                    trigger_context TEXT NOT NULL,
+                    response_text TEXT NOT NULL,
+                    success_score REAL DEFAULT 0.5,
+                    intent TEXT DEFAULT 'general',
+                    usage_count INTEGER DEFAULT 0,
+                    embedding_cache TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            conn.execute("CREATE INDEX idx_intent ON response_patterns(intent)")
+            conn.execute("CREATE INDEX idx_success_score ON response_patterns(success_score DESC)")
+            
+            # Restore recovered data
+            for pattern in recoverable_patterns:
+                try:
+                    conn.execute("""
+                        INSERT INTO response_patterns 
+                        (fragment_id, trigger_context, response_text, success_score, intent, usage_count)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (
+                        pattern['fragment_id'],
+                        pattern['trigger_context'],
+                        pattern['response_text'],
+                        pattern['success_score'],
+                        pattern['intent'],
+                        pattern.get('usage_count', 0)
+                    ))
+                except Exception as e:
+                    print(f"  ⚠️  Could not restore pattern {pattern.get('fragment_id')}: {e}")
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"  ✅ Database recovered successfully")
+            print(f"  📝 Restored {len(recoverable_patterns)} patterns")
+            
+        except Exception as e:
+            print(f"  ❌ Recovery failed: {e}")
+            print(f"  💡 Manual intervention required. Backup at: {backup_path}")
+            raise
+    
+    def reset_database(self, keep_backup: bool = True, bootstrap: bool = False):
+        """
+        Reset database to fresh state.
         
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_success_score 
-            ON response_patterns(success_score DESC)
-        """)
+        Args:
+            keep_backup: If True, create backup before reset
+            bootstrap: If True, add seed patterns after reset
+            
+        Returns:
+            Path to backup file (if created)
+        """
+        import shutil
+        from datetime import datetime
         
-        conn.commit()
-        conn.close()
+        backup_path = None
+        
+        if keep_backup and self.storage_path.exists():
+            backup_path = self.storage_path.with_suffix(f'.backup.{datetime.now().strftime("%Y%m%d_%H%M%S")}.db')
+            shutil.copy2(self.storage_path, backup_path)
+            print(f"  💾 Backup created: {backup_path}")
+        
+        # Get current pattern count
+        try:
+            conn = self._get_connection()
+            cursor = conn.execute("SELECT COUNT(*) FROM response_patterns")
+            old_count = cursor.fetchone()[0]
+            conn.close()
+        except:
+            old_count = "unknown"
+        
+        # Delete database
+        if self.storage_path.exists():
+            self.storage_path.unlink()
+        
+        # Recreate fresh database
+        self._init_database()
+        
+        if bootstrap:
+            self._bootstrap_seed_patterns()
+            new_count = 4
+        else:
+            new_count = 0
+        
+        print(f"  🔄 Database reset complete")
+        print(f"  📊 Old patterns: {old_count}")
+        print(f"  📊 New patterns: {new_count}{' (seed patterns)' if bootstrap else ''}")
+        
+        return backup_path
     
     def _get_connection(self):
         """Get a new database connection with proper timeout."""
@@ -345,6 +500,44 @@ class ResponseFragmentStoreSQLite:
             conn.commit()
         
         conn.close()
+    
+    def upvote(self, fragment_id: str, strength: float = 0.2):
+        """
+        Manual positive feedback - reward a good response.
+        
+        Use this when a response is particularly helpful or accurate.
+        Stronger than normal positive feedback.
+        
+        Args:
+            fragment_id: Pattern ID to upvote
+            strength: How much to boost (default 0.2 = 20% toward 1.0)
+        """
+        self.update_success(fragment_id, outcome=True, learning_rate=strength)
+        print(f"  👍 Upvoted pattern: {fragment_id}")
+    
+    def downvote(self, fragment_id: str, strength: float = 0.3):
+        """
+        Manual negative feedback - punish a bad response.
+        
+        Use this when a response is incorrect, unhelpful, or inappropriate.
+        Stronger than normal negative feedback.
+        
+        Args:
+            fragment_id: Pattern ID to downvote
+            strength: How much to penalize (default 0.3 = 30% toward 0.0)
+        """
+        self.update_success(fragment_id, outcome=False, learning_rate=strength)
+        print(f"  👎 Downvoted pattern: {fragment_id}")
+    
+    def mark_helpful(self, fragment_id: str):
+        """Mark response as helpful (moderate positive feedback)."""
+        self.update_success(fragment_id, outcome=True, learning_rate=0.15)
+        print(f"  ✅ Marked helpful: {fragment_id}")
+    
+    def mark_not_helpful(self, fragment_id: str):
+        """Mark response as not helpful (moderate negative feedback)."""
+        self.update_success(fragment_id, outcome=False, learning_rate=0.15)
+        print(f"  ❌ Marked not helpful: {fragment_id}")
     
     def get_stats(self) -> Dict:
         """Get comprehensive database statistics."""

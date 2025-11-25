@@ -228,3 +228,86 @@ class MultiTenantFragmentStore:
             conn.commit()
             conn.close()
             print(f"  🗑️  Cleared user patterns for {self.user_identity.display_name}")
+    
+    def reset_user_data(self, keep_backup: bool = True, bootstrap: bool = False):
+        """
+        Reset user's data to clean slate.
+        
+        Creates backup before reset. Only works in user mode.
+        Teacher mode must manually manage base knowledge.
+        
+        Args:
+            keep_backup: If True, create backup before reset
+            bootstrap: If True, add seed patterns after reset (default: False for users)
+            
+        Returns:
+            Path to backup file (if created)
+        """
+        if self.user_identity.is_teacher():
+            raise PermissionError(
+                "Cannot reset user data in teacher mode. "
+                "Use base_store.reset_database() to reset base knowledge."
+            )
+        
+        if not self.user_store:
+            raise RuntimeError("User store not initialized")
+        
+        backup_path = self.user_store.reset_database(keep_backup=keep_backup, bootstrap=bootstrap)
+        print(f"  🔄 Reset complete for {self.user_identity.display_name}")
+        
+        return backup_path
+    
+    def upvote(self, fragment_id: str, strength: float = 0.2):
+        """
+        Manually upvote a response (mark as helpful/accurate).
+        
+        Args:
+            fragment_id: Pattern ID to upvote
+            strength: Reward strength (default 0.2)
+        """
+        # Determine which store owns this pattern
+        store = self._get_pattern_store(fragment_id)
+        if store:
+            store.upvote(fragment_id, strength)
+    
+    def downvote(self, fragment_id: str, strength: float = 0.3):
+        """
+        Manually downvote a response (mark as unhelpful/incorrect).
+        
+        Args:
+            fragment_id: Pattern ID to downvote
+            strength: Penalty strength (default 0.3)
+        """
+        store = self._get_pattern_store(fragment_id)
+        if store:
+            store.downvote(fragment_id, strength)
+    
+    def mark_helpful(self, fragment_id: str):
+        """Mark response as helpful (moderate reward)."""
+        store = self._get_pattern_store(fragment_id)
+        if store:
+            store.mark_helpful(fragment_id)
+    
+    def mark_not_helpful(self, fragment_id: str):
+        """Mark response as not helpful (moderate penalty)."""
+        store = self._get_pattern_store(fragment_id)
+        if store:
+            store.mark_not_helpful(fragment_id)
+    
+    def _get_pattern_store(self, fragment_id: str):
+        """Find which store owns a pattern."""
+        # Check user store first
+        if self.user_store and fragment_id in self.user_store.patterns:
+            return self.user_store
+        
+        # Check base store
+        if fragment_id in self.base_store.patterns:
+            # Can only update base patterns in teacher mode
+            if self.user_identity.is_teacher():
+                return self.base_store
+            else:
+                print(f"  ⚠️  Cannot modify base pattern in user mode: {fragment_id}")
+                return None
+        
+        print(f"  ⚠️  Pattern not found: {fragment_id}")
+        return None
