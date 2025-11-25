@@ -293,12 +293,55 @@ class ResponseFragmentStoreSQLite:
         return count == 0
     
     def _bootstrap_seed_patterns(self):
-        """Bootstrap database with seed patterns."""
+        """Bootstrap database with comprehensive seed patterns."""
         seed_patterns = [
+            # Greetings
             ("greeting_hello", "hello", "Hello! How can I help you?", 0.9, "greeting"),
             ("greeting_hi", "hi", "Hi there! What's on your mind?", 0.85, "greeting"),
+            ("greeting_hey", "hey", "Hey! What's up?", 0.85, "greeting"),
+            ("greeting_morning", "good morning", "Good morning! How are you today?", 0.85, "greeting"),
+            ("greeting_afternoon", "good afternoon", "Good afternoon!", 0.85, "greeting"),
+            ("greeting_evening", "good evening", "Good evening!", 0.85, "greeting"),
+            
+            # How are you / Well-being
+            ("wellbeing_how_are_you", "how are you", "I'm doing well, thank you for asking! How can I assist you?", 0.85, "wellbeing"),
+            ("wellbeing_whats_up", "whats up", "Not much! Just here to help. What can I do for you?", 0.8, "wellbeing"),
+            
+            # Capabilities / What can you do
+            ("capability_what_can_do", "what can you do", "I can chat with you, answer questions, help with math problems, and look up information. What would you like to explore?", 0.9, "capability"),
+            ("capability_can_you_help", "can you help", "Of course! I'm here to help. What do you need?", 0.85, "capability"),
+            ("capability_what_are_you", "what are you", "I'm Lilith, a conversational AI that learns from our interactions. I can chat, answer questions, and help with various tasks.", 0.85, "capability"),
+            
+            # Identity / Name
+            ("identity_name", "what is your name", "My name is Lilith. Nice to meet you!", 0.9, "identity"),
+            ("identity_who_are_you", "who are you", "I'm Lilith, an AI assistant designed to learn and adapt to conversations.", 0.85, "identity"),
+            
+            # Gratitude
+            ("gratitude_thank_you", "thank you", "You're welcome! Happy to help.", 0.9, "gratitude"),
+            ("gratitude_thanks", "thanks", "No problem! Let me know if you need anything else.", 0.85, "gratitude"),
+            
+            # Farewell
+            ("farewell_goodbye", "goodbye", "Goodbye! Have a great day!", 0.9, "farewell"),
+            ("farewell_bye", "bye", "Bye! Take care!", 0.85, "farewell"),
+            ("farewell_see_you", "see you later", "See you later! Feel free to come back anytime.", 0.85, "farewell"),
+            
+            # Affirmative
+            ("affirmative_yes", "yes", "Great! How can I help further?", 0.7, "affirmative"),
+            ("affirmative_ok", "ok", "Sounds good! Anything else?", 0.65, "affirmative"),
+            
+            # Negative / Disagreement
+            ("negative_no", "no", "Okay, no problem. Is there something else I can help with?", 0.7, "negative"),
+            
+            # Clarification requests
+            ("clarification_what_mean", "what do you mean", "Let me try to explain that differently.", 0.7, "clarification"),
+            ("clarification_confused", "i dont understand", "I apologize for the confusion. Let me try to clarify.", 0.75, "clarification"),
+            
+            # Knowledge - simple facts
+            ("knowledge_sky_color", "what color is the sky", "The sky is typically blue during the day, though it can appear red or orange at sunrise and sunset.", 0.8, "knowledge"),
+            ("knowledge_water_wet", "is water wet", "Yes, water is wet. Wetness is the property of a liquid sticking to a surface.", 0.75, "knowledge"),
+            
+            # Fallback
             ("unknown_fallback", "", "I'm not sure I understand. Could you rephrase that?", 0.3, "fallback"),
-            ("clarification", "what do you mean", "Let me try to explain that differently.", 0.7, "clarification"),
         ]
         
         conn = self._get_connection()
