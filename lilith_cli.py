@@ -88,12 +88,16 @@ def main():
         print(f"   Total accessible: {counts['total']}")
     
     print()
-    print("Type 'quit' to exit, 'stats' for statistics")
+    print("Type 'quit' to exit")
+    print("Commands: 'stats', 'reset', 'help'")
+    print("Feedback: '+' (upvote), '-' (downvote), '?' (show last pattern ID)")
     print("=" * 60)
     print()
     
     # Conversation loop
     turn = 0
+    last_pattern_id = None
+    
     while True:
         # Get user input
         try:
@@ -119,14 +123,76 @@ def main():
             print()
             continue
         
+        if user_input.lower() == 'help':
+            print("\n📖 Commands:")
+            print("   quit     - Exit the program")
+            print("   stats    - Show pattern statistics")
+            print("   reset    - Reset your data (with backup)")
+            print("   +        - Upvote last response (if wrong, improves it)")
+            print("   -        - Downvote last response (if wrong, suppresses it)")
+            print("   ?        - Show last pattern ID")
+            print()
+            continue
+        
+        if user_input.lower() == 'reset':
+            if user_identity.is_teacher():
+                print("\n⚠️  Cannot reset in teacher mode")
+                print()
+                continue
+            
+            print("\n⚠️  This will reset your personal patterns")
+            confirm = input("Create backup and reset? (yes/no): ").strip().lower()
+            if confirm == 'yes':
+                backup = fragment_store.reset_user_data(keep_backup=True)
+                print(f"✅ Reset complete. Backup: {backup.name if backup else 'none'}")
+            else:
+                print("❌ Reset cancelled")
+            print()
+            continue
+        
+        if user_input == '+':
+            if last_pattern_id:
+                fragment_store.upvote(last_pattern_id)
+                print()
+            else:
+                print("\n⚠️  No recent response to upvote")
+                print()
+            continue
+        
+        if user_input == '-':
+            if last_pattern_id:
+                fragment_store.downvote(last_pattern_id)
+                print()
+            else:
+                print("\n⚠️  No recent response to downvote")
+                print()
+            continue
+        
+        if user_input == '?':
+            if last_pattern_id:
+                print(f"\n📋 Last pattern ID: {last_pattern_id}")
+                print()
+            else:
+                print("\n⚠️  No recent response")
+                print()
+            continue
+        
         # Generate response
         turn += 1
-        response = composer.generate_response(user_input)
+        response = composer.compose_response(user_input)
         
-        print(f"Lilith: {response['text']}")
+        # Track pattern ID if response came from learned patterns
+        if response.fragment_ids:
+            last_pattern_id = response.fragment_ids[0]  # First (primary) pattern
+        else:
+            last_pattern_id = None
         
-        if response.get('modality'):
-            print(f"   [Modality: {response['modality']}]")
+        print(f"Lilith: {response.text}")
+        
+        if response.modality:
+            print(f"   [Modality: {response.modality}]")
+        if response.is_fallback:
+            print(f"   [Fallback response - teach me!]")
         
         print()
 
