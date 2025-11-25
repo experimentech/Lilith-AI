@@ -418,18 +418,35 @@ class ResponseFragmentStoreSQLite:
         
         # Encode query context
         try:
-            query_embedding = self.encoder.encode(context.split())
+            tokens = context.split()
+            query_embedding = self.encoder.encode(tokens)
             if hasattr(query_embedding, 'numpy'):
                 query_embedding = query_embedding.numpy()
             query_embedding = np.array(query_embedding).flatten()
         except Exception as e:
-            print(f"  ⚠️  Encoding error: {e}")
+            print(f"  ⚠️  Encoding error for '{context}': {e}")
+            print(f"      Tokens: {context.split()}")
+            import traceback
+            traceback.print_exc()
             return []
         
-        # Compute similarities
+        # Compute similarities (hybrid: semantic + fuzzy matching)
         scored_patterns = []
         for pattern in patterns:
-            # Get or compute embedding
+            # First try fuzzy matching for exact/near-exact matches
+            fuzzy_score = 0.0
+            if self.fuzzy_matcher:
+                is_match, fuzzy_score = self.fuzzy_matcher.fuzzy_match(
+                    context, 
+                    pattern.trigger_context,
+                    min_similarity=0.75
+                )
+                # If fuzzy match is strong, use it directly
+                if is_match and fuzzy_score >= 0.9:
+                    scored_patterns.append((pattern, float(fuzzy_score)))
+                    continue
+            
+            # Get or compute embedding for semantic matching
             if pattern.embedding_cache:
                 pattern_embedding = np.array(pattern.embedding_cache)
             else:
@@ -446,8 +463,20 @@ class ResponseFragmentStoreSQLite:
             norm_p = np.linalg.norm(pattern_embedding)
             
             if norm_q > 0 and norm_p > 0:
-                similarity = np.dot(query_embedding, pattern_embedding) / (norm_q * norm_p)
-                scored_patterns.append((pattern, float(similarity)))
+                semantic_sim = np.dot(query_embedding, pattern_embedding) / (norm_q * norm_p)
+                
+                # Adaptive weighting based on phrase length
+                # For short phrases (<=3 words), trust fuzzy more
+                # For long phrases, trust semantic more
+                query_words = len(context.split())
+                if query_words <= 3:
+                    # Short phrase: 70% fuzzy, 30% semantic
+                    combined_score = (0.7 * fuzzy_score) + (0.3 * semantic_sim)
+                else:
+                    # Long phrase: 40% fuzzy, 60% semantic
+                    combined_score = (0.4 * fuzzy_score) + (0.6 * semantic_sim)
+                
+                scored_patterns.append((pattern, float(combined_score)))
         
         # Sort by similarity and take top-k
         scored_patterns.sort(key=lambda x: x[1], reverse=True)
