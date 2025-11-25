@@ -18,6 +18,14 @@ from .contrastive_pmflow import (
     train_contrastive_pmfield,
     create_contrastive_encoder,
 )
+from .retrieval_extensions import (
+    QueryExpansionPMField,
+    SemanticNeighborhoodPMField,
+    HierarchicalRetrievalPMField,
+    AttentionWeightedRetrieval,
+    CompositionalRetrievalPMField,
+    create_enhanced_retrieval_encoder,
+)
 from .bnn import TemporalPipelineBNN, MultiGPUPMBNN, PMBNNAlwaysPlasticV2
 from .factory import get_model_v2, get_performance_config, benchmark_temporal_parallelism, validate_embarrassingly_parallel_scaling
 from .utils import create_training_config, get_hardware_info, optimize_for_device
@@ -42,6 +50,13 @@ __all__ = [
     'contrastive_learning_step',
     'train_contrastive_pmfield',
     'create_contrastive_encoder',
+    # Retrieval extensions v0.4.0
+    'QueryExpansionPMField',
+    'SemanticNeighborhoodPMField',
+    'HierarchicalRetrievalPMField',
+    'AttentionWeightedRetrieval',
+    'CompositionalRetrievalPMField',
+    'create_enhanced_retrieval_encoder',
     # BNN models
     'TemporalPipelineBNN',
     'MultiGPUPMBNN',
