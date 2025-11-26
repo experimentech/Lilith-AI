@@ -126,6 +126,20 @@ def main():
                     print(f"   Your patterns: {counts['user']}")
                 print(f"   Base patterns: {counts['base']}")
                 print(f"   Total: {counts['total']}")
+                
+                # Show vocabulary stats if available
+                vocab_stats = fragment_store.get_vocabulary_stats()
+                if vocab_stats:
+                    print(f"\n📖 Vocabulary:")
+                    print(f"   Total terms: {vocab_stats['total_terms']}")
+                    print(f"   Technical terms: {vocab_stats['technical_terms']}")
+                    print(f"   Common terms: {vocab_stats['common_terms']}")
+                    
+                    if vocab_stats['top_technical']:
+                        print(f"\n   Top technical terms:")
+                        for term, freq in vocab_stats['top_technical'][:5]:
+                            print(f"     - {term} ({freq})")
+                
                 print()
                 continue
             

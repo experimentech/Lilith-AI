@@ -6,7 +6,7 @@ Users can learn and store patterns without corrupting base knowledge.
 """
 
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 import numpy as np
 
 from .response_fragments_sqlite import ResponseFragmentStoreSQLite as ResponseFragmentStore, ResponsePattern
@@ -25,6 +25,13 @@ try:
     TAXONOMY_AVAILABLE = True
 except ImportError:
     TAXONOMY_AVAILABLE = False
+
+# Optional: Import vocabulary tracker
+try:
+    from .vocabulary_tracker import VocabularyTracker
+    VOCABULARY_TRACKER_AVAILABLE = True
+except ImportError:
+    VOCABULARY_TRACKER_AVAILABLE = False
 
 
 class MultiTenantFragmentStore:
@@ -120,6 +127,21 @@ class MultiTenantFragmentStore:
             print(f"  📚 Concept taxonomy initialized")
         else:
             self.taxonomy = None
+        
+        # Vocabulary tracker (if enabled)
+        if VOCABULARY_TRACKER_AVAILABLE:
+            if user_identity.is_teacher():
+                # Teacher: use base vocabulary
+                vocab_db_path = str(Path(base_data_path) / "base" / "vocabulary.db")
+            else:
+                # User: isolated vocabulary
+                user_data_path = get_user_data_path(user_identity, base_data_path)
+                vocab_db_path = str(Path(user_data_path) / "vocabulary.db")
+            
+            self.vocabulary = VocabularyTracker(vocab_db_path)
+            print(f"  📖 Vocabulary tracker enabled: {vocab_db_path}")
+        else:
+            self.vocabulary = None
     
     def retrieve_patterns(
         self,
@@ -417,6 +439,23 @@ class MultiTenantFragmentStore:
             except Exception as e:
                 print(f"  ⚠️  Concept extraction failed: {e}")
         
+        # 3. Track vocabulary (Phase C: Vocabulary expansion)
+        if self.vocabulary:
+            try:
+                print(f"  📖 Tracking vocabulary...")
+                tracked = self.vocabulary.track_text(response_text, source="wikipedia")
+                
+                # Show technical terms found
+                technical_terms = [term for term, entry in tracked.items() if entry.is_technical]
+                if technical_terms:
+                    print(f"     ✓ Tracked {len(tracked)} terms ({len(technical_terms)} technical)")
+                    # Show top 3 technical terms
+                    for term in list(technical_terms)[:3]:
+                        print(f"       - {term}")
+                
+            except Exception as e:
+                print(f"  ⚠️  Vocabulary tracking failed: {e}")
+        
         return pattern_id
     
     def _add_to_taxonomy(self, concept):
@@ -454,3 +493,15 @@ class MultiTenantFragmentStore:
             
         except Exception as e:
             print(f"       ⚠️  Taxonomy add failed: {e}")
+    
+    def get_vocabulary_stats(self) -> Optional[Dict]:
+        """
+        Get vocabulary statistics.
+        
+        Returns:
+            Dictionary with vocabulary stats or None if not enabled
+        """
+        if not self.vocabulary:
+            return None
+        
+        return self.vocabulary.get_vocabulary_stats()
