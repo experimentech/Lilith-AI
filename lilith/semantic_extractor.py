@@ -25,6 +25,7 @@ class ExtractedConcept:
     usage_relations: List[str]      # "used for X", "designed for X"
     has_relations: List[str]        # "has X", "includes X", "features X"
     created_by: Optional[str] = None  # Creator/developer
+    entity_type: Optional[str] = None  # Inferred entity type (programming_language, person, etc.)
     confidence: float = 0.85        # Extraction confidence
 
 
@@ -33,6 +34,9 @@ class SemanticExtractor:
     Extract structured semantic information from text.
     
     Focus: Simple, robust patterns that work well for Wikipedia-style text.
+    
+    Phase A: Semantic relationships
+    Phase B: Entity type recognition
     """
     
     def __init__(self):
@@ -73,6 +77,26 @@ class SemanticExtractor:
             r'(?:created|developed|designed|invented)\s+(?:by|in)\s+(.+?)(?:\.|,|in\s+\d{4}|$)',
             re.IGNORECASE
         )
+        
+        # Entity type mapping from type_relations
+        self.entity_type_mappings = {
+            'programming language': 'programming_language',
+            'language': 'programming_language',
+            'software': 'software',
+            'framework': 'software_framework',
+            'library': 'software_library',
+            'tool': 'software_tool',
+            'algorithm': 'algorithm',
+            'data structure': 'data_structure',
+            'concept': 'abstract_concept',
+            'theory': 'theory',
+            'method': 'method',
+            'technique': 'technique',
+            'person': 'person',
+            'company': 'organization',
+            'organization': 'organization',
+            'institution': 'organization',
+        }
     
     def extract_concepts(
         self, 
@@ -110,6 +134,7 @@ class SemanticExtractor:
             usage_relations=[],
             has_relations=[],
             created_by=None,
+            entity_type=None,
             confidence=0.85
         )
         
@@ -117,6 +142,9 @@ class SemanticExtractor:
         type_rel = self._extract_is_a(first_sentence)
         if type_rel:
             concept.type_relations.append(type_rel)
+        
+        # Infer entity type from type relations
+        concept.entity_type = self._infer_entity_type(concept.type_relations, concept.term)
         
         # Extract properties from emphasis clauses
         props = self._extract_properties(first_sentence)
@@ -279,6 +307,52 @@ class SemanticExtractor:
         
         return None
     
+    def _infer_entity_type(self, type_relations: List[str], term: str) -> Optional[str]:
+        """
+        Infer entity type from type relations and term characteristics.
+        
+        Args:
+            type_relations: List of "is a X" relations
+            term: The entity term
+            
+        Returns:
+            Entity type string or None
+            
+        Examples:
+            ["programming language"] → "programming_language"
+            ["person"] → "person"
+            ["software framework"] → "software_framework"
+        """
+        if not type_relations:
+            # Try to infer from capitalization (proper nouns)
+            if term and term[0].isupper() and ' ' in term:
+                # Multi-word capitalized = likely organization or proper noun
+                return "proper_noun"
+            return None
+        
+        # Check first type relation
+        type_rel = type_relations[0].lower()
+        
+        # Try exact or partial matches
+        for key, entity_type in self.entity_type_mappings.items():
+            if key in type_rel:
+                return entity_type
+        
+        # Generic fallback based on common patterns
+        if 'language' in type_rel:
+            return 'programming_language'
+        elif 'software' in type_rel or 'application' in type_rel:
+            return 'software'
+        elif 'algorithm' in type_rel:
+            return 'algorithm'
+        elif 'structure' in type_rel:
+            return 'data_structure'
+        elif 'computing' in type_rel or 'computation' in type_rel:
+            return 'computing_concept'
+        
+        # Default: abstract concept
+        return 'concept'
+    
     def concept_to_dict(self, concept: ExtractedConcept) -> Dict:
         """
         Convert ExtractedConcept to dictionary for storage.
@@ -349,6 +423,7 @@ def demo():
         for concept in concepts:
             print(f"Term: {concept.term}")
             print(f"Type: {concept.type_relations}")
+            print(f"Entity Type: {concept.entity_type}")
             print(f"Properties: {concept.properties}")
             print(f"Usage: {concept.usage_relations}")
             print(f"Has: {concept.has_relations}")

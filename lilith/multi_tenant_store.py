@@ -19,6 +19,13 @@ try:
 except ImportError:
     CONCEPT_STORE_AVAILABLE = False
 
+# Optional: Import concept taxonomy for entity type hierarchy
+try:
+    from .concept_taxonomy import ConceptTaxonomy
+    TAXONOMY_AVAILABLE = True
+except ImportError:
+    TAXONOMY_AVAILABLE = False
+
 
 class MultiTenantFragmentStore:
     """
@@ -106,6 +113,13 @@ class MultiTenantFragmentStore:
             print(f"  🧠 Concept store enabled: {concept_db_path}")
         else:
             self.concept_store = None
+        
+        # Concept taxonomy (if enabled)
+        if TAXONOMY_AVAILABLE:
+            self.taxonomy = ConceptTaxonomy()
+            print(f"  📚 Concept taxonomy initialized")
+        else:
+            self.taxonomy = None
     
     def retrieve_patterns(
         self,
@@ -389,12 +403,54 @@ class MultiTenantFragmentStore:
                         concept_id = self.concept_store.add_concept(**concept_dict)
                         
                         print(f"     ✓ Learned concept: {concept.term}")
+                        if concept.entity_type:
+                            print(f"       - Entity type: {concept.entity_type}")
                         if concept.type_relations:
                             print(f"       - Type: {concept.type_relations[0]}")
                         if concept.properties:
                             print(f"       - Properties: {', '.join(concept.properties[:3])}")
+                        
+                        # Add to taxonomy (Phase B: Entity recognition)
+                        if self.taxonomy and concept.entity_type:
+                            self._add_to_taxonomy(concept)
                 
             except Exception as e:
                 print(f"  ⚠️  Concept extraction failed: {e}")
         
         return pattern_id
+    
+    def _add_to_taxonomy(self, concept):
+        """
+        Add extracted concept to taxonomy with inferred relationships.
+        
+        Args:
+            concept: ExtractedConcept with entity_type and type_relations
+        """
+        if not self.taxonomy:
+            return
+        
+        try:
+            # Prepare parent types
+            parents = set()
+            
+            # Add entity type as parent
+            if concept.entity_type:
+                parents.add(concept.entity_type)
+            
+            # Add type relations as parents (normalize to taxonomy format)
+            for type_rel in concept.type_relations:
+                # Convert "programming language" → "programming_language"
+                normalized = type_rel.lower().replace(' ', '_').replace('-', '_')
+                parents.add(normalized)
+            
+            # Add to taxonomy
+            self.taxonomy.add_concept(
+                name=concept.term.lower().replace(' ', '_'),
+                parents=parents,
+                properties=set(concept.properties)
+            )
+            
+            print(f"       - Added to taxonomy with parents: {parents}")
+            
+        except Exception as e:
+            print(f"       ⚠️  Taxonomy add failed: {e}")
