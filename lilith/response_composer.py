@@ -1805,7 +1805,7 @@ class ResponseComposer:
         
         # Standard fallback if no external knowledge found
         return ComposedResponse(
-            text="I'm not sure how to respond to that yet. I'm still learning!",
+            text="I don't have information about that yet. If you know the answer, you can teach me by typing it as your next message, then upvoting with '/+'!",
             fragment_ids=["fallback"],
             composition_weights=[1.0],
             coherence_score=0.0,
@@ -1865,13 +1865,13 @@ class ResponseComposer:
         
         # Generate contextual fallback
         if is_question and is_technical:
-            fallback_text = "I don't have specific information about that topic yet. Could you ask about something related to what we've discussed, or rephrase your question?"
+            fallback_text = "I don't have specific information about that topic yet. If you know the answer, teach me by typing it and then use '/+' to upvote!"
         elif is_question:
-            fallback_text = "I'm not sure how to answer that. Could you rephrase or ask about something else?"
+            fallback_text = "I'm not sure how to answer that. You can teach me by providing the answer and upvoting with '/+'."
         elif is_technical:
-            fallback_text = "That's an interesting topic, but I don't have enough information about it in my learned patterns. Could we discuss something related?"
+            fallback_text = "That's an interesting topic, but I haven't learned about it yet. You can teach me by explaining it and using '/+' to confirm!"
         else:
-            fallback_text = "I'm not quite sure how to respond to that. Could you elaborate or try rephrasing?"
+            fallback_text = "I'm not quite sure how to respond. You can teach me the right response by typing it and upvoting with '/+'."
         
         print(f"     ⚠️  Low confidence ({best_score:.3f}) - using graceful fallback")
         

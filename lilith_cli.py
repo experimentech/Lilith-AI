@@ -208,7 +208,8 @@ def main():
                     else:
                         # Regular upvote for existing pattern
                         fragment_store.upvote(last_pattern_id)
-                        print("\n👍 Upvoted!")
+                        print(f"\n👍 Upvoted pattern: {last_pattern_id}")
+                        print(f"   Pattern reinforced - I'll be more confident using it!")
                 else:
                     print("\n⚠️  No recent response to upvote")
                 print()
@@ -217,7 +218,8 @@ def main():
             elif command == '-':
                 if last_pattern_id:
                     fragment_store.downvote(last_pattern_id)
-                    print("\n👎 Downvoted!")
+                    print(f"\n👎 Downvoted pattern: {last_pattern_id}")
+                    print(f"   Pattern weakened - I'll use it less often")
                 else:
                     print("\n⚠️  No recent response to downvote")
                 print()
@@ -255,8 +257,18 @@ def main():
         
         if response.modality:
             print(f"   [Modality: {response.modality}]")
+        
+        # Enhanced fallback feedback
         if response.is_fallback:
-            print(f"   [Fallback response - teach me!]")
+            if response.is_low_confidence:
+                # No knowledge found at all
+                print(f"   💡 I don't know about this yet. Teach me:")
+                print(f"      1. Type the correct answer as your next message")
+                print(f"      2. Upvote it with '/+' to help me learn!")
+            else:
+                # Wikipedia or external knowledge found
+                print(f"   📚 This is from external knowledge - not yet learned")
+                print(f"      Upvote with '/+' to teach me this pattern!")
         
         print()
 
