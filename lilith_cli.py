@@ -140,6 +140,23 @@ def main():
                         for term, freq in vocab_stats['top_technical'][:5]:
                             print(f"     - {term} ({freq})")
                 
+                # Show pattern stats if available
+                pattern_stats = fragment_store.get_pattern_stats()
+                if pattern_stats:
+                    print(f"\n📝 Syntactic Patterns:")
+                    print(f"   Total patterns: {pattern_stats['total_patterns']}")
+                    print(f"   Total matches: {pattern_stats['total_matches']}")
+                    
+                    if pattern_stats['by_intent']:
+                        print(f"\n   By intent:")
+                        for intent, count in pattern_stats['by_intent'].items():
+                            print(f"     - {intent}: {count}")
+                    
+                    if pattern_stats['top_patterns']:
+                        print(f"\n   Most frequent:")
+                        for template, freq, intent in pattern_stats['top_patterns'][:3]:
+                            print(f"     - {template} ({freq}x)")
+                
                 print()
                 continue
             

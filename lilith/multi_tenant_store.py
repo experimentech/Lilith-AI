@@ -33,6 +33,13 @@ try:
 except ImportError:
     VOCABULARY_TRACKER_AVAILABLE = False
 
+# Optional: Import pattern extractor
+try:
+    from .pattern_extractor import PatternExtractor
+    PATTERN_EXTRACTOR_AVAILABLE = True
+except ImportError:
+    PATTERN_EXTRACTOR_AVAILABLE = False
+
 
 class MultiTenantFragmentStore:
     """
@@ -142,6 +149,21 @@ class MultiTenantFragmentStore:
             print(f"  📖 Vocabulary tracker enabled: {vocab_db_path}")
         else:
             self.vocabulary = None
+        
+        # Pattern extractor (Phase D: Syntactic patterns)
+        if PATTERN_EXTRACTOR_AVAILABLE:
+            if user_identity.is_teacher():
+                # Teacher: use base patterns
+                pattern_db_path = str(Path(base_data_path) / "base" / "patterns.db")
+            else:
+                # User: isolated patterns
+                user_data_path = get_user_data_path(user_identity, base_data_path)
+                pattern_db_path = str(Path(user_data_path) / "patterns.db")
+            
+            self.pattern_extractor = PatternExtractor(pattern_db_path)
+            print(f"  📝 Pattern extractor enabled: {pattern_db_path}")
+        else:
+            self.pattern_extractor = None
     
     def retrieve_patterns(
         self,
@@ -456,6 +478,22 @@ class MultiTenantFragmentStore:
             except Exception as e:
                 print(f"  ⚠️  Vocabulary tracking failed: {e}")
         
+        # 4. Extract syntactic patterns (Phase D: Syntactic pattern learning)
+        if self.pattern_extractor:
+            try:
+                print(f"  📝 Extracting syntactic patterns...")
+                pattern_matches = self.pattern_extractor.extract_patterns(response_text, source="wikipedia")
+                
+                if pattern_matches:
+                    print(f"     ✓ Found {len(pattern_matches)} patterns")
+                    # Show unique pattern templates
+                    templates = set(m.pattern.template for m in pattern_matches)
+                    for template in list(templates)[:3]:  # Show top 3
+                        print(f"       - {template}")
+                
+            except Exception as e:
+                print(f"  ⚠️  Pattern extraction failed: {e}")
+        
         return pattern_id
     
     def _add_to_taxonomy(self, concept):
@@ -505,3 +543,15 @@ class MultiTenantFragmentStore:
             return None
         
         return self.vocabulary.get_vocabulary_stats()
+    
+    def get_pattern_stats(self) -> Optional[Dict]:
+        """
+        Get syntactic pattern statistics.
+        
+        Returns:
+            Dictionary with pattern stats or None if not enabled
+        """
+        if not self.pattern_extractor:
+            return None
+        
+        return self.pattern_extractor.get_pattern_stats()
