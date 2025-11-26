@@ -144,17 +144,24 @@ class DatabaseBackedFragmentStore:
     NEW: Success-based learning - tracks query→pattern outcomes to improve retrieval.
     """
     
-    def __init__(self, semantic_encoder, storage_path: str = "conversation_patterns.db"):
+    def __init__(
+        self, 
+        semantic_encoder, 
+        storage_path: str = "conversation_patterns.db",
+        vocabulary_tracker=None
+    ):
         """
         Initialize database-backed fragment store.
         
         Args:
             semantic_encoder: SemanticStage encoder (kept for compatibility)
             storage_path: SQLite database file path
+            vocabulary_tracker: Optional VocabularyTracker for query expansion
         """
         self.encoder = semantic_encoder
         self.storage_path = storage_path
         self.db = PatternDatabase(storage_path)
+        self.vocabulary_tracker = vocabulary_tracker
         
         # Calculate IDF scores for keyword weighting (brain: distinctiveness!)
         # Rare words like 'hi', 'beach' get higher weights than common 'you', 'it'
@@ -394,12 +401,14 @@ class DatabaseBackedFragmentStore:
         topk: int = 5,
         min_score: float = 0.0,
         semantic_weight: float = 0.3,
-        use_query_expansion: bool = True
+        use_query_expansion: bool = True,
+        use_vocabulary_expansion: bool = True
     ) -> List[Tuple[ResponsePattern, float]]:
         """
         Hybrid BNN embedding + keyword retrieval (OPEN BOOK EXAM architecture).
         
-        Enhanced with PMFlow QueryExpansion for better synonym matching.
+        Enhanced with PMFlow QueryExpansion and vocabulary-based query expansion
+        for better synonym matching and semantic coverage.
         
         This is the key innovation: BNN learns "how to index" patterns,
         database stores "what to retrieve". Like an open book exam where
@@ -414,6 +423,7 @@ class DatabaseBackedFragmentStore:
                 1.0 = pure semantic similarity
                 0.3 = hybrid (recommended)
             use_query_expansion: Use PMFlow query expansion for better synonym matching
+            use_vocabulary_expansion: Use vocabulary co-occurrence for term expansion
         
         Returns:
             List of (ResponsePattern, combined_score) tuples
@@ -421,7 +431,24 @@ class DatabaseBackedFragmentStore:
         # Step 1: BNN EMBEDDING - Learn "how to recognize" similar contexts
         # This is the "indexing skill" (open book exam)
         tokens = context.lower().split()
-        query_embedding = self.encoder.encode(tokens)  # BNN generates semantic representation
+        
+        # Step 1a: VOCABULARY EXPANSION - Augment tokens with related terms
+        if use_vocabulary_expansion and self.vocabulary_tracker:
+            try:
+                expanded_tokens = self.vocabulary_tracker.expand_query(
+                    tokens,
+                    max_related_per_term=2,  # Conservative: 2 related terms per token
+                    min_cooccurrence=2       # Require at least 2 co-occurrences
+                )
+                # Use expanded tokens for embedding
+                tokens_for_embedding = expanded_tokens
+            except Exception:
+                # Fallback to original tokens if expansion fails
+                tokens_for_embedding = tokens
+        else:
+            tokens_for_embedding = tokens
+        
+        query_embedding = self.encoder.encode(tokens_for_embedding)  # BNN generates semantic representation
         
         # NEW: Query expansion for synonym matching (ML → machine learning)
         if use_query_expansion and hasattr(self.encoder, 'pm_field'):
@@ -464,6 +491,18 @@ class DatabaseBackedFragmentStore:
         # Step 2: Get candidate patterns via keywords (fast filter)
         keyword_tuples = extract_keywords(context, 'query')
         keywords = [kw for kw, _, _ in keyword_tuples]
+        
+        # Step 2a: VOCABULARY EXPANSION for keywords - Add related terms
+        if use_vocabulary_expansion and self.vocabulary_tracker and keywords:
+            try:
+                expanded_keywords = self.vocabulary_tracker.expand_query(
+                    keywords,
+                    max_related_per_term=2,
+                    min_cooccurrence=2
+                )
+                keywords = expanded_keywords
+            except Exception:
+                pass  # Use original keywords on error
         
         if not keywords:
             # No keywords - fall back to top patterns

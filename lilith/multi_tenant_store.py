@@ -110,32 +110,8 @@ class MultiTenantFragmentStore:
             
             print(f"  👤 User mode: {user_identity.display_name} (isolated storage)")
         
-        # Concept store (if enabled)
-        if enable_concept_store and CONCEPT_STORE_AVAILABLE:
-            if user_identity.is_teacher():
-                # Teacher: use base concept store
-                concept_db_path = str(Path(base_data_path) / "base" / "concepts.db")
-            else:
-                # User: isolated concept store
-                user_data_path = get_user_data_path(user_identity, base_data_path)
-                concept_db_path = str(Path(user_data_path) / "concepts.db")
-            
-            self.concept_store = ProductionConceptStore(
-                semantic_encoder=encoder,
-                db_path=concept_db_path
-            )
-            print(f"  🧠 Concept store enabled: {concept_db_path}")
-        else:
-            self.concept_store = None
-        
-        # Concept taxonomy (if enabled)
-        if TAXONOMY_AVAILABLE:
-            self.taxonomy = ConceptTaxonomy()
-            print(f"  📚 Concept taxonomy initialized")
-        else:
-            self.taxonomy = None
-        
-        # Vocabulary tracker (if enabled)
+        # Vocabulary tracker (if enabled) - Initialize BEFORE concept store
+        # so we can pass it to concept store for query expansion
         if VOCABULARY_TRACKER_AVAILABLE:
             if user_identity.is_teacher():
                 # Teacher: use base vocabulary
@@ -149,6 +125,34 @@ class MultiTenantFragmentStore:
             print(f"  📖 Vocabulary tracker enabled: {vocab_db_path}")
         else:
             self.vocabulary = None
+        
+        # Concept store (if enabled) - Now with vocabulary integration
+        if enable_concept_store and CONCEPT_STORE_AVAILABLE:
+            if user_identity.is_teacher():
+                # Teacher: use base concept store
+                concept_db_path = str(Path(base_data_path) / "base" / "concepts.db")
+            else:
+                # User: isolated concept store
+                user_data_path = get_user_data_path(user_identity, base_data_path)
+                concept_db_path = str(Path(user_data_path) / "concepts.db")
+            
+            self.concept_store = ProductionConceptStore(
+                semantic_encoder=encoder,
+                db_path=concept_db_path,
+                vocabulary_tracker=self.vocabulary  # ← Now with vocabulary expansion!
+            )
+            print(f"  🧠 Concept store enabled: {concept_db_path}")
+            if self.vocabulary:
+                print(f"     ✨ Vocabulary-enhanced concept retrieval enabled")
+        else:
+            self.concept_store = None
+        
+        # Concept taxonomy (if enabled)
+        if TAXONOMY_AVAILABLE:
+            self.taxonomy = ConceptTaxonomy()
+            print(f"  📚 Concept taxonomy initialized")
+        else:
+            self.taxonomy = None
         
         # Pattern extractor (Phase D: Syntactic patterns)
         if PATTERN_EXTRACTOR_AVAILABLE:

@@ -405,6 +405,50 @@ class VocabularyTracker:
             ''', (term, term, limit))
             
             return cursor.fetchall()
+    
+    def expand_query(
+        self, 
+        query_tokens: List[str], 
+        max_related_per_term: int = 3,
+        min_cooccurrence: int = 2
+    ) -> List[str]:
+        """
+        Expand query tokens with related terms from vocabulary.
+        
+        Uses co-occurrence data to add semantically related terms,
+        improving recall for queries with synonyms or related concepts.
+        
+        Example:
+            Input: ["ML", "algorithm"]
+            Output: ["ML", "algorithm", "machine", "learning", "supervised"]
+        
+        Args:
+            query_tokens: Original query tokens
+            max_related_per_term: Max related terms to add per token
+            min_cooccurrence: Minimum co-occurrence count threshold
+            
+        Returns:
+            Expanded list of tokens (original + related)
+        """
+        expanded = list(query_tokens)  # Start with original
+        seen = set(t.lower() for t in query_tokens)
+        
+        for token in query_tokens:
+            # Get related terms from vocabulary
+            related = self.get_related_terms(token.lower(), limit=max_related_per_term * 2)
+            
+            # Add high-confidence related terms
+            added = 0
+            for related_term, count in related:
+                if count >= min_cooccurrence and related_term.lower() not in seen:
+                    expanded.append(related_term)
+                    seen.add(related_term.lower())
+                    added += 1
+                    
+                    if added >= max_related_per_term:
+                        break
+        
+        return expanded
 
 
 def demo():

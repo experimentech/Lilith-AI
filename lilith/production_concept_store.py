@@ -58,7 +58,8 @@ class ProductionConceptStore:
         self, 
         semantic_encoder,
         db_path: str,
-        consolidation_threshold: float = 0.85
+        consolidation_threshold: float = 0.85,
+        vocabulary_tracker=None
     ):
         """
         Initialize production concept store.
@@ -67,10 +68,12 @@ class ProductionConceptStore:
             semantic_encoder: PMFlowEmbeddingEncoder for embeddings
             db_path: Path to SQLite database
             consolidation_threshold: Threshold for merging similar concepts (0.85 recommended)
+            vocabulary_tracker: Optional VocabularyTracker for query expansion
         """
         self.encoder = semantic_encoder
         self.db = ConceptDatabase(db_path)
         self.consolidation_threshold = consolidation_threshold
+        self.vocabulary_tracker = vocabulary_tracker
         
         # Cache for concept embeddings (not persisted)
         self._embedding_cache: Dict[str, np.ndarray] = {}
@@ -166,7 +169,8 @@ class ProductionConceptStore:
         top_k: int = 5,
         min_similarity: float = 0.60,
         use_expansion: bool = True,
-        use_hierarchical: bool = True
+        use_hierarchical: bool = True,
+        use_vocabulary_expansion: bool = True
     ) -> List[Tuple[SemanticConcept, float]]:
         """
         Retrieve concepts by query text (PMFlow-enhanced).
@@ -177,6 +181,7 @@ class ProductionConceptStore:
             min_similarity: Minimum similarity threshold
             use_expansion: Use query expansion for synonym matching
             use_hierarchical: Use hierarchical filtering for speed
+            use_vocabulary_expansion: Use vocabulary co-occurrence for term expansion
             
         Returns:
             List of (concept, similarity_score) tuples
@@ -185,15 +190,29 @@ class ProductionConceptStore:
         if not concepts:
             return []
         
+        # Vocabulary expansion: Augment query with related terms
+        expanded_query_text = query_text
+        if use_vocabulary_expansion and self.vocabulary_tracker:
+            try:
+                tokens = query_text.lower().split()
+                expanded_tokens = self.vocabulary_tracker.expand_query(
+                    tokens,
+                    max_related_per_term=2,
+                    min_cooccurrence=2
+                )
+                expanded_query_text = ' '.join(expanded_tokens)
+            except Exception:
+                pass  # Fallback to original query
+        
         # Try PMFlow-enhanced retrieval
         if self.compositional_retrieval is not None:
             return self._pmflow_retrieve_by_text(
-                query_text, concepts, top_k, min_similarity,
+                expanded_query_text, concepts, top_k, min_similarity,
                 use_expansion, use_hierarchical
             )
         
         # Fallback: Manual retrieval
-        return self._manual_retrieve_by_text(query_text, concepts, top_k, min_similarity)
+        return self._manual_retrieve_by_text(expanded_query_text, concepts, top_k, min_similarity)
     
     def _pmflow_retrieve_by_text(
         self,
