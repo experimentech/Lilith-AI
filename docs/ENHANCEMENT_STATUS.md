@@ -67,39 +67,60 @@ composition_mode="parallel"
 
 ### ⚠️ 3. Cross-Reference Vocabulary with Embeddings
 
-**Status:** PARTIALLY IMPLEMENTED - NOT INTEGRATED
+**Status:** ✅ IMPLEMENTED (Phase 1 Complete - November 26, 2025)
 
 **What Exists:**
-- `VocabularyTracker` class with SQLite storage
-- Term frequency tracking
-- Co-occurrence matrix (5-word window)
-- `get_related_terms()` method available
-- Technical term classification
+- ✅ `VocabularyTracker` class with SQLite storage
+- ✅ Term frequency tracking
+- ✅ Co-occurrence matrix (5-word window)
+- ✅ `get_related_terms()` method available
+- ✅ Technical term classification
+- ✅ **NEW:** `expand_query()` method for vocabulary-based expansion
+- ✅ **NEW:** Integration in `DatabaseBackedFragmentStore.retrieve_patterns_hybrid()`
+- ✅ **NEW:** Integration in `ProductionConceptStore.retrieve_by_text()`
+- ✅ **NEW:** Multi-tenant support via `MultiTenantFragmentStore`
 
-**What's Missing:**
-- ❌ Vocabulary not used to enhance query embeddings
-- ❌ No query expansion using co-occurrence data
-- ❌ Related terms not used for semantic similarity
-- ❌ No embedding augmentation from vocabulary
-
-**Gap:**
+**Implementation:**
 ```python
-# Current: Query embedding uses only input tokens
-query_emb = encoder.encode(tokens)
+# Query expansion using co-occurrence
+expanded_tokens = vocabulary.expand_query(
+    ["machine", "learning"],
+    max_related_per_term=2,
+    min_cooccurrence=2
+)
+# Result: ["machine", "learning", "artificial intelligence", "data", "deep"]
 
-# Should be: Augment with related vocabulary
-related = vocabulary.get_related_terms(term)
-augmented_tokens = tokens + [r[0] for r in related[:3]]
-query_emb = encoder.encode(augmented_tokens)
+# Concept retrieval with vocabulary expansion
+results = concept_store.retrieve_by_text(
+    "ML",
+    use_vocabulary_expansion=True  # ← Enabled by default
+)
+# Expands "ML" → adds related terms → better recall
 ```
 
-**Required Work:**
-1. Query expansion using vocabulary co-occurrence
-2. Embedding enhancement with related terms
-3. Integration in `retrieve_patterns_hybrid()`
-4. Integration in `ProductionConceptStore.retrieve_by_text()`
+**Evidence:**
+```bash
+$ python tests/test_vocabulary_expansion.py
+✅ Query expansion is WORKING
+   - Queries augmented with related terms from co-occurrence data
 
-**Location:** `lilith/vocabulary_tracker.py` (exists but unused)
+Query: 'machine learning'
+Expanded: ['machine learning', 'artificial intelligence', 'data', 
+           'deep', 'deep learning', 'artificial']
+```
+
+**Impact:**
+- Improved recall for synonym queries ("ML" finds "machine learning")
+- Related term discovery enhances semantic coverage
+- Conservative parameters prevent query drift (max 2 terms, min 2 co-occurrences)
+
+**Location:**
+- `lilith/vocabulary_tracker.py` lines 407-461 (expand_query method)
+- `lilith/database_fragment_store.py` lines 150-153, 414-451 (integration)
+- `lilith/production_concept_store.py` lines 64-66, 171-212 (integration)
+- `tests/test_vocabulary_expansion.py` (test suite)
+
+**Status:** ✅ COMPLETE - Ready for production use
 
 ---
 

@@ -19,6 +19,13 @@ from .response_fragments import ResponseFragmentStore, ResponsePattern
 from .conversation_state import ConversationState
 from .bnn_intent_classifier import BNNIntentClassifier
 
+# Optional: Import query pattern matcher for query understanding
+try:
+    from .query_pattern_matcher import QueryPatternMatcher, QueryMatch
+    QUERY_PATTERN_MATCHING_AVAILABLE = True
+except ImportError:
+    QUERY_PATTERN_MATCHING_AVAILABLE = False
+
 # Optional: Import concept store and template composer for compositional responses
 try:
     from .production_concept_store import ProductionConceptStore
@@ -154,6 +161,12 @@ class ResponseComposer:
         elif enable_modal_routing and not MODAL_ROUTING_AVAILABLE:
             print("  ⚠️  Modal routing not available")
         
+        # Initialize query pattern matcher for query understanding
+        self.query_matcher = None
+        if QUERY_PATTERN_MATCHING_AVAILABLE:
+            self.query_matcher = QueryPatternMatcher()
+            print("  🔍 Query pattern matching enabled!")
+        
         # Track metrics for pattern vs concept approaches
         self.metrics = {
             'pattern_count': 0,
@@ -286,7 +299,21 @@ class ResponseComposer:
         Separated to avoid recursion with parallel mode.
         """
         
-        # 1. Classify intent using BNN if available
+        # 0. QUERY PATTERN MATCHING - Extract query structure and intent
+        query_match = None
+        main_concept = None
+        if self.query_matcher and user_input:
+            query_match = self.query_matcher.match_query(user_input)
+            if query_match and query_match.confidence > 0.75:
+                # Extracted structural information from query
+                main_concept = self.query_matcher.extract_main_concept(query_match)
+                
+                # Use query intent to override BNN intent (more reliable)
+                if query_match.confidence > 0.85:
+                    intent_hint = query_match.intent
+                    use_intent_filtering = False  # Skip BNN, we have better intent
+        
+        # 1. Classify intent using BNN if available (if not already extracted from query)
         intent_hint = None
         if use_intent_filtering and self.intent_classifier is not None and user_input:
             # BNN extracts semantic intent
@@ -1717,6 +1744,14 @@ class ResponseComposer:
         """
         self.metrics['parallel_uses'] += 1
         
+        # 0. Extract query structure if available
+        query_match = None
+        main_concept = None
+        if self.query_matcher and user_input:
+            query_match = self.query_matcher.match_query(user_input)
+            if query_match and query_match.confidence > 0.75:
+                main_concept = self.query_matcher.extract_main_concept(query_match)
+        
         # 1. Try pattern-based approach (call internal method to avoid recursion)
         pattern_response = self._compose_from_patterns_internal(
             context,
@@ -1727,11 +1762,19 @@ class ResponseComposer:
             semantic_weight=0.5
         )
         
-        # 2. Try concept-based approach
-        concept_response = self._compose_from_concepts(
-            context,
-            user_input
-        )
+        # 2. Try concept-based approach (use extracted concept if available)
+        if main_concept:
+            # Use extracted concept for focused retrieval
+            concept_response = self._compose_from_concepts(
+                context,
+                main_concept  # Use extracted concept instead of full query
+            )
+        else:
+            # Fallback to full query
+            concept_response = self._compose_from_concepts(
+                context,
+                user_input
+            )
         
         # 3. Choose best response
         if concept_response and not concept_response.is_low_confidence:
