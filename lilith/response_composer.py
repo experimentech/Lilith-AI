@@ -57,6 +57,13 @@ except ImportError:
     MODAL_ROUTING_AVAILABLE = False
     Modality = None  # type: ignore
 
+# Optional: Import reasoning stage for deliberative thinking
+try:
+    from .reasoning_stage import ReasoningStage, DeliberationResult
+    REASONING_AVAILABLE = True
+except ImportError:
+    REASONING_AVAILABLE = False
+
 
 @dataclass
 class ComposedResponse:
@@ -166,6 +173,19 @@ class ResponseComposer:
         if QUERY_PATTERN_MATCHING_AVAILABLE:
             self.query_matcher = QueryPatternMatcher()
             print("  🔍 Query pattern matching enabled!")
+        
+        # Initialize reasoning stage for deliberative thinking
+        self.reasoning_stage = None
+        if REASONING_AVAILABLE and semantic_encoder is not None:
+            try:
+                self.reasoning_stage = ReasoningStage(
+                    encoder=semantic_encoder,
+                    concept_store=concept_store,
+                    deliberation_steps=3,  # Quick deliberation by default
+                    convergence_threshold=0.75
+                )
+            except Exception as e:
+                print(f"  ⚠️  Reasoning stage not available: {e}")
         
         # Track metrics for pattern vs concept approaches
         self.metrics = {
@@ -299,12 +319,21 @@ class ResponseComposer:
         Separated to avoid recursion with parallel mode.
         """
         
-        # 0. QUERY PATTERN MATCHING - Extract query structure and intent
+        # 0. EARLY REASONING: Clean query of filler phrases before any processing
+        # This resolves "I mean, what can you do?" → "what can you do?"
+        cleaned_user_input = user_input
+        if self.reasoning_stage and user_input:
+            cleaned_user_input = self.reasoning_stage.clean_query(user_input)
+            if cleaned_user_input.lower() != user_input.lower().strip():
+                print(f"  🧹 Cleaned query: '{user_input}' → '{cleaned_user_input}'")
+        
+        # 1. QUERY PATTERN MATCHING - Extract query structure and intent
+        # Use CLEANED query for better pattern matching
         query_match = None
         main_concept = None
         intent_hint = None  # Initialize intent hint
-        if self.query_matcher and user_input:
-            query_match = self.query_matcher.match_query(user_input)
+        if self.query_matcher and cleaned_user_input:
+            query_match = self.query_matcher.match_query(cleaned_user_input)
             if query_match and query_match.confidence > 0.75:
                 # Extracted structural information from query
                 main_concept = self.query_matcher.extract_main_concept(query_match)
@@ -314,21 +343,22 @@ class ResponseComposer:
                     intent_hint = query_match.intent
                     use_intent_filtering = False  # Skip BNN, we have better intent
         
-        # 1. Classify intent using BNN if available (if not already extracted from query)
-        if intent_hint is None and use_intent_filtering and self.intent_classifier is not None and user_input:
+        # 2. Classify intent using BNN if available (if not already extracted from query)
+        if intent_hint is None and use_intent_filtering and self.intent_classifier is not None and cleaned_user_input:
             # BNN extracts semantic intent
-            intent_scores = self.intent_classifier.classify_intent(user_input, topk=1)
+            intent_scores = self.intent_classifier.classify_intent(cleaned_user_input, topk=1)
             
             if intent_scores and intent_scores[0][1] > 0.5:  # Reasonable confidence
                 intent_hint = intent_scores[0][0]  # Top intent label
         
-        # 2. RETRIEVE PATTERNS - Choose method based on configuration  
+        # 3. RETRIEVE PATTERNS - Choose method based on configuration  
         # MULTI-TURN COHERENCE: Use enriched context (includes history + topics)
         # instead of just raw user_input for better topic continuity
         # 
         # Context format: "Previous: X → Y | Earlier: Z | Current: user_input"
         # This helps resolve pronouns and maintain topic threads
-        retrieval_query = context  # Use rich context, not just user_input
+        # Use cleaned query for retrieval if available
+        retrieval_query = context if context != user_input else cleaned_user_input
         
         if use_semantic_retrieval and hasattr(self.fragments, 'retrieve_patterns_hybrid'):
             # NEW PATH: BNN embedding + keyword hybrid (OPEN BOOK EXAM)
@@ -408,7 +438,33 @@ class ResponseComposer:
             if uncovered_in_query and not any(t in response_lower for t in uncovered_in_query):
                 return self._fallback_response_low_confidence(user_input, best_pattern, best_score)
             
-        # 3. PATTERN ADAPTATION: Use pattern as template, not verbatim
+        # 3. REASONING STAGE: Deliberate on query before composition
+        # This adds a "thinking" step where the BNN explores concept connections
+        deliberation_result = None
+        if self.reasoning_stage and user_input:
+            try:
+                # Run deliberation with retrieved patterns
+                deliberation_result = self.reasoning_stage.reason_about(
+                    query=user_input,
+                    retrieved_patterns=patterns[:5],  # Top 5 patterns
+                    context=context
+                )
+                
+                # If reasoning resolved a clearer intent, use it
+                if deliberation_result.resolved_intent and not intent_hint:
+                    intent_hint = deliberation_result.resolved_intent
+                    
+                # Print reasoning summary for visibility
+                summary = self.reasoning_stage.get_reasoning_summary(deliberation_result)
+                if summary and deliberation_result.inferences:
+                    print(summary)
+                    
+            except Exception as e:
+                # Reasoning is optional - don't fail if it errors
+                import logging
+                logging.debug(f"Reasoning stage error: {e}")
+            
+        # 4. PATTERN ADAPTATION: Use pattern as template, not verbatim
         # Brain-like: retrieved pattern provides structure/intent, BNN adapts to context
         if user_input and best_score > 0.75:
             # High confidence - adapt pattern to current context
