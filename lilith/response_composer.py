@@ -338,7 +338,8 @@ class ResponseComposer:
                 retrieval_query,
                 topk=topk * 3,
                 min_score=0.0,
-                semantic_weight=semantic_weight
+                semantic_weight=semantic_weight,
+                intent_filter=intent_hint  # Pass extracted intent for filtering
             )
             
             # MULTI-TURN COHERENCE: Boost patterns that match active conversation topics

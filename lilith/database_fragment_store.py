@@ -402,7 +402,8 @@ class DatabaseBackedFragmentStore:
         min_score: float = 0.0,
         semantic_weight: float = 0.3,
         use_query_expansion: bool = True,
-        use_vocabulary_expansion: bool = True
+        use_vocabulary_expansion: bool = True,
+        intent_filter: Optional[str] = None
     ) -> List[Tuple[ResponsePattern, float]]:
         """
         Hybrid BNN embedding + keyword retrieval (OPEN BOOK EXAM architecture).
@@ -420,7 +421,7 @@ class DatabaseBackedFragmentStore:
             min_score: Minimum success score threshold
             semantic_weight: How much to weight BNN embeddings vs keywords (0.0-1.0)
                 0.0 = pure keywords (current system)
-                1.0 = pure semantic similarity
+                1.1 = pure semantic similarity
                 0.3 = hybrid (recommended)
             use_query_expansion: Use PMFlow query expansion for better synonym matching
             use_vocabulary_expansion: Use vocabulary co-occurrence for term expansion
@@ -591,6 +592,19 @@ class DatabaseBackedFragmentStore:
             hybrid_score = max(0.0, min(2.0, hybrid_score))
             
             scored_patterns.append((pattern, hybrid_score))
+        
+        # Step 4b: INTENT FILTERING - If intent hint provided, boost matching patterns
+        if intent_filter:
+            intent_boosted = []
+            for pattern, score in scored_patterns:
+                if pattern.intent == intent_filter:
+                    # Strong boost for exact intent match
+                    boosted_score = score * 2.0
+                else:
+                    # Keep other patterns but with lower scores
+                    boosted_score = score * 0.3
+                intent_boosted.append((pattern, boosted_score))
+            scored_patterns = intent_boosted
         
         # Sort by combined score
         scored_patterns.sort(key=lambda x: x[1], reverse=True)

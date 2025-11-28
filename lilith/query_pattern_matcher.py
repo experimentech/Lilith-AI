@@ -209,6 +209,52 @@ class QueryPatternMatcher:
                     "who created rust",
                     "who invented python"
                 ]
+            },
+            
+            # Meta queries (about the system itself)
+            {
+                "template": "what can you do",
+                "regex": r"(?:what\s+)?(?:can|could|do)\s+you\s+do(?:\?|$)",  # Removed ^ anchor
+                "intent": "capability",  # Match base pattern intent
+                "slots": [],
+                "examples": [
+                    "what can you do",
+                    "what do you do",
+                    "what could you do",
+                    "tell me what you can do"
+                ]
+            },
+            {
+                "template": "tell me about yourself",
+                "regex": r"(?:tell\s+me\s+)?(?:about\s+)?(?:yourself|you|your\s+capabilities)(?:\?|$)",  # Removed ^ anchor
+                "intent": "capability",  # Match base pattern intent
+                "slots": [],
+                "examples": [
+                    "tell me about yourself",
+                    "about you",
+                    "your capabilities"
+                ]
+            },
+            {
+                "template": "what are you",
+                "regex": r"(?:what\s+)?(?:are|is)\s+you(?:\?|$)",  # Removed ^ anchor
+                "intent": "identity",  # Match base pattern intent
+                "slots": [],
+                "examples": [
+                    "what are you",
+                    "what is you"
+                ]
+            },
+            {
+                "template": "help",
+                "regex": r"(?:^|\s)(?:help|how\s+do\s+i\s+use\s+(?:this|you))(?:\?|$)",  # Match at start or after whitespace
+                "intent": "capability",  # Match base pattern intent
+                "slots": [],
+                "examples": [
+                    "help",
+                    "how do i use this",
+                    "how do i use you"
+                ]
             }
         ]
     

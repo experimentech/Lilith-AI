@@ -225,6 +225,74 @@ class MultiTenantFragmentStore:
         # Return without source marker
         return [(pattern, conf) for pattern, conf, _ in top_matches]
     
+    def retrieve_patterns_hybrid(
+        self,
+        context: str,
+        topk: int = 5,
+        min_score: float = 0.0,
+        semantic_weight: float = 0.3,
+        use_query_expansion: bool = True,
+        use_vocabulary_expansion: bool = True,
+        intent_filter: Optional[str] = None
+    ) -> List[Tuple[ResponsePattern, float]]:
+        """
+        Hybrid BNN + keyword retrieval across user and base stores.
+        
+        Args:
+            context: User input/conversation context
+            topk: Number of patterns to retrieve
+            min_score: Minimum success score threshold
+            semantic_weight: Weight for BNN embeddings vs keywords
+            use_query_expansion: Use PMFlow query expansion
+            use_vocabulary_expansion: Use vocabulary co-occurrence expansion
+            intent_filter: Optional intent to filter/boost patterns
+        
+        Returns:
+            List of (pattern, score) tuples
+        """
+        all_matches = []
+        
+        # Get matches from user store (if exists)
+        if self.user_store and hasattr(self.user_store, 'retrieve_patterns_hybrid'):
+            user_matches = self.user_store.retrieve_patterns_hybrid(
+                context,
+                topk=topk,
+                min_score=min_score,
+                semantic_weight=semantic_weight,
+                use_query_expansion=use_query_expansion,
+                use_vocabulary_expansion=use_vocabulary_expansion,
+                intent_filter=intent_filter
+            )
+            for pattern, score in user_matches:
+                all_matches.append((pattern, score, "user"))
+        
+        # Get matches from base store
+        if hasattr(self.base_store, 'retrieve_patterns_hybrid'):
+            base_matches = self.base_store.retrieve_patterns_hybrid(
+                context,
+                topk=topk,
+                min_score=min_score,
+                semantic_weight=semantic_weight,
+                use_query_expansion=use_query_expansion,
+                use_vocabulary_expansion=use_vocabulary_expansion,
+                intent_filter=intent_filter
+            )
+            for pattern, score in base_matches:
+                all_matches.append((pattern, score, "base"))
+        
+        # Sort by score and take top-k
+        all_matches.sort(key=lambda x: x[1], reverse=True)
+        top_matches = all_matches[:topk]
+        
+        # Debug info for best match
+        if top_matches:
+            _, _, source = top_matches[0]
+            marker = "📘" if source == "base" else "📗"
+            print(f"     {marker} Retrieved from {source} knowledge")
+        
+        # Return without source marker
+        return [(pattern, score) for pattern, score, _ in top_matches]
+    
     def add_pattern(
         self,
         trigger_context: str,
