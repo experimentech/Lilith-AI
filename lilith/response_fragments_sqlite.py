@@ -475,6 +475,18 @@ class ResponseFragmentStoreSQLite:
         
         # Compute similarities (hybrid: semantic + fuzzy matching)
         scored_patterns = []
+        
+        # Parse query to extract SUBJECT slot for comparison
+        query_subject = None
+        try:
+            from .query_pattern_matcher import QueryPatternMatcher
+            qpm = QueryPatternMatcher()
+            query_match = qpm.match_query(context)
+            if query_match and 'SUBJECT' in query_match.slots:
+                query_subject = query_match.slots['SUBJECT'].lower()
+        except Exception:
+            pass  # Pattern matching not available, skip subject check
+        
         for pattern in patterns:
             # First try fuzzy matching for exact/near-exact matches
             fuzzy_score = 0.0
@@ -484,10 +496,30 @@ class ResponseFragmentStoreSQLite:
                     pattern.trigger_context,
                     min_similarity=0.75
                 )
-                # If fuzzy match is strong, use it directly
+                # If fuzzy match is strong, verify subjects match before accepting
                 if is_match and fuzzy_score >= 0.9:
-                    scored_patterns.append((pattern, float(fuzzy_score)))
-                    continue
+                    # Subject-level guard: if we extracted a SUBJECT from the query,
+                    # check that the pattern's trigger has the same subject
+                    if query_subject:
+                        pattern_match = qpm.match_query(pattern.trigger_context)
+                        if pattern_match and 'SUBJECT' in pattern_match.slots:
+                            pattern_subject = pattern_match.slots['SUBJECT'].lower()
+                            if query_subject != pattern_subject:
+                                # Subjects differ! Don't accept as direct fuzzy match
+                                # Let it go through semantic scoring instead
+                                fuzzy_score = fuzzy_score * 0.3  # Heavily penalize
+                            else:
+                                # Subjects match, accept direct fuzzy match
+                                scored_patterns.append((pattern, float(fuzzy_score)))
+                                continue
+                        else:
+                            # Pattern has no SUBJECT slot, accept fuzzy match
+                            scored_patterns.append((pattern, float(fuzzy_score)))
+                            continue
+                    else:
+                        # No query subject extracted, accept fuzzy match as-is
+                        scored_patterns.append((pattern, float(fuzzy_score)))
+                        continue
             
             # Get or compute embedding for semantic matching
             if pattern.embedding_cache:
@@ -518,6 +550,19 @@ class ResponseFragmentStoreSQLite:
                 else:
                     # Long phrase: 40% fuzzy, 60% semantic
                     combined_score = (0.4 * fuzzy_score) + (0.6 * semantic_sim)
+                
+                # Subject mismatch penalty: if query has a specific SUBJECT and
+                # pattern has a different SUBJECT, heavily penalize the score
+                if query_subject:
+                    try:
+                        pattern_match = qpm.match_query(pattern.trigger_context)
+                        if pattern_match and 'SUBJECT' in pattern_match.slots:
+                            pattern_subject = pattern_match.slots['SUBJECT'].lower()
+                            if query_subject != pattern_subject:
+                                # Different subjects - this is likely a wrong match
+                                combined_score = combined_score * 0.1  # 90% penalty
+                    except Exception:
+                        pass
                 
                 scored_patterns.append((pattern, float(combined_score)))
         

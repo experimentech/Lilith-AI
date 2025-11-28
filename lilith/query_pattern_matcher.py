@@ -79,6 +79,18 @@ class QueryPatternMatcher:
                     "define machine learning"
                 ]
             },
+            # Knowledge-check / learned-knowledge queries
+            {
+                "template": "do you know what [SUBJECT] is",
+                "regex": r"^do\s+you\s+know\s+what\s+(?:a\s+|an\s+|the\s+)?(.+?)\s+is(?:\?|$)",
+                "intent": "learned_knowledge",
+                "slots": ["SUBJECT"],
+                "examples": [
+                    "do you know what a banana is",
+                    "do you know what an apple is",
+                    "do you know what photosynthesis is"
+                ]
+            },
             
             # Mechanism/How queries
             {
