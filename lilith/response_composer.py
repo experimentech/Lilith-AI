@@ -302,6 +302,7 @@ class ResponseComposer:
         # 0. QUERY PATTERN MATCHING - Extract query structure and intent
         query_match = None
         main_concept = None
+        intent_hint = None  # Initialize intent hint
         if self.query_matcher and user_input:
             query_match = self.query_matcher.match_query(user_input)
             if query_match and query_match.confidence > 0.75:
@@ -314,8 +315,7 @@ class ResponseComposer:
                     use_intent_filtering = False  # Skip BNN, we have better intent
         
         # 1. Classify intent using BNN if available (if not already extracted from query)
-        intent_hint = None
-        if use_intent_filtering and self.intent_classifier is not None and user_input:
+        if intent_hint is None and use_intent_filtering and self.intent_classifier is not None and user_input:
             # BNN extracts semantic intent
             intent_scores = self.intent_classifier.classify_intent(user_input, topk=1)
             
