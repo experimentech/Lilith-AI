@@ -573,6 +573,56 @@ class ResponseFragmentStoreSQLite:
         
         conn.close()
     
+    def retrieve_patterns_hybrid(
+        self,
+        context: str,
+        topk: int = 5,
+        min_score: float = 0.0,
+        semantic_weight: float = 0.3,
+        use_query_expansion: bool = True,
+        use_vocabulary_expansion: bool = True,
+        intent_filter: Optional[str] = None
+    ) -> List[Tuple[ResponsePattern, float]]:
+        """
+        Simplified hybrid retrieval for ResponseFragmentStoreSQLite.
+        
+        Note: This is a compatibility method that wraps retrieve_patterns.
+        Full hybrid retrieval with BNN embeddings + keyword matching is in DatabaseBackedFragmentStore.
+        This version uses standard retrieval but adds intent filtering.
+        
+        Args:
+            context: User input/conversation context
+            topk: Number of patterns to retrieve
+            min_score: Minimum success score threshold
+            semantic_weight: Ignored (for compatibility)
+            use_query_expansion: Ignored (for compatibility)
+            use_vocabulary_expansion: Ignored (for compatibility)
+            intent_filter: Optional intent to filter/boost patterns
+        
+        Returns:
+            List of (ResponsePattern, score) tuples
+        """
+        # Use standard retrieval
+        patterns = self.retrieve_patterns(context, topk=topk * 3, min_score=min_score)
+        
+        # Apply intent filtering if provided
+        if intent_filter and patterns:
+            boosted = []
+            for pattern, score in patterns:
+                if pattern.intent == intent_filter:
+                    # Strong boost for exact intent match
+                    boosted_score = score * 2.0
+                else:
+                    # Keep other patterns but with lower scores
+                    boosted_score = score * 0.3
+                boosted.append((pattern, boosted_score))
+            
+            # Re-sort and limit
+            boosted.sort(key=lambda x: x[1], reverse=True)
+            return boosted[:topk]
+        
+        return patterns[:topk]
+    
     def upvote(self, fragment_id: str, strength: float = 0.2):
         """
         Manual positive feedback - reward a good response.

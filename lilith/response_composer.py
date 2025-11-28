@@ -591,6 +591,11 @@ class ResponseComposer:
         Returns:
             Adapted response text
         """
+        # For meta-queries (capability/identity), use pattern verbatim
+        # These are factual responses about the system itself
+        if hasattr(pattern, 'intent') and pattern.intent in ['capability', 'identity']:
+            return pattern.response_text
+        
         # Step 1: Analyze pattern structure
         pattern_intent = pattern.intent if hasattr(pattern, 'intent') else "statement"
         is_question = "?" in pattern.response_text
@@ -717,8 +722,13 @@ class ResponseComposer:
         # Check what user is asking about
         user_lower = user_input.lower()
         
-        # Capability questions
-        if any(phrase in user_lower for phrase in ["what can you", "what do you", "can you help"]):
+        # Capability/identity questions - use pattern verbatim if it's appropriate
+        if any(phrase in user_lower for phrase in ["what can you", "what do you", "can you help", 
+                                                    "who are you", "what are you"]):
+            # If pattern is capability/identity-related, trust it
+            if pattern.intent in ["capability", "identity"]:
+                return pattern.response_text
+            # Otherwise use generic fallback
             return "I can help answer questions and discuss various topics. What would you like to explore?"
         
         # Interest/preference questions  
