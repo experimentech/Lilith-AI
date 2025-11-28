@@ -47,6 +47,29 @@ class QueryPatternMatcher:
         Focused on extracting what the user wants to know.
         """
         return [
+            # Identity queries (about the AI itself) - MUST come before general "what is" pattern
+            {
+                "template": "what is your name",
+                "regex": r"^(?:what\s+is|what's|whats)\s+your\s+name(?:\?|$)",
+                "intent": "identity",
+                "slots": [],
+                "examples": [
+                    "what is your name",
+                    "what's your name",
+                    "whats your name"
+                ]
+            },
+            {
+                "template": "who are you",
+                "regex": r"^who\s+are\s+you(?:\?|$)",
+                "intent": "identity",
+                "slots": [],
+                "examples": [
+                    "who are you",
+                    "who are you?"
+                ]
+            },
+            
             # Definition queries
             {
                 "template": "what is [SUBJECT]",

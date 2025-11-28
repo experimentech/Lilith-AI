@@ -1135,6 +1135,18 @@ class ResponseComposer:
         fragment_ids = [primary_pattern.fragment_id]
         weights = [primary_weight]
         
+        # Factual intents should NOT be blended - they have specific correct answers
+        factual_intents = {'identity', 'capability', 'meta'}
+        if primary_pattern.intent in factual_intents and primary_weight >= 0.9:
+            # High-confidence factual pattern - return as-is, no blending
+            return ComposedResponse(
+                text=response_text,
+                fragment_ids=fragment_ids,
+                composition_weights=weights,
+                coherence_score=primary_weight,
+                primary_pattern=primary_pattern
+            )
+        
         # Calculate weight ratio between top two patterns
         # If they're close, blending makes sense
         should_blend = False
