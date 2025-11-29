@@ -91,3 +91,8 @@ Pushing-Medium/
 # Benchmarks output
 benchmarks/results/
 benchmarks/data/
+
+# Environment files (contains secrets)
+.env
+.env.local
+.env.*.local
