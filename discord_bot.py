@@ -359,7 +359,14 @@ class LilithDiscordBot:
             if message.author == self.bot.user:
                 return
             
-            # Ignore messages that are commands
+            # Debug: Log all incoming messages
+            print(f"  📨 Message from {message.author}: '{message.content[:50]}...' mentions={[u.name for u in message.mentions]}")
+            
+            # Ignore messages that are commands (slash commands handled separately)
+            if message.content.startswith('/'):
+                return
+            
+            # Process prefix commands
             if message.content.startswith(self.bot.command_prefix):
                 await self.bot.process_commands(message)
                 return
@@ -368,7 +375,16 @@ class LilithDiscordBot:
             is_dm = isinstance(message.channel, discord.DMChannel)
             is_mentioned = self.bot.user in message.mentions
             
-            if not (is_dm or is_mentioned):
+            # Also check for role mentions that match the bot's name
+            is_role_mentioned = any(
+                role.name.lower() == self.bot.user.name.lower() 
+                for role in message.role_mentions
+            )
+            
+            print(f"  📨 is_dm={is_dm}, is_mentioned={is_mentioned}, is_role_mentioned={is_role_mentioned}")
+            
+            if not (is_dm or is_mentioned or is_role_mentioned):
+                print(f"  📨 Ignoring (not DM and not mentioned)")
                 return
             
             # Remove mention from message
@@ -377,7 +393,16 @@ class LilithDiscordBot:
                 content = content.replace(f'<@{self.bot.user.id}>', '').strip()
                 content = content.replace(f'<@!{self.bot.user.id}>', '').strip()
             
+            # Also remove role mentions
+            if is_role_mentioned:
+                for role in message.role_mentions:
+                    if role.name.lower() == self.bot.user.name.lower():
+                        content = content.replace(f'<@&{role.id}>', '').strip()
+            
+            print(f"  📨 Processing: '{content}'")
+            
             if not content:
+                print(f"  📨 Empty content after removing mention, ignoring")
                 return
             
             # Process the message
@@ -645,6 +670,7 @@ class LilithDiscordBot:
                 name="Commands",
                 value=(
                     "`/setname` - Set your preferred name\n"
+                    "`/teach` - Teach me new knowledge\n"
                     "`/whoami` - See what I know about you\n"
                     "`/stats` - View statistics\n"
                     "`/forget` - Clear conversation history\n"
@@ -666,12 +692,61 @@ class LilithDiscordBot:
             embed.add_field(
                 name="Teaching Me",
                 value=(
-                    "• Tell me facts and I'll remember them\n"
+                    "• Use `/teach` to teach me new things\n"
                     "• Say 'My name is X' and I'll call you that\n"
-                    "• Correct me when I'm wrong"
+                    "• React 👍 to responses I should remember"
                 ),
                 inline=False
             )
+            
+            await interaction.response.send_message(embed=embed)
+        
+        @self.bot.tree.command(name="teach", description="Teach Lilith something new")
+        @app_commands.describe(
+            question="What someone might ask (e.g., 'what color are apples?')",
+            answer="The correct answer (e.g., 'Apples can be red, green, or yellow')"
+        )
+        async def teach(interaction, question: str, answer: str):
+            """Teach Lilith a new pattern."""
+            user_id = self._get_user_id(interaction.user)
+            
+            # Get or create store for this user
+            if user_id not in self._user_stores:
+                # Initialize user components if needed
+                self._get_or_create_composer(interaction.user)
+            
+            store = self._user_stores.get(user_id)
+            
+            if not store:
+                await interaction.response.send_message(
+                    "❌ Sorry, I couldn't set up your learning space. Try again!",
+                    ephemeral=True
+                )
+                return
+            
+            try:
+                # Add the pattern to the user's store
+                pattern_id = store.add_pattern(
+                    pattern=question.lower().strip(),
+                    response=answer.strip(),
+                    intent="taught",
+                    success_rate=0.8
+                )
+                
+                await interaction.response.send_message(
+                    f"✅ **Learned!**\n"
+                    f"Q: *{question}*\n"
+                    f"A: {answer}\n\n"
+                    f"I'll remember this! Try asking me the question now. 🎓"
+                )
+                print(f"  📚 User {user_id} taught: '{question}' → '{answer}'")
+                
+            except Exception as e:
+                await interaction.response.send_message(
+                    f"❌ Sorry, I had trouble learning that: {e}",
+                    ephemeral=True
+                )
+                print(f"  ⚠️ Teaching error: {e}")
             
             await interaction.response.send_message(embed=embed)
     
@@ -745,6 +820,13 @@ class LilithDiscordBot:
                         
             except asyncio.CancelledError:
                 pass
+            except Exception as e:
+                print(f"  Error during shutdown: {e}")
+            finally:
+                # Ensure clean shutdown
+                if not self.bot.is_closed():
+                    await self.bot.close()
+                print("✅ Bot shut down cleanly")
     
     async def _console_loop(self):
         """Interactive console loop running alongside the bot."""
