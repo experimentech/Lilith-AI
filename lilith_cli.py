@@ -24,6 +24,13 @@ try:
 except ImportError:
     AUTO_LEARNING_AVAILABLE = False
 
+# Optional: Automatic feedback detection
+try:
+    from lilith.feedback_detector import FeedbackDetector, FeedbackTracker
+    FEEDBACK_DETECTION_AVAILABLE = True
+except ImportError:
+    FEEDBACK_DETECTION_AVAILABLE = False
+
 
 def main():
     """Run multi-tenant Lilith CLI"""
@@ -100,7 +107,23 @@ def main():
         if auto_state_path.exists():
             auto_learner.load_state(auto_state_path)
     
+    # Initialize automatic feedback detection
+    feedback_tracker = None
+    if FEEDBACK_DETECTION_AVAILABLE:
+        feedback_tracker = FeedbackTracker(
+            detector=FeedbackDetector(
+                min_confidence=0.4,
+                apply_threshold=0.5,
+                strong_strength=0.2,
+                weak_strength=0.1
+            )
+        )
+    
     print("🤖 Lilith initialized")
+    if feedback_tracker:
+        print("   🎯 Auto-feedback detection enabled")
+    if auto_learner:
+        print("   📚 Auto-learning from conversations enabled")
     print()
     
     # Show pattern counts
@@ -201,10 +224,31 @@ def main():
                 print("   /quit    - Exit the program")
                 print("   /exit    - Exit the program")
                 print("   /stats   - Show pattern statistics")
+                print("   /feedback- Show auto-feedback stats")
                 print("   /reset   - Reset your data (with backup)")
                 print("   /+       - Upvote last response")
                 print("   /-       - Downvote last response")
                 print("   /?       - Show last pattern ID")
+                print()
+                continue
+            
+            elif command == 'feedback':
+                if feedback_tracker:
+                    stats = feedback_tracker.get_stats()
+                    print("\n📊 Auto-Feedback Statistics:")
+                    print(f"   Total interactions: {stats['total_interactions']}")
+                    print(f"   Positive signals: {stats['positive']} ({stats['positive_rate']:.1%})")
+                    print(f"   Negative signals: {stats['negative']} ({stats['negative_rate']:.1%})")
+                    print(f"   Neutral: {stats['neutral']}")
+                    
+                    recent = feedback_tracker.get_recent_feedback(5)
+                    if recent:
+                        print("\n   Recent feedback:")
+                        for r in recent:
+                            signal = r['feedback']
+                            print(f"     - '{r['input']}' → {signal}")
+                else:
+                    print("\n⚠️  Feedback detection not available")
                 print()
                 continue
             
@@ -275,6 +319,20 @@ def main():
                 print()
                 continue
         
+        # Check for automatic feedback signals BEFORE processing current input
+        if feedback_tracker and last_user_input and last_response_text:
+            feedback_result = feedback_tracker.check_feedback(user_input)
+            if feedback_result:
+                result, pattern_id = feedback_result
+                if result.should_apply and pattern_id:
+                    emoji = feedback_tracker.detector.get_feedback_emoji(result)
+                    if result.is_positive:
+                        fragment_store.upvote(pattern_id, strength=result.strength)
+                        print(f"   {emoji} Auto-feedback: {result.reason}")
+                    elif result.is_negative:
+                        fragment_store.downvote(pattern_id, strength=result.strength)
+                        print(f"   {emoji} Auto-feedback: {result.reason}")
+        
         # Generate response
         turn += 1
         response = composer.compose_response(context=user_input, user_input=user_input)
@@ -288,6 +346,14 @@ def main():
             last_pattern_id = response.fragment_ids[0]  # First (primary) pattern
         else:
             last_pattern_id = None
+        
+        # Record interaction for feedback tracking
+        if feedback_tracker:
+            feedback_tracker.record_interaction(
+                user_input=user_input,
+                response_text=response.text,
+                pattern_id=last_pattern_id
+            )
         
         # Auto-learn semantic relationships from this conversation
         if auto_learner:
