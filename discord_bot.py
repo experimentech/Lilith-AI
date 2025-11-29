@@ -692,17 +692,182 @@ class LilithDiscordBot:
         
         print("🚀 Starting Lilith Discord Bot...")
         self.bot.run(token)
+    
+    async def run_with_console(self, token: str = None):
+        """
+        Run the bot with an interactive console for monitoring and control.
+        
+        Console commands:
+            stats   - Show session statistics
+            users   - List active users
+            cleanup - Force session cleanup
+            quit    - Shutdown the bot gracefully
+        """
+        import asyncio
+        
+        token = token or os.getenv("DISCORD_TOKEN")
+        
+        if not token:
+            raise ValueError(
+                "Discord token required. Set DISCORD_TOKEN environment variable "
+                "or pass token to run()"
+            )
+        
+        print("🚀 Starting Lilith Discord Bot with console...")
+        print("   Type 'help' for console commands")
+        print("")
+        
+        # Start the bot in background
+        async with self.bot:
+            # Start bot connection
+            bot_task = asyncio.create_task(self.bot.start(token))
+            
+            # Wait for bot to be ready
+            await self.bot.wait_until_ready()
+            
+            # Run console input loop
+            console_task = asyncio.create_task(self._console_loop())
+            
+            try:
+                # Wait for either task to complete
+                done, pending = await asyncio.wait(
+                    [bot_task, console_task],
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+                
+                # Cancel remaining tasks
+                for task in pending:
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+                        
+            except asyncio.CancelledError:
+                pass
+    
+    async def _console_loop(self):
+        """Interactive console loop running alongside the bot."""
+        import asyncio
+        import sys
+        
+        def get_input():
+            """Get input in a thread-safe way."""
+            try:
+                return input("\n[lilith] > ").strip().lower()
+            except EOFError:
+                return "quit"
+        
+        while True:
+            try:
+                # Run input in executor to not block event loop
+                loop = asyncio.get_event_loop()
+                cmd = await loop.run_in_executor(None, get_input)
+                
+                if not cmd:
+                    continue
+                
+                if cmd in ('quit', 'exit', 'q'):
+                    print("👋 Shutting down...")
+                    await self.bot.close()
+                    break
+                
+                elif cmd == 'help':
+                    print("""
+Console Commands:
+  stats     - Show session statistics
+  users     - List active user sessions  
+  cleanup   - Force cleanup of inactive sessions
+  clear     - Clear old user data (respects retention period)
+  ping      - Check if bot is responsive
+  servers   - List connected servers
+  quit      - Shutdown the bot gracefully
+""")
+                
+                elif cmd == 'stats':
+                    stats = self.get_session_stats()
+                    print(f"""
+Session Statistics:
+  Active sessions: {stats['active_sessions']}
+  Oldest session: {stats['oldest_session_minutes']:.1f} minutes
+  Newest session: {stats['newest_session_minutes']:.1f} minutes
+  Session timeout: {stats['session_timeout_minutes']} minutes
+  User retention: {stats['user_retention_days']} days
+""")
+                
+                elif cmd == 'users':
+                    if not self._user_composers:
+                        print("  No active user sessions")
+                    else:
+                        print(f"\nActive Sessions ({len(self._user_composers)}):")
+                        for user_id in self._user_composers.keys():
+                            last_active = self._user_last_active.get(user_id)
+                            if last_active:
+                                from datetime import datetime
+                                age = (datetime.now() - last_active).total_seconds() / 60
+                                print(f"  • {user_id} (active {age:.1f} min ago)")
+                            else:
+                                print(f"  • {user_id}")
+                
+                elif cmd == 'cleanup':
+                    freed = self._cleanup_inactive_sessions()
+                    print(f"  🧹 Freed {freed} inactive sessions")
+                
+                elif cmd == 'clear':
+                    deleted = self._cleanup_old_user_data()
+                    if deleted:
+                        print(f"  🗑️ Deleted {len(deleted)} old user records: {deleted}")
+                    else:
+                        print("  No old user data to clean up")
+                
+                elif cmd == 'ping':
+                    latency = self.bot.latency * 1000
+                    print(f"  🏓 Pong! Latency: {latency:.0f}ms")
+                
+                elif cmd == 'servers':
+                    if not self.bot.guilds:
+                        print("  Not connected to any servers")
+                    else:
+                        print(f"\nConnected Servers ({len(self.bot.guilds)}):")
+                        for guild in self.bot.guilds:
+                            print(f"  • {guild.name} ({guild.member_count} members)")
+                
+                else:
+                    print(f"  Unknown command: {cmd}")
+                    print("  Type 'help' for available commands")
+                    
+            except Exception as e:
+                print(f"  Console error: {e}")
 
 
 def main():
     """Main entry point."""
+    import argparse
+    
     if not DISCORD_AVAILABLE:
         print("Error: discord.py is required")
         print("Install with: pip install discord.py")
         sys.exit(1)
     
-    bot = LilithDiscordBot()
-    bot.run()
+    parser = argparse.ArgumentParser(description='Lilith Discord Bot')
+    parser.add_argument('--console', '-c', action='store_true',
+                        help='Run with interactive console')
+    parser.add_argument('--timeout', '-t', type=int, default=30,
+                        help='Session timeout in minutes (default: 30)')
+    parser.add_argument('--retention', '-r', type=int, default=7,
+                        help='User data retention in days (default: 7)')
+    args = parser.parse_args()
+    
+    bot = LilithDiscordBot(
+        session_timeout_minutes=args.timeout,
+        user_retention_days=args.retention
+    )
+    
+    if args.console:
+        import asyncio
+        asyncio.run(bot.run_with_console())
+    else:
+        bot.run()
 
 
 if __name__ == "__main__":

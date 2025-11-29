@@ -38,8 +38,22 @@ if ! python -c "import discord" 2>/dev/null; then
     exit 1
 fi
 
+# Show usage if --help
+if [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
+    echo "Usage: run_discord.sh [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  -c, --console    Run with interactive console"
+    echo "  -t, --timeout N  Session timeout in minutes (default: 30)"
+    echo "  -r, --retention N  User data retention in days (default: 7)"
+    echo "  -h, --help       Show this help"
+    echo ""
+    echo "Console mode provides commands like 'stats', 'users', 'cleanup', 'quit'"
+    exit 0
+fi
+
 echo "🚀 Starting Lilith Discord Bot..."
 echo ""
 
-# Run the bot
+# Run the bot with any passed arguments
 python discord_bot.py "$@"
