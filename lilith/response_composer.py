@@ -26,6 +26,13 @@ try:
 except ImportError:
     QUERY_PATTERN_MATCHING_AVAILABLE = False
 
+# Optional: Import contrastive learner for semantic embeddings
+try:
+    from .contrastive_learner import ContrastiveLearner
+    CONTRASTIVE_LEARNING_AVAILABLE = True
+except ImportError:
+    CONTRASTIVE_LEARNING_AVAILABLE = False
+
 # Optional: Import concept store and template composer for compositional responses
 try:
     from .production_concept_store import ProductionConceptStore
@@ -187,6 +194,9 @@ class ResponseComposer:
             except Exception as e:
                 print(f"  ⚠️  Reasoning stage not available: {e}")
         
+        # Contrastive learner for online semantic training
+        self.contrastive_learner = None
+        
         # Track metrics for pattern vs concept approaches
         self.metrics = {
             'pattern_count': 0,
@@ -201,6 +211,73 @@ class ResponseComposer:
         self.last_query = None
         self.last_response = None
         self.last_approach = None  # 'pattern', 'concept', 'parallel', or 'math'
+    
+    def load_contrastive_weights(self, path: str) -> bool:
+        """
+        Load pre-trained contrastive weights into the semantic encoder.
+        
+        This improves semantic similarity understanding by loading weights
+        trained via contrastive learning (see tools/train_contrastive.py).
+        
+        Args:
+            path: Path to saved contrastive learner state (without extension)
+            
+        Returns:
+            True if loaded successfully, False otherwise
+        """
+        if not CONTRASTIVE_LEARNING_AVAILABLE:
+            print("  ⚠️  Contrastive learning not available")
+            return False
+        
+        if self.intent_classifier is None:
+            print("  ⚠️  No semantic encoder - can't load contrastive weights")
+            return False
+        
+        from pathlib import Path as PathLib
+        path_obj = PathLib(path)
+        
+        if not path_obj.with_suffix('.json').exists():
+            print(f"  ⚠️  Contrastive weights not found at {path}")
+            return False
+        
+        try:
+            self.contrastive_learner = ContrastiveLearner(
+                self.intent_classifier.encoder
+            )
+            self.contrastive_learner.load(path_obj)
+            print(f"  🎓 Loaded contrastive weights: {len(self.contrastive_learner.pairs)} pairs, "
+                  f"{len(self.contrastive_learner.metrics_history)} epochs trained")
+            return True
+        except Exception as e:
+            print(f"  ⚠️  Failed to load contrastive weights: {e}")
+            return False
+    
+    def add_semantic_correction(self, concept_a: str, concept_b: str, should_be_similar: bool):
+        """
+        Add a user correction to teach semantic relationships.
+        
+        This enables online learning from user feedback without full retraining.
+        
+        Args:
+            concept_a: First concept
+            concept_b: Second concept  
+            should_be_similar: True if concepts should be similar, False if different
+        """
+        if self.contrastive_learner is None:
+            if not CONTRASTIVE_LEARNING_AVAILABLE or self.intent_classifier is None:
+                return
+            # Initialize learner on first correction
+            self.contrastive_learner = ContrastiveLearner(self.intent_classifier.encoder)
+        
+        self.contrastive_learner.add_user_correction(concept_a, concept_b, should_be_similar)
+        
+        # Do incremental update
+        relationship = "positive" if should_be_similar else "hard_negative"
+        self.contrastive_learner.incremental_update(
+            [(concept_a, concept_b, relationship)],
+            steps=5
+        )
+        print(f"  📚 Learned: '{concept_a}' {'≈' if should_be_similar else '≠'} '{concept_b}'")
     
     def record_conversation_outcome(self, success: bool):
         """

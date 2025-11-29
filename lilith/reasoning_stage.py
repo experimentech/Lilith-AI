@@ -365,12 +365,26 @@ class ReasoningStage:
                 with torch.no_grad():
                     # Project to latent space if needed
                     if hasattr(self.encoder, '_projection'):
-                        latent = embeddings @ self.encoder._projection.to(embeddings.device)
+                        # The stored embedding is concat of [hashed, pmflow_refined]
+                        # We need only the hashed portion for projection
+                        base_dim = self.encoder._projection.shape[0]
+                        if embeddings.shape[1] > base_dim:
+                            # Extract base hashed portion
+                            base_emb = embeddings[:, :base_dim]
+                        else:
+                            base_emb = embeddings
+                        latent = base_emb @ self.encoder._projection.to(embeddings.device)
                     else:
                         latent = embeddings
                         
                     # Single evolution step
-                    evolved = self.encoder.pm_field(latent)
+                    evolved_output = self.encoder.pm_field(latent)
+                    
+                    # Handle MultiScalePMField tuple output (fine, coarse, combined)
+                    if isinstance(evolved_output, tuple):
+                        evolved = evolved_output[2]  # Use combined output
+                    else:
+                        evolved = evolved_output
                     
                     # Normalize
                     evolved = F.normalize(evolved, dim=-1)
@@ -397,8 +411,9 @@ class ReasoningStage:
                     concept_b.embedding
                 ).item()
                 
-                # Convergence: concepts moved closer together
-                if sim > self.convergence_threshold and sim > orig_sim + 0.1:
+                # Convergence: concepts are semantically related
+                # With contrastive training, 0.3+ indicates real similarity
+                if sim > 0.3 and sim > orig_sim + 0.05:
                     inference = Inference(
                         inference_type="connection",
                         source_concepts=[concept_a.term, concept_b.term],
@@ -409,7 +424,7 @@ class ReasoningStage:
                     inferences.append(inference)
                     
                 # Strong convergence: possible implication
-                if sim > 0.9:
+                if sim > 0.7:
                     inference = Inference(
                         inference_type="implication",
                         source_concepts=[concept_a.term, concept_b.term],
@@ -419,13 +434,14 @@ class ReasoningStage:
                     )
                     inferences.append(inference)
                     
-                # Divergence: concepts moved apart
-                if sim < 0.3 and sim < orig_sim - 0.1:
+                # Divergence: concepts are semantically different
+                # With contrastive training, negative similarity indicates opposition
+                if sim < -0.1:
                     inference = Inference(
                         inference_type="contradiction",
                         source_concepts=[concept_a.term, concept_b.term],
                         conclusion=f"{concept_a.term} conflicts with {concept_b.term}",
-                        confidence=1 - sim,
+                        confidence=abs(sim),
                         reasoning_path=[f"step_{step_num}: divergence detected"]
                     )
                     inferences.append(inference)

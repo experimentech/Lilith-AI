@@ -1,0 +1,585 @@
+{
+  "pairs": [
+    {
+      "anchor": "cat",
+      "other": "animal",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "dog",
+      "other": "animal",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "bird",
+      "other": "animal",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "cat",
+      "other": "mammal",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "dog",
+      "other": "mammal",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "whale",
+      "other": "mammal",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "eagle",
+      "other": "bird",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "sparrow",
+      "other": "bird",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "penguin",
+      "other": "bird",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "salmon",
+      "other": "fish",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "shark",
+      "other": "fish",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "tuna",
+      "other": "fish",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "python",
+      "other": "programming language",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "java",
+      "other": "programming language",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "neural network",
+      "other": "machine learning",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "deep learning",
+      "other": "machine learning",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "machine learning",
+      "other": "artificial intelligence",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "computer",
+      "other": "technology",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "smartphone",
+      "other": "technology",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "happiness",
+      "other": "emotion",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "sadness",
+      "other": "emotion",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "anger",
+      "other": "emotion",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "mathematics",
+      "other": "science",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "physics",
+      "other": "science",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "biology",
+      "other": "science",
+      "relationship": "positive",
+      "weight": 0.95,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "cat",
+      "other": "dog",
+      "relationship": "positive",
+      "weight": 0.85,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "dog",
+      "other": "cat",
+      "relationship": "positive",
+      "weight": 0.85,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "python",
+      "other": "java",
+      "relationship": "positive",
+      "weight": 0.85,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "java",
+      "other": "python",
+      "relationship": "positive",
+      "weight": 0.85,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "happy",
+      "other": "joyful",
+      "relationship": "positive",
+      "weight": 0.85,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "joyful",
+      "other": "happy",
+      "relationship": "positive",
+      "weight": 0.85,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "big",
+      "other": "large",
+      "relationship": "positive",
+      "weight": 0.85,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "large",
+      "other": "big",
+      "relationship": "positive",
+      "weight": 0.85,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "machine learning",
+      "other": "deep learning",
+      "relationship": "positive",
+      "weight": 0.85,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "artificial intelligence",
+      "other": "AI",
+      "relationship": "positive",
+      "weight": 0.85,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "AI",
+      "other": "artificial intelligence",
+      "relationship": "positive",
+      "weight": 0.85,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "hello",
+      "other": "hi",
+      "relationship": "positive",
+      "weight": 0.85,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "hi",
+      "other": "hello",
+      "relationship": "positive",
+      "weight": 0.85,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "goodbye",
+      "other": "bye",
+      "relationship": "positive",
+      "weight": 0.85,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "bye",
+      "other": "goodbye",
+      "relationship": "positive",
+      "weight": 0.85,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "hot",
+      "other": "cold",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "cold",
+      "other": "hot",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "big",
+      "other": "small",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "small",
+      "other": "big",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "fast",
+      "other": "slow",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "slow",
+      "other": "fast",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "happy",
+      "other": "sad",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "sad",
+      "other": "happy",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "good",
+      "other": "bad",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "bad",
+      "other": "good",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "light",
+      "other": "dark",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "dark",
+      "other": "light",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "up",
+      "other": "down",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "down",
+      "other": "up",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "left",
+      "other": "right",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "right",
+      "other": "left",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "yes",
+      "other": "no",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "no",
+      "other": "yes",
+      "relationship": "hard_negative",
+      "weight": 0.9,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "cat",
+      "other": "mathematics",
+      "relationship": "negative",
+      "weight": 0.7,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "python",
+      "other": "happiness",
+      "relationship": "negative",
+      "weight": 0.7,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "computer",
+      "other": "banana",
+      "relationship": "negative",
+      "weight": 0.7,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "love",
+      "other": "keyboard",
+      "relationship": "negative",
+      "weight": 0.7,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "mountain",
+      "other": "programming",
+      "relationship": "negative",
+      "weight": 0.7,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "ocean",
+      "other": "algorithm",
+      "relationship": "negative",
+      "weight": 0.7,
+      "source": "core_semantic"
+    },
+    {
+      "anchor": "artificial intelligence",
+      "other": "machine learning",
+      "relationship": "positive",
+      "weight": 1.0,
+      "source": "test"
+    },
+    {
+      "anchor": "neural network",
+      "other": "deep learning",
+      "relationship": "positive",
+      "weight": 1.0,
+      "source": "test"
+    },
+    {
+      "anchor": "deep learning",
+      "other": "neural network",
+      "relationship": "positive",
+      "weight": 1.0,
+      "source": "test"
+    },
+    {
+      "anchor": "Python",
+      "other": "programming",
+      "relationship": "positive",
+      "weight": 1.0,
+      "source": "test"
+    },
+    {
+      "anchor": "programming",
+      "other": "Python",
+      "relationship": "positive",
+      "weight": 1.0,
+      "source": "test"
+    },
+    {
+      "anchor": "apple",
+      "other": "fruit",
+      "relationship": "positive",
+      "weight": 1.0,
+      "source": "test"
+    },
+    {
+      "anchor": "fruit",
+      "other": "apple",
+      "relationship": "positive",
+      "weight": 1.0,
+      "source": "test"
+    },
+    {
+      "anchor": "cat",
+      "other": "computer",
+      "relationship": "negative",
+      "weight": 1.0,
+      "source": "test"
+    }
+  ],
+  "metrics_history": [
+    {
+      "epoch": 1,
+      "loss": 1.1174952149391175,
+      "positive_similarity": 0.08058273755013942,
+      "negative_similarity": 0.009491917490959168,
+      "margin": 0.07109082005918026,
+      "num_pairs": 72
+    },
+    {
+      "epoch": 2,
+      "loss": 1.020279622077942,
+      "positive_similarity": 0.11005882099270821,
+      "negative_similarity": 0.000572463870048523,
+      "margin": 0.10948635712265968,
+      "num_pairs": 72
+    },
+    {
+      "epoch": 3,
+      "loss": 0.9715669751167297,
+      "positive_similarity": 0.14961553663015364,
+      "negative_similarity": -0.08811903335154056,
+      "margin": 0.2377345699816942,
+      "num_pairs": 72
+    },
+    {
+      "epoch": 4,
+      "loss": 0.9104623436927796,
+      "positive_similarity": 0.18501193821430206,
+      "negative_similarity": -0.11685608476400375,
+      "margin": 0.30186802297830584,
+      "num_pairs": 72
+    },
+    {
+      "epoch": 5,
+      "loss": 0.8592010855674743,
+      "positive_similarity": 0.21457889974117278,
+      "negative_similarity": -0.15294131459668278,
+      "margin": 0.36752021433785553,
+      "num_pairs": 72
+    },
+    {
+      "epoch": 6,
+      "loss": 0.8154119491577149,
+      "positive_similarity": 0.2282055661082268,
+      "negative_similarity": -0.2085287868976593,
+      "margin": 0.4367343530058861,
+      "num_pairs": 72
+    },
+    {
+      "epoch": 7,
+      "loss": 0.7097287893295288,
+      "positive_similarity": 0.2914618104696274,
+      "negative_similarity": -0.2760934799909592,
+      "margin": 0.5675552904605865,
+      "num_pairs": 72
+    },
+    {
+      "epoch": 8,
+      "loss": 0.7100598812103271,
+      "positive_similarity": 0.30717473924160005,
+      "negative_similarity": -0.26892283856868743,
+      "margin": 0.5760975778102875,
+      "num_pairs": 72
+    },
+    {
+      "epoch": 9,
+      "loss": 0.6541438698768616,
+      "positive_similarity": 0.3404818534851074,
+      "negative_similarity": -0.2969551682472229,
+      "margin": 0.6374370217323303,
+      "num_pairs": 72
+    }
+  ],
+  "margin": 0.3,
+  "temperature": 0.07,
+  "learning_rate": 0.01
+}
