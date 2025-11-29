@@ -29,6 +29,7 @@ class UserPreferences:
     custom_data: Dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    last_active: str = field(default_factory=lambda: datetime.now().isoformat())
     
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -41,8 +42,21 @@ class UserPreferences:
             interests=data.get('interests', []),
             custom_data=data.get('custom_data', {}),
             created_at=data.get('created_at', datetime.now().isoformat()),
-            updated_at=data.get('updated_at', datetime.now().isoformat())
+            updated_at=data.get('updated_at', datetime.now().isoformat()),
+            last_active=data.get('last_active', data.get('updated_at', datetime.now().isoformat()))
         )
+    
+    def touch(self) -> None:
+        """Update last_active timestamp."""
+        self.last_active = datetime.now().isoformat()
+    
+    def days_inactive(self) -> float:
+        """Get number of days since last activity."""
+        try:
+            last = datetime.fromisoformat(self.last_active)
+            return (datetime.now() - last).total_seconds() / 86400
+        except (ValueError, TypeError):
+            return 0.0
 
 
 class UserPreferencesStore:
@@ -142,6 +156,97 @@ class UserPreferencesStore:
         """Get a custom preference value."""
         prefs = self.load(user_id)
         return prefs.custom_data.get(key, default)
+    
+    def touch_user(self, user_id: str) -> None:
+        """Update user's last_active timestamp."""
+        prefs = self.load(user_id)
+        prefs.touch()
+        self.save(prefs)
+    
+    def get_all_users(self) -> List[str]:
+        """Get list of all user IDs with stored preferences."""
+        users_dir = self.base_path / "users"
+        if not users_dir.exists():
+            return []
+        
+        user_ids = []
+        for user_dir in users_dir.iterdir():
+            if user_dir.is_dir():
+                prefs_file = user_dir / "preferences.json"
+                if prefs_file.exists():
+                    user_ids.append(user_dir.name)
+        return user_ids
+    
+    def get_inactive_users(self, days: float = 7.0) -> List[Tuple[str, float]]:
+        """
+        Get users inactive for more than specified days.
+        
+        Args:
+            days: Inactivity threshold in days
+            
+        Returns:
+            List of (user_id, days_inactive) tuples
+        """
+        inactive = []
+        for user_id in self.get_all_users():
+            prefs = self.load(user_id)
+            inactive_days = prefs.days_inactive()
+            if inactive_days >= days:
+                inactive.append((user_id, inactive_days))
+        
+        # Sort by most inactive first
+        inactive.sort(key=lambda x: x[1], reverse=True)
+        return inactive
+    
+    def delete_user_data(self, user_id: str) -> bool:
+        """
+        Delete all data for a user.
+        
+        Args:
+            user_id: User to delete
+            
+        Returns:
+            True if deleted, False if not found
+        """
+        import shutil
+        
+        if user_id == "teacher":
+            return False  # Never delete teacher/base data
+        
+        user_dir = self.base_path / "users" / user_id
+        if not user_dir.exists():
+            return False
+        
+        # Remove from cache
+        self._cache.pop(user_id, None)
+        
+        # Delete directory
+        shutil.rmtree(user_dir)
+        print(f"🗑️  Deleted user data for: {user_id}")
+        return True
+    
+    def cleanup_inactive_users(self, days: float = 7.0, dry_run: bool = True) -> List[str]:
+        """
+        Delete data for users inactive longer than specified days.
+        
+        Args:
+            days: Inactivity threshold in days
+            dry_run: If True, only report what would be deleted
+            
+        Returns:
+            List of deleted (or would-be-deleted) user IDs
+        """
+        inactive = self.get_inactive_users(days)
+        deleted = []
+        
+        for user_id, inactive_days in inactive:
+            if dry_run:
+                print(f"  Would delete: {user_id} (inactive {inactive_days:.1f} days)")
+            else:
+                if self.delete_user_data(user_id):
+                    deleted.append(user_id)
+        
+        return [uid for uid, _ in inactive] if dry_run else deleted
 
 
 class PreferenceExtractor:

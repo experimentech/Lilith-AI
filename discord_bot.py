@@ -22,7 +22,8 @@ Usage:
 import os
 import sys
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
+from datetime import datetime, timedelta
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -65,13 +66,17 @@ class LilithDiscordBot:
     
     def __init__(self, 
                  data_path: str = "data",
-                 command_prefix: str = "!"):
+                 command_prefix: str = "!",
+                 session_timeout_minutes: int = 30,
+                 user_retention_days: float = 7.0):
         """
         Initialize the Discord bot.
         
         Args:
             data_path: Base path for data storage
             command_prefix: Prefix for legacy commands (slash commands recommended)
+            session_timeout_minutes: Minutes of inactivity before freeing session memory
+            user_retention_days: Days of inactivity before deleting user data (0 = never)
         """
         _check_discord()
         
@@ -84,6 +89,8 @@ class LilithDiscordBot:
         from lilith.user_preferences import UserPreferenceLearner, UserPreferencesStore
         
         self.data_path = Path(data_path)
+        self.session_timeout_minutes = session_timeout_minutes
+        self.user_retention_days = user_retention_days
         
         # Store class references for later use
         self._ResponseComposer = ResponseComposer
@@ -124,12 +131,13 @@ class LilithDiscordBot:
         except ImportError:
             pass
         
-        # Per-user state caches
+        # Per-user state caches with last activity tracking
         self._user_composers: Dict[str, Any] = {}
         self._user_stores: Dict[str, Any] = {}
         self._user_states: Dict[str, Any] = {}
         self._user_trackers: Dict[str, Any] = {}
         self._user_auto_learners: Dict[str, Any] = {}
+        self._user_last_active: Dict[str, datetime] = {}  # Track session activity
         
         # Track last messages for feedback (message_id -> (user_id, pattern_id))
         self._message_patterns: Dict[int, tuple] = {}
@@ -137,6 +145,127 @@ class LilithDiscordBot:
         # Setup event handlers
         self._setup_events()
         self._setup_commands()
+    
+    def _touch_session(self, user_id: str) -> None:
+        """Update session activity timestamp."""
+        from datetime import datetime
+        self._user_last_active[user_id] = datetime.now()
+    
+    def _cleanup_inactive_sessions(self) -> int:
+        """
+        Free memory for sessions inactive longer than timeout.
+        
+        Returns:
+            Number of sessions cleaned up
+        """
+        from datetime import datetime, timedelta
+        
+        if self.session_timeout_minutes <= 0:
+            return 0
+        
+        threshold = datetime.now() - timedelta(minutes=self.session_timeout_minutes)
+        to_cleanup = []
+        
+        for user_id, last_active in self._user_last_active.items():
+            if last_active < threshold:
+                to_cleanup.append(user_id)
+        
+        for user_id in to_cleanup:
+            self._free_user_session(user_id)
+        
+        return len(to_cleanup)
+    
+    def _free_user_session(self, user_id: str) -> None:
+        """
+        Free memory for a user's session (keeps data on disk).
+        
+        Args:
+            user_id: User whose session to free
+        """
+        # Remove from all caches
+        self._user_composers.pop(user_id, None)
+        self._user_stores.pop(user_id, None)
+        self._user_states.pop(user_id, None)
+        self._user_trackers.pop(user_id, None)
+        self._user_auto_learners.pop(user_id, None)
+        self._user_last_active.pop(user_id, None)
+        
+        # Clear from preference cache too
+        self.preference_store._cache.pop(user_id, None)
+    
+    def _cleanup_old_user_data(self) -> List[str]:
+        """
+        Delete data for users inactive longer than retention period.
+        
+        Returns:
+            List of deleted user IDs
+        """
+        if self.user_retention_days <= 0:
+            return []
+        
+        # First free their sessions
+        inactive = self.preference_store.get_inactive_users(self.user_retention_days)
+        for user_id, _ in inactive:
+            self._free_user_session(user_id)
+        
+        # Then delete their data
+        return self.preference_store.cleanup_inactive_users(
+            days=self.user_retention_days, 
+            dry_run=False
+        )
+    
+    def get_session_stats(self) -> Dict[str, Any]:
+        """Get statistics about active sessions."""
+        from datetime import datetime
+        
+        active_sessions = len(self._user_composers)
+        
+        # Find oldest and newest sessions
+        oldest_age = 0.0
+        newest_age = float('inf')
+        
+        for user_id, last_active in self._user_last_active.items():
+            age_minutes = (datetime.now() - last_active).total_seconds() / 60
+            oldest_age = max(oldest_age, age_minutes)
+            newest_age = min(newest_age, age_minutes)
+        
+        return {
+            'active_sessions': active_sessions,
+            'oldest_session_minutes': oldest_age if active_sessions > 0 else 0,
+            'newest_session_minutes': newest_age if active_sessions > 0 else 0,
+            'session_timeout_minutes': self.session_timeout_minutes,
+            'user_retention_days': self.user_retention_days,
+        }
+    
+    async def _background_cleanup(self):
+        """Background task that periodically cleans up inactive sessions and old user data."""
+        import asyncio
+        
+        while True:
+            try:
+                # Run cleanup every 5 minutes
+                await asyncio.sleep(300)
+                
+                # Cleanup inactive sessions
+                freed_count = self._cleanup_inactive_sessions()
+                if freed_count > 0:
+                    print(f"🧹 Freed {freed_count} inactive sessions")
+                
+                # Cleanup old user data (check once per hour, but we run every 5 min so use counter)
+                if not hasattr(self, '_cleanup_counter'):
+                    self._cleanup_counter = 0
+                self._cleanup_counter += 1
+                
+                if self._cleanup_counter >= 12:  # 12 * 5 min = 1 hour
+                    self._cleanup_counter = 0
+                    deleted_users = self._cleanup_old_user_data()
+                    if deleted_users:
+                        print(f"🗑️ Deleted data for {len(deleted_users)} inactive users: {deleted_users}")
+                        
+            except Exception as e:
+                print(f"⚠️ Background cleanup error: {e}")
+                continue
+
     
     def _get_user_id(self, discord_user) -> str:
         """Convert Discord user to Lilith user ID."""
@@ -158,8 +287,9 @@ class LilithDiscordBot:
         
         # Create fragment store for this user
         fragment_store = self._MultiTenantFragmentStore(
-            base_path=str(self.data_path),
-            user_identity=identity
+            encoder=self.encoder,
+            user_identity=identity,
+            base_data_path=str(self.data_path)
         )
         
         # Create conversation state
@@ -209,6 +339,8 @@ class LilithDiscordBot:
             print(f"🤖 Lilith Discord Bot is ready!")
             print(f"   Logged in as: {self.bot.user}")
             print(f"   Servers: {len(self.bot.guilds)}")
+            print(f"   Session timeout: {self.session_timeout_minutes} minutes")
+            print(f"   User retention: {self.user_retention_days} days")
             
             # Sync slash commands
             try:
@@ -216,6 +348,9 @@ class LilithDiscordBot:
                 print(f"   Synced {len(synced)} slash commands")
             except Exception as e:
                 print(f"   Failed to sync commands: {e}")
+            
+            # Start background cleanup task
+            self.bot.loop.create_task(self._background_cleanup())
         
         @self.bot.event
         async def on_message(message):
@@ -311,7 +446,13 @@ class LilithDiscordBot:
         Returns:
             Response text
         """
+        from datetime import datetime
+        
         user_id = self._get_user_id(user)
+        
+        # Track user activity for session management
+        self._user_last_active[user_id] = datetime.now()
+        self.preference_store.touch_user(user_id)
         
         # Get or create composer for this user
         composer = self._get_or_create_composer(user)
