@@ -32,7 +32,13 @@ class UserPreferences:
     last_active: str = field(default_factory=lambda: datetime.now().isoformat())
     
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        """Convert to dictionary, ensuring datetime objects become ISO strings."""
+        data = asdict(self)
+        # Convert any datetime objects to ISO strings
+        for key in ['created_at', 'updated_at', 'last_active']:
+            if isinstance(data.get(key), datetime):
+                data[key] = data[key].isoformat()
+        return data
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'UserPreferences':
@@ -53,7 +59,11 @@ class UserPreferences:
     def days_inactive(self) -> float:
         """Get number of days since last activity."""
         try:
-            last = datetime.fromisoformat(self.last_active)
+            # Handle both string and datetime objects
+            if isinstance(self.last_active, datetime):
+                last = self.last_active
+            else:
+                last = datetime.fromisoformat(self.last_active)
             return (datetime.now() - last).total_seconds() / 86400
         except (ValueError, TypeError):
             return 0.0
