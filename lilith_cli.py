@@ -17,6 +17,13 @@ from lilith.conversation_state import ConversationState
 from lilith.multi_tenant_store import MultiTenantFragmentStore
 from lilith.user_auth import UserAuthenticator, AuthMode
 
+# Optional: Auto semantic learning
+try:
+    from lilith.auto_semantic_learner import AutoSemanticLearner
+    AUTO_LEARNING_AVAILABLE = True
+except ImportError:
+    AUTO_LEARNING_AVAILABLE = False
+
 
 def main():
     """Run multi-tenant Lilith CLI"""
@@ -75,6 +82,24 @@ def main():
         enable_modal_routing=True
     )
     
+    # Load contrastive-trained semantic weights (if available)
+    contrastive_path = Path("data/contrastive_learner")
+    if contrastive_path.with_suffix('.json').exists():
+        composer.load_contrastive_weights(str(contrastive_path))
+    
+    # Initialize auto semantic learner (learns from conversations)
+    auto_learner = None
+    if AUTO_LEARNING_AVAILABLE and composer.contrastive_learner:
+        auto_learner = AutoSemanticLearner(
+            contrastive_learner=composer.contrastive_learner,
+            auto_train_threshold=10,  # Train after 10 new pairs
+            auto_train_steps=3
+        )
+        # Load previous session state
+        auto_state_path = Path("data/auto_learner_state.json")
+        if auto_state_path.exists():
+            auto_learner.load_state(auto_state_path)
+    
     print("🤖 Lilith initialized")
     print()
     
@@ -105,6 +130,10 @@ def main():
         try:
             user_input = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
+            # Save auto-learner state before exit
+            if auto_learner:
+                auto_learner.force_train()
+                auto_learner.save_state(Path("data/auto_learner_state.json"))
             print("\n\nGoodbye!")
             break
         
@@ -116,6 +145,13 @@ def main():
             command = user_input[1:].lower()
             
             if command in ['quit', 'exit']:
+                # Save auto-learner state before exit
+                if auto_learner:
+                    auto_learner.force_train()  # Train on any pending pairs
+                    auto_learner.save_state(Path("data/auto_learner_state.json"))
+                    stats = auto_learner.get_stats()
+                    if stats['pairs_added'] > 0:
+                        print(f"\n📚 Session learning: {stats['pairs_added']} semantic pairs extracted")
                 print("\nGoodbye!")
                 break
             
@@ -252,6 +288,14 @@ def main():
             last_pattern_id = response.fragment_ids[0]  # First (primary) pattern
         else:
             last_pattern_id = None
+        
+        # Auto-learn semantic relationships from this conversation
+        if auto_learner:
+            relations = auto_learner.process_conversation(user_input, response.text)
+            if relations:
+                # Show what was learned (optional, can remove for cleaner output)
+                pass  # Silently learn - uncomment below for verbose mode
+                # print(f"   📚 Learned {len(relations)} semantic relationships")
         
         print(f"Lilith: {response.text}")
         
