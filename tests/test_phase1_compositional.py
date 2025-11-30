@@ -17,9 +17,9 @@ import shutil
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.concept_database import ConceptDatabase
-from pipeline.production_concept_store import ProductionConceptStore, Relation
-from pipeline.template_composer import TemplateComposer
+from lilith.concept_database import ConceptDatabase
+from lilith.production_concept_store import ProductionConceptStore, Relation
+from lilith.template_composer import TemplateComposer
 
 
 def test_concept_database():

@@ -29,7 +29,7 @@ import numpy as np
 from pathlib import Path
 from typing import List, Tuple
 from pmflow_bnn_enhanced.pmflow import contrastive_plasticity
-from pipeline.embedding import PMFlowEmbeddingEncoder
+from lilith.embedding import PMFlowEmbeddingEncoder
 
 
 class SuccessBasedLearner:

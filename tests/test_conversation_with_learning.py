@@ -14,10 +14,10 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'experiments/retrieval_sanity'))
 
-from pipeline.embedding import PMFlowEmbeddingEncoder
-from pipeline.database_fragment_store import DatabaseBackedFragmentStore
-from pipeline.response_composer import ResponseComposer
-from pipeline.conversation_state import ConversationState
+from lilith.embedding import PMFlowEmbeddingEncoder
+from lilith.database_fragment_store import DatabaseBackedFragmentStore
+from lilith.response_composer import ResponseComposer
+from lilith.conversation_state import ConversationState
 
 
 def simulate_conversation_with_learning():

@@ -23,14 +23,14 @@ import torch
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from pipeline.stage_coordinator import StageCoordinator, StageType
-from pipeline.base import Utterance, PipelineArtifact, ParsedSentence, SymbolicFrame, Token
-from pipeline.response_fragments import ResponseFragmentStore
-from pipeline.response_composer import ResponseComposer
-from pipeline.response_learner import ResponseLearner
-from pipeline.conversation_history import ConversationHistory
-from pipeline.conversation_state import ConversationState
-from pipeline.context_encoder import ConversationContextEncoder
+from experiments.retrieval_sanity.pipeline.stage_coordinator import StageCoordinator, StageType
+from experiments.retrieval_sanity.pipeline.base import Utterance, PipelineArtifact, ParsedSentence, SymbolicFrame, Token
+from experiments.retrieval_sanity.pipeline.response_fragments import ResponseFragmentStore
+from experiments.retrieval_sanity.pipeline.response_composer import ResponseComposer
+from experiments.retrieval_sanity.pipeline.response_learner import ResponseLearner
+from experiments.retrieval_sanity.pipeline.conversation_history import ConversationHistory
+from experiments.retrieval_sanity.pipeline.conversation_state import ConversationState
+from experiments.retrieval_sanity.pipeline.context_encoder import ConversationContextEncoder
 
 
 class ConversationLoop:
@@ -87,7 +87,7 @@ class ConversationLoop:
         # Initialize response generation components
         print("  📚 Loading response fragment store (learned patterns)...")
         # Use database-backed store for 25x faster retrieval
-        from pipeline.database_fragment_store import DatabaseBackedFragmentStore
+        from experiments.retrieval_sanity.pipeline.database_fragment_store import DatabaseBackedFragmentStore
         self.fragment_store = DatabaseBackedFragmentStore(
             semantic_encoder=self.semantic_stage.encoder,
             storage_path="conversation_patterns.db"

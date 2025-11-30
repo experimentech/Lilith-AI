@@ -13,9 +13,9 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'experiments/retrieval_sanity'))
 
 from pathlib import Path
-from pipeline.embedding import PMFlowEmbeddingEncoder
-from pipeline.database_fragment_store import DatabaseBackedFragmentStore
-from pipeline.response_composer import ResponseComposer
+from lilith.embedding import PMFlowEmbeddingEncoder
+from lilith.database_fragment_store import DatabaseBackedFragmentStore
+from lilith.response_composer import ResponseComposer
 
 def test_retrieval_quality(use_semantic=False, encoder_path=None):
     """Test retrieval with different configurations."""

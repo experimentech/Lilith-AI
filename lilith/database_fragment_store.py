@@ -18,7 +18,7 @@ import torch.nn.functional as F
 
 # Import the database infrastructure
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from pattern_database import PatternDatabase, extract_keywords
+from experiments.retrieval_sanity.pattern_database import PatternDatabase, extract_keywords
 
 # Import the original ResponsePattern dataclass
 from .response_fragments import ResponsePattern

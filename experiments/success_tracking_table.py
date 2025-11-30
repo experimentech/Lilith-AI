@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'experiments/retrieva
 import numpy as np
 from collections import defaultdict
 from typing import Dict, List, Tuple
-from pipeline.embedding import PMFlowEmbeddingEncoder
+from lilith.embedding import PMFlowEmbeddingEncoder
 
 
 class QueryPatternSuccessTracker:

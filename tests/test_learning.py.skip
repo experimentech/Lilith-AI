@@ -21,7 +21,7 @@ from pipeline import (
     StageCoordinator,
     StageType,
 )
-from pipeline.response_learner import ResponseLearner
+from lilith.response_learner import ResponseLearner
 
 def main():
     print("🧠 Learning System Test\n")

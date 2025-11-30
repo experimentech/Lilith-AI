@@ -13,8 +13,8 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "experiments" / "retrieval_sanity"))
 
-from pipeline.database_fragment_store import DatabaseBackedFragmentStore
-from pipeline.embedding import PMFlowEmbeddingEncoder
+from lilith.database_fragment_store import DatabaseBackedFragmentStore
+from lilith.embedding import PMFlowEmbeddingEncoder
 from pattern_database import PatternDatabase
 
 

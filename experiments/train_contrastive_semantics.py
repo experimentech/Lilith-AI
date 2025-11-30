@@ -22,7 +22,7 @@ from pathlib import Path
 from pmflow_bnn_enhanced.pmflow import contrastive_plasticity
 
 # Import Lilith components
-from pipeline.database_fragment_store import DatabaseBackedFragmentStore
+from lilith.database_fragment_store import DatabaseBackedFragmentStore
 
 
 def compute_similarity(encoder, phrase1, phrase2):

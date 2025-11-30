@@ -10,7 +10,7 @@ learn "when I see X, look up Y in the database" as an association?
 
 import torch
 import numpy as np
-from pipeline.embedding import PMFlowEmbeddingEncoder
+from lilith.embedding import PMFlowEmbeddingEncoder
 
 print("=" * 80)
 print("TESTING BNN LEARNING CAPABILITY")

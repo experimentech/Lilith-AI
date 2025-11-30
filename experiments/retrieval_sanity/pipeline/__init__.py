@@ -13,6 +13,13 @@ from .conversation_history import ConversationHistory
 from .response_fragments import ResponseFragmentStore, ResponsePattern
 from .response_composer import ResponseComposer, ComposedResponse
 from .response_learner import ResponseLearner
+from .responder import ConversationResponder
+from .embedding import PMFlowEmbeddingEncoder
+from .plasticity import PlasticityController
+from .pipeline import SymbolicPipeline
+from .storage_bridge import SymbolicStore
+from .decoder import TemplateDecoder
+from .trace import TraceLogger
 
 __all__ = [
     "PipelineArtifact",
@@ -30,4 +37,11 @@ __all__ = [
     "ResponseComposer",
     "ComposedResponse",
     "ResponseLearner",
+    "ConversationResponder",
+    "PMFlowEmbeddingEncoder",
+    "PlasticityController",
+    "SymbolicPipeline",
+    "SymbolicStore",
+    "TemplateDecoder",
+    "TraceLogger",
 ]

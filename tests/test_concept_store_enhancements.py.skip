@@ -20,7 +20,7 @@ if str(WORKSPACE_ROOT) not in sys.path:
 import torch
 import numpy as np
 from poc_compositional.concept_store import ConceptStore
-from pipeline.embedding import PMFlowEmbeddingEncoder
+from lilith.embedding import PMFlowEmbeddingEncoder
 
 
 def test_concept_store_enhancements():

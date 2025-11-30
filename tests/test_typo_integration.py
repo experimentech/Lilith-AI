@@ -21,7 +21,7 @@ class DummyEncoder:
         return vec
 
 # Test the integration
-from pipeline.response_fragments import ResponseFragmentStore, ResponsePattern
+from lilith.response_fragments import ResponseFragmentStore, ResponsePattern
 
 print("=" * 70)
 print("TYPO TOLERANCE INTEGRATION TEST")

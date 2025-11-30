@@ -147,12 +147,21 @@ class LilithDiscordBot:
         except ImportError:
             pass
         
+        # Plasticity configuration
+        self.plasticity_config = {
+            'enabled': True,
+            'syntax_plasticity_interval': 5,  # Apply syntax plasticity every N interactions
+            'pmflow_plasticity_interval': 10,  # Apply PMFlow plasticity every N interactions
+            'contrastive_interval': 5,  # Apply contrastive learning every N interactions
+        }
+        
         # Per-user state caches with last activity tracking
         self._user_composers: Dict[str, Any] = {}
         self._user_stores: Dict[str, Any] = {}
         self._user_states: Dict[str, Any] = {}
         self._user_trackers: Dict[str, Any] = {}
         self._user_auto_learners: Dict[str, Any] = {}
+        self._user_interaction_counts: Dict[str, int] = {}  # Track interactions for plasticity triggers
         self._user_last_active: Dict[str, datetime] = {}  # Track session activity
         
         # Track last messages for feedback (message_id -> (user_id, pattern_id))
@@ -230,6 +239,44 @@ class LilithDiscordBot:
             dry_run=False
         )
     
+    def _save_plasticity_state(self):
+        """Save PMFlow and contrastive learner state for active composers."""
+        try:
+            saved_count = 0
+            for user_id, composer in self._user_composers.items():
+                if not composer.syntax_stage:
+                    continue
+                    
+                # Save PMFlow state if available
+                if hasattr(composer.syntax_stage, 'pmflow') and composer.syntax_stage.pmflow is not None:
+                    save_path = self.data_path / "pmflow" / f"{user_id}_pmflow.json"
+                    save_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    try:
+                        composer.syntax_stage.pmflow.save(str(save_path))
+                        saved_count += 1
+                    except Exception as e:
+                        print(f"  ⚠️  Failed to save PMFlow for {user_id}: {e}")
+                
+                # Save contrastive learner state if available
+                if hasattr(composer.syntax_stage, 'contrastive_learner') and composer.syntax_stage.contrastive_learner:
+                    learner = composer.syntax_stage.contrastive_learner
+                    if hasattr(learner, 'save'):
+                        save_path = self.data_path / "contrastive" / f"{user_id}_contrastive.json"
+                        save_path.parent.mkdir(parents=True, exist_ok=True)
+                        
+                        try:
+                            learner.save(str(save_path))
+                            saved_count += 1
+                        except Exception as e:
+                            print(f"  ⚠️  Failed to save contrastive learner for {user_id}: {e}")
+            
+            if saved_count > 0:
+                print(f"💾 Saved plasticity state for {saved_count} component(s)")
+                
+        except Exception as e:
+            print(f"⚠️ Plasticity save error: {e}")
+    
     def get_session_stats(self) -> Dict[str, Any]:
         """Get statistics about active sessions."""
         from datetime import datetime
@@ -277,6 +324,9 @@ class LilithDiscordBot:
                     deleted_users = self._cleanup_old_user_data()
                     if deleted_users:
                         print(f"🗑️ Deleted data for {len(deleted_users)} inactive users: {deleted_users}")
+                
+                # Save plasticity state periodically (every 5 minutes)
+                self._save_plasticity_state()
                         
             except Exception as e:
                 print(f"⚠️ Background cleanup error: {e}")
@@ -380,7 +430,8 @@ class LilithDiscordBot:
             state,
             semantic_encoder=self.encoder,
             enable_knowledge_augmentation=True,
-            enable_modal_routing=True
+            enable_modal_routing=True,
+            use_grammar=True  # Enable BNN syntax stage with plasticity
         )
         
         # Load contrastive weights if available
@@ -450,7 +501,7 @@ class LilithDiscordBot:
                 await self.bot.process_commands(message)
                 return
             
-            # Only respond to DMs or when mentioned
+            # Determine if we're in a DM or guild
             is_dm = isinstance(message.channel, discord.DMChannel)
             is_mentioned = self.bot.user in message.mentions
             
@@ -460,13 +511,28 @@ class LilithDiscordBot:
                 for role in message.role_mentions
             )
             
-            print(f"  📨 is_dm={is_dm}, is_mentioned={is_mentioned}, is_role_mentioned={is_role_mentioned}")
+            # Get guild info if in a server
+            guild_id = str(message.guild.id) if message.guild else None
+            guild_name = message.guild.name if message.guild else ""
             
-            if not (is_dm or is_mentioned or is_role_mentioned):
-                print(f"  📨 Ignoring (not DM and not mentioned)")
-                return
+            # Check if passive listening is enabled for this guild
+            should_respond = is_dm or is_mentioned or is_role_mentioned
+            passive_listening_enabled = False
             
-            # Remove mention from message
+            if guild_id and not should_respond:
+                # Check guild settings for passive listening
+                server_settings = self.server_store_manager.load_settings(guild_id, guild_name)
+                passive_listening_enabled = server_settings.passive_listening
+                
+                if passive_listening_enabled:
+                    print(f"  👂 Passive listening: observing message for learning (no response)")
+                else:
+                    print(f"  📨 Ignoring (not DM, not mentioned, passive listening disabled)")
+                    return
+            
+            print(f"  📨 is_dm={is_dm}, is_mentioned={is_mentioned}, is_role_mentioned={is_role_mentioned}, will_respond={should_respond}")
+            
+            # Prepare content - remove mentions if present
             content = message.content
             if is_mentioned:
                 content = content.replace(f'<@{self.bot.user.id}>', '').strip()
@@ -484,22 +550,31 @@ class LilithDiscordBot:
                 print(f"  📨 Empty content after removing mention, ignoring")
                 return
             
-            # Get guild info if in a server
-            guild_id = str(message.guild.id) if message.guild else None
-            guild_name = message.guild.name if message.guild else ""
-            
-            # Process the message
-            async with message.channel.typing():
+            # Process the message (for learning and/or response)
+            response_text = None
+            if should_respond:
+                # Generate response with typing indicator
+                async with message.channel.typing():
+                    response_text = await self._process_message(
+                        message.author, 
+                        content,
+                        message.id,
+                        guild_id=guild_id,
+                        guild_name=guild_name
+                    )
+            else:
+                # Passive listening: process for learning only (no typing indicator)
                 response_text = await self._process_message(
                     message.author, 
                     content,
                     message.id,
                     guild_id=guild_id,
-                    guild_name=guild_name
+                    guild_name=guild_name,
+                    passive_mode=True  # Learn but don't generate response
                 )
             
-            # Send response
-            if response_text:
+            # Send response only if we should respond and got a response
+            if should_respond and response_text:
                 sent_message = await message.reply(response_text)
                 
                 # Track for reaction feedback
@@ -550,10 +625,11 @@ class LilithDiscordBot:
         content: str, 
         message_id: int,
         guild_id: str = None,
-        guild_name: str = ""
-    ) -> str:
+        guild_name: str = "",
+        passive_mode: bool = False
+    ) -> Optional[str]:
         """
-        Process a message and generate a response.
+        Process a message and optionally generate a response.
         
         Args:
             user: Discord user
@@ -561,9 +637,10 @@ class LilithDiscordBot:
             message_id: Message ID for tracking
             guild_id: Guild ID if in server (None for DMs)
             guild_name: Guild name for display
+            passive_mode: If True, learn from message but don't generate response
             
         Returns:
-            Response text
+            Response text (or None if passive_mode=True)
         """
         from datetime import datetime
         
@@ -579,6 +656,28 @@ class LilithDiscordBot:
         
         # Check for preference information (name, interests)
         learned = self.preference_learner.process_input(user_id, content)
+        
+        # In passive mode, only do learning - no response generation
+        if passive_mode:
+            # Still update auto-learner with the observed message
+            auto_learner = self._user_auto_learners.get(cache_key)
+            if auto_learner:
+                # Process conversation pair for semantic learning
+                # Use empty response since we're just observing
+                auto_learner.process_conversation(content, "")
+            
+            # Apply plasticity if enabled (learning from observation)
+            if self.plasticity_config['enabled']:
+                self._user_interaction_counts[cache_key] = self._user_interaction_counts.get(cache_key, 0) + 1
+                interaction_count = self._user_interaction_counts[cache_key]
+                
+                # Periodically apply observed learning
+                if composer.syntax_stage and interaction_count % 10 == 0:
+                    print(f"  👂 Passive learning update (interaction {interaction_count})")
+            
+            return None  # No response in passive mode
+        
+        # === ACTIVE MODE: Generate response ===
         
         # Check for feedback signals from previous message
         tracker = self._user_trackers.get(cache_key)
@@ -608,6 +707,48 @@ class LilithDiscordBot:
         auto_learner = self._user_auto_learners.get(cache_key)
         if auto_learner:
             auto_learner.process_conversation(content, response.text)
+        
+        # === NEUROPLASTICITY: Apply learning based on interaction count ===
+        if self.plasticity_config['enabled']:
+            # Increment interaction count
+            self._user_interaction_counts[cache_key] = self._user_interaction_counts.get(cache_key, 0) + 1
+            interaction_count = self._user_interaction_counts[cache_key]
+            
+            # Apply syntax plasticity periodically (if we have patterns from this conversation)
+            syntax_interval = self.plasticity_config['syntax_plasticity_interval']
+            if composer.syntax_stage and interaction_count % syntax_interval == 0:
+                print(f"  🧠 Applying syntax plasticity (interaction {interaction_count})...")
+                try:
+                    # Get all available patterns from syntax stage
+                    if hasattr(composer.syntax_stage, 'patterns') and composer.syntax_stage.patterns:
+                        # Apply plasticity to a sample of recent patterns
+                        pattern_sample = list(composer.syntax_stage.patterns.values())[-5:]
+                        for pattern in pattern_sample:
+                            if hasattr(composer.syntax_stage, '_apply_plasticity'):
+                                report = composer.syntax_stage._apply_plasticity(
+                                    pattern=pattern,
+                                    feedback=0.8,  # Positive reinforcement for successful interaction
+                                    contrastive_pairs=None
+                                )
+                                if report:
+                                    print(f"     Plasticity: pattern={report.pattern_id}, "
+                                          f"delta_centers={report.delta_centers:.4f}, "
+                                          f"delta_mus={report.delta_mus:.4f}")
+                except Exception as e:
+                    print(f"  ⚠️  Syntax plasticity error: {e}")
+            
+            # Apply contrastive learning from conversation pairs
+            contrastive_interval = self.plasticity_config['contrastive_interval']
+            if composer.syntax_stage and interaction_count % contrastive_interval == 0:
+                print(f"  🎓 Applying contrastive learning (interaction {interaction_count})...")
+                try:
+                    if hasattr(composer.syntax_stage, 'apply_contrastive_learning'):
+                        # Apply general contrastive learning on collected patterns
+                        report = composer.syntax_stage.apply_contrastive_learning()
+                        if report:
+                            print(f"     Contrastive: pattern={report.pattern_id}, type={report.plasticity_type}")
+                except Exception as e:
+                    print(f"  ⚠️  Contrastive learning error: {e}")
         
         # Build response text
         response_text = response.text

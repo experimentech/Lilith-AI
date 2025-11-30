@@ -13,8 +13,8 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.math_backend import MathBackend, SYMPY_AVAILABLE
-from pipeline.modal_classifier import ModalClassifier, Modality
+from lilith.math_backend import MathBackend, SYMPY_AVAILABLE
+from lilith.modal_classifier import ModalClassifier, Modality
 
 
 def test_modal_classifier():

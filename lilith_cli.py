@@ -137,7 +137,7 @@ def main():
     
     print()
     print("Type '/quit' or '/exit' to exit")
-    print("Commands: '/stats', '/reset', '/help'")
+    print("Commands: '/teach', '/stats', '/reset', '/help'")
     print("Feedback: '/+' (upvote), '/-' (downvote), '/?' (show last pattern ID)")
     print("=" * 60)
     print()
@@ -223,12 +223,56 @@ def main():
                 print("\n📖 Commands:")
                 print("   /quit    - Exit the program")
                 print("   /exit    - Exit the program")
+                print("   /teach   - Teach a new question/answer pair")
                 print("   /stats   - Show pattern statistics")
                 print("   /feedback- Show auto-feedback stats")
                 print("   /reset   - Reset your data (with backup)")
                 print("   /+       - Upvote last response")
                 print("   /-       - Downvote last response")
                 print("   /?       - Show last pattern ID")
+                print()
+                continue
+            
+            elif command == 'teach':
+                print("\n📚 Teaching Mode")
+                print("=" * 50)
+                
+                # Get question
+                question = input("Question: ").strip()
+                if not question:
+                    print("❌ Teaching cancelled - no question provided")
+                    print()
+                    continue
+                
+                # Get answer
+                answer = input("Answer: ").strip()
+                if not answer:
+                    print("❌ Teaching cancelled - no answer provided")
+                    print()
+                    continue
+                
+                # Add the pattern (layered_store handles the appropriate API)
+                try:
+                    pattern_id = fragment_store.add_pattern(
+                        pattern=question.lower(),
+                        response=answer,
+                        intent="taught",
+                        success_rate=0.8
+                    )
+                    
+                    if pattern_id:
+                        location = "base knowledge" if user_identity.is_teacher() else "your personal knowledge"
+                        print(f"\n✅ Learned!")
+                        print(f"   Q: {question}")
+                        print(f"   A: {answer}")
+                        print(f"   Stored in: {location}")
+                        print(f"   Pattern ID: {pattern_id}")
+                        print(f"\n   Try asking me now! 🎓")
+                    else:
+                        print(f"\n❌ Failed to store pattern (no writable layer)")
+                except Exception as e:
+                    print(f"\n❌ Failed to learn pattern: {e}")
+                
                 print()
                 continue
             
@@ -372,13 +416,14 @@ def main():
         if response.is_fallback:
             if response.is_low_confidence:
                 # No knowledge found at all
-                print(f"   💡 I don't know about this yet. Teach me:")
-                print(f"      1. Type the correct answer as your next message")
-                print(f"      2. Upvote it with '/+' to help me learn!")
+                print(f"   💡 I don't know about this yet. You can teach me:")
+                print(f"      Option 1: Use '/teach' command for direct teaching")
+                print(f"      Option 2: Provide the answer, then I'll respond to it,")
+                print(f"                and you can upvote MY answer with '/+'")
             else:
                 # Wikipedia or external knowledge found
-                print(f"   📚 This is from external knowledge - not yet learned")
-                print(f"      Upvote with '/+' to teach me this pattern!")
+                print(f"   📚 This is from external knowledge - not yet in my learned patterns")
+                print(f"      Upvote with '/+' to save this for faster recall next time!")
         
         print()
 

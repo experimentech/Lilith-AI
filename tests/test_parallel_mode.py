@@ -13,11 +13,11 @@ import shutil
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.embedding import PMFlowEmbeddingEncoder
-from pipeline.production_concept_store import ProductionConceptStore
-from pipeline.response_composer import ResponseComposer
-from pipeline.conversation_state import ConversationState
-from pipeline.response_fragments import ResponseFragmentStore
+from lilith.embedding import PMFlowEmbeddingEncoder
+from lilith.production_concept_store import ProductionConceptStore
+from lilith.response_composer import ResponseComposer
+from lilith.conversation_state import ConversationState
+from lilith.response_fragments import ResponseFragmentStore
 
 
 def test_automatic_parallel_mode():

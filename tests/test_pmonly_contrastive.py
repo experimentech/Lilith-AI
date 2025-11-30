@@ -16,7 +16,7 @@ import torch
 import numpy as np
 from pathlib import Path
 from pmflow_bnn_enhanced.pmflow import contrastive_plasticity
-from pipeline.embedding import PMFlowEmbeddingEncoder
+from lilith.embedding import PMFlowEmbeddingEncoder
 
 
 def compute_similarity(encoder, phrase1, phrase2):

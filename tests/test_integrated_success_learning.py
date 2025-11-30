@@ -12,8 +12,8 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'experiments/retrieval_sanity'))
 
-from pipeline.embedding import PMFlowEmbeddingEncoder
-from pipeline.database_fragment_store import DatabaseBackedFragmentStore
+from lilith.embedding import PMFlowEmbeddingEncoder
+from lilith.database_fragment_store import DatabaseBackedFragmentStore
 
 
 def test_integrated_learning():
