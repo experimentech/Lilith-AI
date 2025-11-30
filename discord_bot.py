@@ -333,6 +333,70 @@ class LilithDiscordBot:
                 continue
 
     
+    def _detect_and_learn_declarative(self, content: str, cache_key: str) -> Optional[str]:
+        """
+        Detect declarative statements (facts) and store them for learning.
+        
+        Patterns detected:
+        - "X is Y" (Vampires are undead, Nosferatu is a vampire)
+        - "X does Y" (Vampires drink blood)
+        - "X has Y" (Vampires have fangs)
+        - "X verb Y" (Vampires sleep during the day)
+        
+        Returns:
+            String describing what was learned, or None
+        """
+        import re
+        
+        # Normalize content
+        text = content.strip().rstrip('.!?')
+        
+        # Patterns for declarative statements
+        patterns = [
+            (r'^(.+?)\s+(?:is|are|was|were)\s+(.+)$', 'is'),
+            (r'^(.+?)\s+(?:does|do|did)\s+(.+)$', 'does'),
+            (r'^(.+?)\s+(?:has|have|had)\s+(.+)$', 'has'),
+            (r'^(.+?)\s+(?:drink|drinks|eat|eats|sleep|sleeps|live|lives|hunt|hunts)\s+(.+)$', 'verb'),
+        ]
+        
+        for pattern, relation_type in patterns:
+            match = re.match(pattern, text, re.IGNORECASE)
+            if match:
+                subject = match.group(1).strip()
+                predicate = match.group(2).strip()
+                
+                # Don't learn questions or very short statements
+                if len(subject) < 2 or len(predicate) < 2:
+                    continue
+                if subject.lower().startswith(('what', 'who', 'where', 'when', 'why', 'how', 'do', 'does', 'is', 'are')):
+                    continue
+                
+                # Store as a learned pattern
+                store = self._user_stores.get(cache_key)
+                if store and hasattr(store, 'add_pattern'):
+                    # Create a Q&A pattern from the declarative statement
+                    if relation_type == 'is':
+                        question = f"What is {subject}?"
+                        answer = f"{subject} is {predicate}"
+                    elif relation_type == 'does':
+                        question = f"What does {subject} do?"
+                        answer = f"{subject} does {predicate}"
+                    elif relation_type == 'has':
+                        question = f"What does {subject} have?"
+                        answer = f"{subject} has {predicate}"
+                    else:  # verb
+                        question = f"What about {subject}?"
+                        answer = text
+                    
+                    try:
+                        store.add_pattern(question, answer, metadata={'source': 'declarative_learning'})
+                        return f"{subject} -> {predicate}"
+                    except Exception as e:
+                        print(f"  ⚠️  Failed to store declarative: {e}")
+                        return None
+        
+        return None
+    
     def _get_user_id(self, discord_user) -> str:
         """Convert Discord user to Lilith user ID."""
         return f"discord_{discord_user.id}"
@@ -579,13 +643,15 @@ class LilithDiscordBot:
                 
                 # Track for reaction feedback
                 user_id = self._get_user_id(message.author)
-                if user_id in self._user_trackers:
-                    tracker = self._user_trackers[user_id]
+                # Build cache_key to match how trackers are stored
+                cache_key = f"{user_id}:{guild_id or 'dm'}"
+                if cache_key in self._user_trackers:
+                    tracker = self._user_trackers[cache_key]
                     if tracker.history:
                         last = tracker.history[-1]
                         if last.get('pattern_id'):
                             self._message_patterns[sent_message.id] = (
-                                user_id, 
+                                cache_key,  # Store cache_key, not just user_id
                                 last['pattern_id']
                             )
         
@@ -601,15 +667,18 @@ class LilithDiscordBot:
             if message_id not in self._message_patterns:
                 return
             
-            user_id, pattern_id = self._message_patterns[message_id]
+            cache_key, pattern_id = self._message_patterns[message_id]
+            
+            # Extract user_id from cache_key for validation
+            stored_user_id = cache_key.split(':')[0]
             
             # Check if reaction is from the original user
-            if self._get_user_id(user) != user_id:
+            if self._get_user_id(user) != stored_user_id:
                 return
             
             # Apply feedback based on emoji
             emoji = str(reaction.emoji)
-            store = self._user_stores.get(user_id)
+            store = self._user_stores.get(cache_key)  # Use cache_key, not user_id
             
             if store:
                 if emoji in ['👍', '❤️', '✅', '🎉', '💯']:
@@ -687,6 +756,12 @@ class LilithDiscordBot:
             return None  # No response in passive mode
         
         # === ACTIVE MODE: Generate response ===
+        
+        # Detect and learn from declarative statements (only if learning enabled)
+        if learning_enabled:
+            declarative_learned = self._detect_and_learn_declarative(content, cache_key)
+            if declarative_learned:
+                print(f"  📝 Learned declarative fact: {declarative_learned}")
         
         # Check for feedback signals from previous message (only if learning enabled)
         if learning_enabled:
