@@ -647,6 +647,13 @@ class LilithDiscordBot:
         user_id = self._get_user_id(user)
         cache_key = f"{user_id}:{guild_id or 'dm'}"
         
+        # Check if learning is enabled for this context
+        # DMs always have learning enabled; guilds check settings
+        learning_enabled = True
+        if guild_id:
+            server_settings = self.server_store_manager.load_settings(guild_id, guild_name)
+            learning_enabled = server_settings.learning_enabled
+        
         # Track user activity for session management
         self._user_last_active[user_id] = datetime.now()
         self.preference_store.touch_user(user_id)
@@ -654,62 +661,68 @@ class LilithDiscordBot:
         # Get or create composer for this user (context-aware)
         composer = self._get_or_create_composer(user, guild_id=guild_id, guild_name=guild_name)
         
-        # Check for preference information (name, interests)
+        # Check for preference information (name, interests) - always enabled
         learned = self.preference_learner.process_input(user_id, content)
         
         # In passive mode, only do learning - no response generation
         if passive_mode:
-            # Still update auto-learner with the observed message
-            auto_learner = self._user_auto_learners.get(cache_key)
-            if auto_learner:
-                # Process conversation pair for semantic learning
-                # Use empty response since we're just observing
-                auto_learner.process_conversation(content, "")
-            
-            # Apply plasticity if enabled (learning from observation)
-            if self.plasticity_config['enabled']:
-                self._user_interaction_counts[cache_key] = self._user_interaction_counts.get(cache_key, 0) + 1
-                interaction_count = self._user_interaction_counts[cache_key]
+            # Only learn if learning is enabled
+            if learning_enabled:
+                # Still update auto-learner with the observed message
+                auto_learner = self._user_auto_learners.get(cache_key)
+                if auto_learner:
+                    # Process conversation pair for semantic learning
+                    # Use empty response since we're just observing
+                    auto_learner.process_conversation(content, "")
                 
-                # Periodically apply observed learning
-                if composer.syntax_stage and interaction_count % 10 == 0:
-                    print(f"  👂 Passive learning update (interaction {interaction_count})")
+                # Apply plasticity if enabled (learning from observation)
+                if self.plasticity_config['enabled']:
+                    self._user_interaction_counts[cache_key] = self._user_interaction_counts.get(cache_key, 0) + 1
+                    interaction_count = self._user_interaction_counts[cache_key]
+                    
+                    # Periodically apply observed learning
+                    if composer.syntax_stage and interaction_count % 10 == 0:
+                        print(f"  👂 Passive learning update (interaction {interaction_count})")
             
             return None  # No response in passive mode
         
         # === ACTIVE MODE: Generate response ===
         
-        # Check for feedback signals from previous message
-        tracker = self._user_trackers.get(cache_key)
-        store = self._user_stores.get(cache_key)
-        
-        if tracker and store and tracker.history:
-            # Get last response info
-            feedback_result = tracker.check_feedback(content)
+        # Check for feedback signals from previous message (only if learning enabled)
+        if learning_enabled:
+            tracker = self._user_trackers.get(cache_key)
+            store = self._user_stores.get(cache_key)
             
-            if feedback_result:
-                result, pattern_id = feedback_result
-                if result.should_apply and pattern_id:
-                    if result.is_positive:
-                        store.upvote(pattern_id, strength=result.strength)
-                    elif result.is_negative:
-                        store.downvote(pattern_id, strength=result.strength)
+            if tracker and store and tracker.history:
+                # Get last response info
+                feedback_result = tracker.check_feedback(content)
+                
+                if feedback_result:
+                    result, pattern_id = feedback_result
+                    if result.should_apply and pattern_id:
+                        if result.is_positive:
+                            store.upvote(pattern_id, strength=result.strength)
+                        elif result.is_negative:
+                            store.downvote(pattern_id, strength=result.strength)
         
         # Generate response
         response = composer.compose_response(context=content, user_input=content)
         
-        # Track for feedback
-        if tracker:
-            pattern_id = response.fragment_ids[0] if response.fragment_ids else None
-            tracker.record_interaction(content, response.text, pattern_id)
+        # Track for feedback (only if learning enabled)
+        if learning_enabled:
+            tracker = self._user_trackers.get(cache_key)
+            if tracker:
+                pattern_id = response.fragment_ids[0] if response.fragment_ids else None
+                tracker.record_interaction(content, response.text, pattern_id)
         
-        # Auto-learn semantic relationships
-        auto_learner = self._user_auto_learners.get(cache_key)
-        if auto_learner:
-            auto_learner.process_conversation(content, response.text)
+        # Auto-learn semantic relationships (only if learning enabled)
+        if learning_enabled:
+            auto_learner = self._user_auto_learners.get(cache_key)
+            if auto_learner:
+                auto_learner.process_conversation(content, response.text)
         
         # === NEUROPLASTICITY: Apply learning based on interaction count ===
-        if self.plasticity_config['enabled']:
+        if learning_enabled and self.plasticity_config['enabled']:
             # Increment interaction count
             self._user_interaction_counts[cache_key] = self._user_interaction_counts.get(cache_key, 0) + 1
             interaction_count = self._user_interaction_counts[cache_key]
