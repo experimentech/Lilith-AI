@@ -176,6 +176,135 @@ bot = LilithDiscordBot(
 )
 ```
 
+---
+
+## Server Settings & Behavior
+
+Use `/settings` command to configure how the bot behaves in your server.
+
+### 🎧 Passive Listening (Default: **ENABLED**)
+
+**What it does:**
+- **ENABLED** ✅: Bot silently observes ALL messages for learning and context
+  - Learns from conversations happening in the channel
+  - Builds contextual understanding of topics being discussed
+  - **Only responds when mentioned (@Lilith)** - won't spam!
+  - When mentioned, has full conversation context for relevant responses
+  
+- **DISABLED** ❌: Bot ignores messages unless directly mentioned
+  - No background learning from conversations
+  - No contextual awareness of channel discussions
+  - Still responds when mentioned, but without prior context
+
+**Example with passive listening enabled:**
+```
+User A: "I'm debugging a Python async issue"
+User B: "Have you tried asyncio.gather()?"
+[Bot learns: Python, async, asyncio context]
+
+User C: "@Lilith what are we talking about?"
+Bot: "You're discussing Python async/await patterns and asyncio.gather()."
+```
+
+**Toggle:**
+```
+/settings passive_listening true   # Enable (recommended)
+/settings passive_listening false  # Disable
+```
+
+**Recommendation:** Keep **enabled** for better context-aware responses.
+
+---
+
+### 🧠 Learning Enabled (Default: **ENABLED**)
+
+**What it does:**
+- **ENABLED** ✅: Bot learns and evolves from interactions
+  - Processes feedback (👍/👎 reactions)
+  - Semantic learning (word associations, concepts)
+  - Neuroplasticity (pattern refinement, grammar improvements)
+  - Knowledge accumulation over time
+  
+- **DISABLED** ❌: Bot responds but doesn't update knowledge
+  - No learning from feedback or interactions
+  - No pattern updates or knowledge growth
+  - Still generates responses using existing knowledge
+  - Useful for testing or "read-only" mode
+
+**Toggle:**
+```
+/settings learning_enabled true    # Enable (recommended)
+/settings learning_enabled false   # Disable for testing
+```
+
+**Recommendation:** Keep **enabled** for continuous improvement.
+
+---
+
+### 🎯 Minimum Confidence (Default: **0.3** / 30%)
+
+Controls how confident the bot must be before responding.
+
+**Adjust:**
+```
+/settings min_confidence 0.5   # Require 50% confidence
+/settings view_all             # View all settings
+```
+
+---
+
+### 👨‍🏫 Teaching Roles
+
+Restrict who can teach the bot:
+
+```
+/teachrole add @TrustedRole
+/teachrole remove @TrustedRole
+```
+
+---
+
+## Teaching the Bot
+
+**Method 1: `/teach` Command**
+```
+/teach
+Question: What is the capital of France?
+Answer: Paris
+```
+
+**Method 2: Reactions**
+- 👍 ❤️ ✅ = Upvote
+- 👎 ❌ = Downvote
+
+**Method 3: Implicit Feedback**
+```
+Bot: "Python is functional only."
+You: "That's wrong, it's multi-paradigm."
+[Bot learns from correction]
+```
+
+---
+
+## Privacy & Data
+
+**Stored:** Message content (for learning), user preferences, server knowledge
+
+**Not stored:** Edit history, deleted messages, private info
+
+**Location:** `data/servers/{guild_id}/`, `data/users/{user_id}/`
+
+---
+
+## DM Behavior
+
+In Direct Messages:
+- ✅ Always responds
+- ✅ Learning always enabled
+- ✅ Settings don't apply
+
+---
+
 ## Security Notes
 
 - Each Discord user gets isolated storage (can't see others' data)

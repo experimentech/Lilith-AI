@@ -26,12 +26,35 @@ from typing import Optional, Dict, Any, List
 
 @dataclass
 class ServerSettings:
-    """Configuration for a Discord server."""
+    """
+    Configuration for a Discord server.
+    
+    Learning Behavior:
+    -----------------
+    passive_listening (default: True)
+        When enabled, the bot silently observes ALL messages in guild channels
+        for learning and context tracking, but only responds when mentioned.
+        This allows the bot to understand conversation context and provide
+        relevant responses when invoked.
+        
+        - ENABLED: Bot learns from all messages, responds only when mentioned
+        - DISABLED: Bot ignores non-mention messages completely
+        
+    learning_enabled (default: True)
+        Controls whether the bot can learn and update its knowledge from
+        interactions in this server. Affects feedback processing, semantic
+        learning, and neuroplasticity updates.
+        
+        - ENABLED: Bot learns from interactions (feedback, patterns, semantics)
+        - DISABLED: Bot responds but doesn't update its knowledge base
+        
+    Note: In DMs, both settings are always treated as enabled.
+    """
     guild_id: str
     guild_name: str = ""
     
     # Listening mode
-    passive_listening: bool = False          # Listen without responding
+    passive_listening: bool = True           # Listen to all messages for context (responds only when mentioned)
     passive_channels: List[str] = field(default_factory=list)  # Channel IDs for passive mode
     
     # Learning settings
@@ -59,7 +82,7 @@ class ServerSettings:
         return cls(
             guild_id=data['guild_id'],
             guild_name=data.get('guild_name', ''),
-            passive_listening=data.get('passive_listening', False),
+            passive_listening=data.get('passive_listening', True),  # Default: True for context awareness
             passive_channels=data.get('passive_channels', []),
             learning_enabled=data.get('learning_enabled', True),
             teaching_roles=data.get('teaching_roles', []),
