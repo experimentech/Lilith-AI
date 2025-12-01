@@ -82,29 +82,22 @@ class LilithDiscordBot:
         
         # Import Lilith components here to avoid import errors when discord not available
         from lilith.embedding import PMFlowEmbeddingEncoder
-        from lilith.response_composer import ResponseComposer
-        from lilith.conversation_state import ConversationState
         from lilith.multi_tenant_store import MultiTenantFragmentStore
         from lilith.user_auth import AuthMode, UserIdentity
         from lilith.user_preferences import UserPreferenceLearner, UserPreferencesStore
-        from lilith.layered_store import (
-            LayeredFragmentStore, LayerStackBuilder, LayerPermission,
-            create_dm_stack, create_server_stack
-        )
         from lilith.server_store import ServerStoreManager, ServerSettings
+        from lilith.session import LilithSession, SessionConfig
         
         self.data_path = Path(data_path)
         self.session_timeout_minutes = session_timeout_minutes
         self.user_retention_days = user_retention_days
         
         # Store class references for later use
-        self._ResponseComposer = ResponseComposer
-        self._ConversationState = ConversationState
         self._MultiTenantFragmentStore = MultiTenantFragmentStore
         self._AuthMode = AuthMode
         self._UserIdentity = UserIdentity
-        self._LayerStackBuilder = LayerStackBuilder
-        self._LayerPermission = LayerPermission
+        self._LilithSession = LilithSession
+        self._SessionConfig = SessionConfig
         
         # Discord bot setup with intents
         intents = discord.Intents.default()
@@ -131,40 +124,23 @@ class LilithDiscordBot:
         # Base knowledge store (shared read-only knowledge)
         self._base_store = None  # Loaded lazily
         
-        # Optional: Auto semantic learning
-        self._AutoSemanticLearner = None
-        try:
-            from lilith.auto_semantic_learner import AutoSemanticLearner
-            self._AutoSemanticLearner = AutoSemanticLearner
-        except ImportError:
-            pass
+        # Session configuration
+        self.session_config = self._SessionConfig(
+            data_path=str(self.data_path),
+            learning_enabled=True,
+            enable_declarative_learning=True,
+            enable_feedback_detection=True,
+            plasticity_enabled=True,
+            syntax_plasticity_interval=5,
+            pmflow_plasticity_interval=10,
+            contrastive_interval=5
+        )
         
-        # Optional: Feedback detection
-        self._FeedbackTracker = None
-        try:
-            from lilith.feedback_detector import FeedbackTracker
-            self._FeedbackTracker = FeedbackTracker
-        except ImportError:
-            pass
-        
-        # Plasticity configuration
-        self.plasticity_config = {
-            'enabled': True,
-            'syntax_plasticity_interval': 5,  # Apply syntax plasticity every N interactions
-            'pmflow_plasticity_interval': 10,  # Apply PMFlow plasticity every N interactions
-            'contrastive_interval': 5,  # Apply contrastive learning every N interactions
-        }
-        
-        # Per-user state caches with last activity tracking
-        self._user_composers: Dict[str, Any] = {}
-        self._user_stores: Dict[str, Any] = {}
-        self._user_states: Dict[str, Any] = {}
-        self._user_trackers: Dict[str, Any] = {}
-        self._user_auto_learners: Dict[str, Any] = {}
-        self._user_interaction_counts: Dict[str, int] = {}  # Track interactions for plasticity triggers
+        # Per-user session caches with last activity tracking
+        self._user_sessions: Dict[str, Any] = {}
         self._user_last_active: Dict[str, datetime] = {}  # Track session activity
         
-        # Track last messages for feedback (message_id -> (user_id, pattern_id))
+        # Track last messages for feedback (message_id -> (cache_key, pattern_id))
         self._message_patterns: Dict[int, tuple] = {}
         
         # Setup event handlers
@@ -191,31 +167,32 @@ class LilithDiscordBot:
         threshold = datetime.now() - timedelta(minutes=self.session_timeout_minutes)
         to_cleanup = []
         
-        for user_id, last_active in self._user_last_active.items():
+        for cache_key, last_active in self._user_last_active.items():
             if last_active < threshold:
-                to_cleanup.append(user_id)
+                to_cleanup.append(cache_key)
         
-        for user_id in to_cleanup:
-            self._free_user_session(user_id)
+        for cache_key in to_cleanup:
+            self._free_user_session(cache_key)
         
         return len(to_cleanup)
     
-    def _free_user_session(self, user_id: str) -> None:
+    def _free_user_session(self, cache_key: str) -> None:
         """
         Free memory for a user's session (keeps data on disk).
         
         Args:
-            user_id: User whose session to free
+            cache_key: Session cache key (user_id:guild_id or user_id:dm)
         """
-        # Remove from all caches
-        self._user_composers.pop(user_id, None)
-        self._user_stores.pop(user_id, None)
-        self._user_states.pop(user_id, None)
-        self._user_trackers.pop(user_id, None)
-        self._user_auto_learners.pop(user_id, None)
-        self._user_last_active.pop(user_id, None)
+        # Cleanup and remove session
+        if cache_key in self._user_sessions:
+            self._user_sessions[cache_key].cleanup()
+            del self._user_sessions[cache_key]
         
-        # Clear from preference cache too
+        # Remove activity tracking
+        self._user_last_active.pop(cache_key, None)
+        
+        # Clear from preference cache (extract user_id from cache_key)
+        user_id = cache_key.split(':')[0]
         self.preference_store._cache.pop(user_id, None)
     
     def _cleanup_old_user_data(self) -> List[str]:
@@ -240,54 +217,30 @@ class LilithDiscordBot:
         )
     
     def _save_plasticity_state(self):
-        """Save PMFlow and contrastive learner state for active composers."""
+        """Save state for active sessions."""
         try:
             saved_count = 0
-            for user_id, composer in self._user_composers.items():
-                if not composer.syntax_stage:
-                    continue
-                    
-                # Save PMFlow state if available
-                if hasattr(composer.syntax_stage, 'pmflow') and composer.syntax_stage.pmflow is not None:
-                    save_path = self.data_path / "pmflow" / f"{user_id}_pmflow.json"
-                    save_path.parent.mkdir(parents=True, exist_ok=True)
-                    
-                    try:
-                        composer.syntax_stage.pmflow.save(str(save_path))
-                        saved_count += 1
-                    except Exception as e:
-                        print(f"  ⚠️  Failed to save PMFlow for {user_id}: {e}")
-                
-                # Save contrastive learner state if available
-                if hasattr(composer.syntax_stage, 'contrastive_learner') and composer.syntax_stage.contrastive_learner:
-                    learner = composer.syntax_stage.contrastive_learner
-                    if hasattr(learner, 'save'):
-                        save_path = self.data_path / "contrastive" / f"{user_id}_contrastive.json"
-                        save_path.parent.mkdir(parents=True, exist_ok=True)
-                        
-                        try:
-                            learner.save(str(save_path))
-                            saved_count += 1
-                        except Exception as e:
-                            print(f"  ⚠️  Failed to save contrastive learner for {user_id}: {e}")
+            for cache_key, session in self._user_sessions.items():
+                session.save_state()
+                saved_count += 1
             
             if saved_count > 0:
-                print(f"💾 Saved plasticity state for {saved_count} component(s)")
+                print(f"💾 Saved state for {saved_count} session(s)")
                 
         except Exception as e:
-            print(f"⚠️ Plasticity save error: {e}")
+            print(f"⚠️ State save error: {e}")
     
     def get_session_stats(self) -> Dict[str, Any]:
         """Get statistics about active sessions."""
         from datetime import datetime
         
-        active_sessions = len(self._user_composers)
+        active_sessions = len(self._user_sessions)
         
         # Find oldest and newest sessions
         oldest_age = 0.0
         newest_age = float('inf')
         
-        for user_id, last_active in self._user_last_active.items():
+        for cache_key, last_active in self._user_last_active.items():
             age_minutes = (datetime.now() - last_active).total_seconds() / 60
             oldest_age = max(oldest_age, age_minutes)
             newest_age = min(newest_age, age_minutes)
@@ -333,70 +286,6 @@ class LilithDiscordBot:
                 continue
 
     
-    def _detect_and_learn_declarative(self, content: str, cache_key: str) -> Optional[str]:
-        """
-        Detect declarative statements (facts) and store them for learning.
-        
-        Patterns detected:
-        - "X is Y" (Vampires are undead, Nosferatu is a vampire)
-        - "X does Y" (Vampires drink blood)
-        - "X has Y" (Vampires have fangs)
-        - "X verb Y" (Vampires sleep during the day)
-        
-        Returns:
-            String describing what was learned, or None
-        """
-        import re
-        
-        # Normalize content
-        text = content.strip().rstrip('.!?')
-        
-        # Patterns for declarative statements
-        patterns = [
-            (r'^(.+?)\s+(?:is|are|was|were)\s+(.+)$', 'is'),
-            (r'^(.+?)\s+(?:does|do|did)\s+(.+)$', 'does'),
-            (r'^(.+?)\s+(?:has|have|had)\s+(.+)$', 'has'),
-            (r'^(.+?)\s+(?:drink|drinks|eat|eats|sleep|sleeps|live|lives|hunt|hunts)\s+(.+)$', 'verb'),
-        ]
-        
-        for pattern, relation_type in patterns:
-            match = re.match(pattern, text, re.IGNORECASE)
-            if match:
-                subject = match.group(1).strip()
-                predicate = match.group(2).strip()
-                
-                # Don't learn questions or very short statements
-                if len(subject) < 2 or len(predicate) < 2:
-                    continue
-                if subject.lower().startswith(('what', 'who', 'where', 'when', 'why', 'how', 'do', 'does', 'is', 'are')):
-                    continue
-                
-                # Store as a learned pattern
-                store = self._user_stores.get(cache_key)
-                if store and hasattr(store, 'add_pattern'):
-                    # Create a Q&A pattern from the declarative statement
-                    if relation_type == 'is':
-                        question = f"What is {subject}?"
-                        answer = f"{subject} is {predicate}"
-                    elif relation_type == 'does':
-                        question = f"What does {subject} do?"
-                        answer = f"{subject} does {predicate}"
-                    elif relation_type == 'has':
-                        question = f"What does {subject} have?"
-                        answer = f"{subject} has {predicate}"
-                    else:  # verb
-                        question = f"What about {subject}?"
-                        answer = text
-                    
-                    try:
-                        store.add_pattern(question, answer, metadata={'source': 'declarative_learning'})
-                        return f"{subject} -> {predicate}"
-                    except Exception as e:
-                        print(f"  ⚠️  Failed to store declarative: {e}")
-                        return None
-        
-        return None
-    
     def _get_user_id(self, discord_user) -> str:
         """Convert Discord user to Lilith user ID."""
         return f"discord_{discord_user.id}"
@@ -418,9 +307,9 @@ class LilithDiscordBot:
         )
         return self._base_store
     
-    def _get_or_create_composer(self, discord_user, guild_id: str = None, guild_name: str = ""):
+    def _get_or_create_session(self, discord_user, guild_id: str = None, guild_name: str = ""):
         """
-        Get or create a ResponseComposer for a user with context-aware layering.
+        Get or create a LilithSession for a user.
         
         Args:
             discord_user: Discord user object
@@ -428,19 +317,15 @@ class LilithDiscordBot:
             guild_name: Server name for display
             
         Returns:
-            ResponseComposer configured with appropriate layer stack
-            
-        Layer configurations:
-            DM context: base (read) → user (read/write)
-            Server context: base (read) → server (read/write) → user (read for prefs)
+            LilithSession configured for this context
         """
         user_id = self._get_user_id(discord_user)
         
         # Create cache key based on context
         cache_key = f"{user_id}:{guild_id or 'dm'}"
         
-        if cache_key in self._user_composers:
-            return self._user_composers[cache_key]
+        if cache_key in self._user_sessions:
+            return self._user_sessions[cache_key]
         
         # Create user identity
         identity = self._UserIdentity(
@@ -449,80 +334,47 @@ class LilithDiscordBot:
             display_name=discord_user.display_name
         )
         
-        # Create user's personal fragment store (always needed)
-        user_store = self._MultiTenantFragmentStore(
+        # Create multi-tenant fragment store
+        fragment_store = self._MultiTenantFragmentStore(
             encoder=self.encoder,
             user_identity=identity,
             base_data_path=str(self.data_path)
         )
         
-        # Get base knowledge store
-        base_store = self._get_base_store()
-        
-        # Build layer stack based on context
-        builder = self._LayerStackBuilder()
-        builder.add_base(base_store)
-        
+        # Get server settings to check if learning is enabled
         if guild_id:
-            # Server context: base → server → user (read-only for prefs)
-            server_store = self.server_store_manager.get_fragment_store(guild_id, guild_name)
-            builder.add_server(server_store, guild_id=guild_id)
-            builder.add_user(user_store, user_id=user_id, read_only=True)
-            builder.with_default_write_layer(f"server:{guild_id}")
-            print(f"  🏠 Creating server context composer for {user_id} in guild {guild_id}")
+            server_settings = self.server_store_manager.load_settings(guild_id, guild_name)
+            learning_enabled = server_settings.learning_enabled
+            print(f"  🏠 Creating server context session for {user_id} in guild {guild_id} (learning: {learning_enabled})")
         else:
-            # DM context: base → user
-            builder.add_user(user_store, user_id=user_id, read_only=False)
-            builder.with_default_write_layer(f"user:{user_id}")
-            print(f"  💬 Creating DM context composer for {user_id}")
+            learning_enabled = True
+            print(f"  💬 Creating DM context session for {user_id}")
         
-        layered_store = builder.build()
-        
-        # Create conversation state
-        state = self._ConversationState(self.encoder)
-        
-        # Create response composer
-        # Note: ResponseComposer expects a store with retrieve_patterns() API
-        # In server context, use the server store; in DM context, use user store
-        if guild_id:
-            composer_store = server_store  # Server's ResponseFragmentStore
-        else:
-            composer_store = user_store  # User's MultiTenantFragmentStore
-        
-        composer = self._ResponseComposer(
-            composer_store,
-            state,
-            semantic_encoder=self.encoder,
-            enable_knowledge_augmentation=True,
-            enable_modal_routing=True,
-            use_grammar=True  # Enable BNN syntax stage with plasticity
+        # Create session config with server/DM-specific settings
+        config = self._SessionConfig(
+            data_path=str(self.data_path),
+            learning_enabled=learning_enabled,
+            enable_declarative_learning=learning_enabled,
+            enable_feedback_detection=True,
+            plasticity_enabled=learning_enabled,
+            syntax_plasticity_interval=5,
+            pmflow_plasticity_interval=10,
+            contrastive_interval=5
         )
         
-        # Load contrastive weights if available
-        contrastive_path = self.data_path / "contrastive_learner"
-        if contrastive_path.with_suffix('.json').exists():
-            composer.load_contrastive_weights(str(contrastive_path))
+        # Create session
+        session = self._LilithSession(
+            user_id=user_id,
+            context_id=guild_id or "dm",
+            config=config,
+            store=fragment_store,
+            display_name=discord_user.display_name or "User"
+        )
         
-        # Create feedback tracker
-        if self._FeedbackTracker:
-            tracker = self._FeedbackTracker()
-            self._user_trackers[cache_key] = tracker
+        # Cache the session
+        self._user_sessions[cache_key] = session
         
-        # Create auto learner
-        if self._AutoSemanticLearner and composer.contrastive_learner:
-            auto_learner = self._AutoSemanticLearner(
-                contrastive_learner=composer.contrastive_learner,
-                auto_train_threshold=10,
-                auto_train_steps=3
-            )
-            self._user_auto_learners[cache_key] = auto_learner
-        
-        # Cache all components using context-aware key
-        self._user_composers[cache_key] = composer
-        self._user_stores[cache_key] = layered_store
-        self._user_states[cache_key] = state
-        
-        return composer
+        return session
     
     def _setup_events(self):
         """Setup Discord event handlers."""
@@ -592,7 +444,11 @@ class LilithDiscordBot:
                     print(f"  👂 Passive listening: observing message for learning (no response)")
                 else:
                     print(f"  📨 Ignoring (not DM, not mentioned, passive listening disabled)")
-                    return
+                    # Don't return - let it fall through to process if needed
+            
+            # Skip processing entirely if not responding and passive listening is off
+            if not should_respond and not passive_listening_enabled:
+                return
             
             print(f"  📨 is_dm={is_dm}, is_mentioned={is_mentioned}, is_role_mentioned={is_role_mentioned}, will_respond={should_respond}")
             
@@ -643,17 +499,14 @@ class LilithDiscordBot:
                 
                 # Track for reaction feedback
                 user_id = self._get_user_id(message.author)
-                # Build cache_key to match how trackers are stored
                 cache_key = f"{user_id}:{guild_id or 'dm'}"
-                if cache_key in self._user_trackers:
-                    tracker = self._user_trackers[cache_key]
-                    if tracker.history:
-                        last = tracker.history[-1]
-                        if last.get('pattern_id'):
-                            self._message_patterns[sent_message.id] = (
-                                cache_key,  # Store cache_key, not just user_id
-                                last['pattern_id']
-                            )
+                session = self._user_sessions.get(cache_key)
+                
+                if session and session.last_pattern_id:
+                    self._message_patterns[sent_message.id] = (
+                        cache_key,
+                        session.last_pattern_id
+                    )
         
         @self.bot.event
         async def on_reaction_add(reaction, user):
@@ -678,14 +531,14 @@ class LilithDiscordBot:
             
             # Apply feedback based on emoji
             emoji = str(reaction.emoji)
-            store = self._user_stores.get(cache_key)  # Use cache_key, not user_id
+            session = self._user_sessions.get(cache_key)
             
-            if store:
+            if session:
                 if emoji in ['👍', '❤️', '✅', '🎉', '💯']:
-                    store.upvote(pattern_id, strength=0.2)
+                    session.upvote(pattern_id, strength=0.2)
                     print(f"   👍 Upvoted {pattern_id} via reaction")
                 elif emoji in ['👎', '❌', '😕', '🤔']:
-                    store.downvote(pattern_id, strength=0.2)
+                    session.downvote(pattern_id, strength=0.2)
                     print(f"   👎 Downvoted {pattern_id} via reaction")
     
     async def _process_message(
@@ -716,127 +569,28 @@ class LilithDiscordBot:
         user_id = self._get_user_id(user)
         cache_key = f"{user_id}:{guild_id or 'dm'}"
         
-        # Check if learning is enabled for this context
-        # DMs always have learning enabled; guilds check settings
-        learning_enabled = True
-        if guild_id:
-            server_settings = self.server_store_manager.load_settings(guild_id, guild_name)
-            learning_enabled = server_settings.learning_enabled
-        
         # Track user activity for session management
-        self._user_last_active[user_id] = datetime.now()
+        self._touch_session(cache_key)
         self.preference_store.touch_user(user_id)
         
-        # Get or create composer for this user (context-aware)
-        composer = self._get_or_create_composer(user, guild_id=guild_id, guild_name=guild_name)
+        # Get or create session for this user (context-aware)
+        session = self._get_or_create_session(user, guild_id=guild_id, guild_name=guild_name)
         
         # Check for preference information (name, interests) - always enabled
         learned = self.preference_learner.process_input(user_id, content)
         
-        # In passive mode, only do learning - no response generation
+        # Process message through session
+        response = session.process_message(content, passive_mode=passive_mode)
+        
+        # In passive mode, no response
         if passive_mode:
-            # Only learn if learning is enabled
-            if learning_enabled:
-                # Still update auto-learner with the observed message
-                auto_learner = self._user_auto_learners.get(cache_key)
-                if auto_learner:
-                    # Process conversation pair for semantic learning
-                    # Use empty response since we're just observing
-                    auto_learner.process_conversation(content, "")
-                
-                # Apply plasticity if enabled (learning from observation)
-                if self.plasticity_config['enabled']:
-                    self._user_interaction_counts[cache_key] = self._user_interaction_counts.get(cache_key, 0) + 1
-                    interaction_count = self._user_interaction_counts[cache_key]
-                    
-                    # Periodically apply observed learning
-                    if composer.syntax_stage and interaction_count % 10 == 0:
-                        print(f"  👂 Passive learning update (interaction {interaction_count})")
-            
-            return None  # No response in passive mode
+            if response.learned_fact:
+                print(f"  👂 Passive learning: {response.learned_fact}")
+            return None
         
-        # === ACTIVE MODE: Generate response ===
-        
-        # Detect and learn from declarative statements (only if learning enabled)
-        if learning_enabled:
-            declarative_learned = self._detect_and_learn_declarative(content, cache_key)
-            if declarative_learned:
-                print(f"  📝 Learned declarative fact: {declarative_learned}")
-        
-        # Check for feedback signals from previous message (only if learning enabled)
-        if learning_enabled:
-            tracker = self._user_trackers.get(cache_key)
-            store = self._user_stores.get(cache_key)
-            
-            if tracker and store and tracker.history:
-                # Get last response info
-                feedback_result = tracker.check_feedback(content)
-                
-                if feedback_result:
-                    result, pattern_id = feedback_result
-                    if result.should_apply and pattern_id:
-                        if result.is_positive:
-                            store.upvote(pattern_id, strength=result.strength)
-                        elif result.is_negative:
-                            store.downvote(pattern_id, strength=result.strength)
-        
-        # Generate response
-        response = composer.compose_response(context=content, user_input=content)
-        
-        # Track for feedback (only if learning enabled)
-        if learning_enabled:
-            tracker = self._user_trackers.get(cache_key)
-            if tracker:
-                pattern_id = response.fragment_ids[0] if response.fragment_ids else None
-                tracker.record_interaction(content, response.text, pattern_id)
-        
-        # Auto-learn semantic relationships (only if learning enabled)
-        if learning_enabled:
-            auto_learner = self._user_auto_learners.get(cache_key)
-            if auto_learner:
-                auto_learner.process_conversation(content, response.text)
-        
-        # === NEUROPLASTICITY: Apply learning based on interaction count ===
-        if learning_enabled and self.plasticity_config['enabled']:
-            # Increment interaction count
-            self._user_interaction_counts[cache_key] = self._user_interaction_counts.get(cache_key, 0) + 1
-            interaction_count = self._user_interaction_counts[cache_key]
-            
-            # Apply syntax plasticity periodically (if we have patterns from this conversation)
-            syntax_interval = self.plasticity_config['syntax_plasticity_interval']
-            if composer.syntax_stage and interaction_count % syntax_interval == 0:
-                print(f"  🧠 Applying syntax plasticity (interaction {interaction_count})...")
-                try:
-                    # Get all available patterns from syntax stage
-                    if hasattr(composer.syntax_stage, 'patterns') and composer.syntax_stage.patterns:
-                        # Apply plasticity to a sample of recent patterns
-                        pattern_sample = list(composer.syntax_stage.patterns.values())[-5:]
-                        for pattern in pattern_sample:
-                            if hasattr(composer.syntax_stage, '_apply_plasticity'):
-                                report = composer.syntax_stage._apply_plasticity(
-                                    pattern=pattern,
-                                    feedback=0.8,  # Positive reinforcement for successful interaction
-                                    contrastive_pairs=None
-                                )
-                                if report:
-                                    print(f"     Plasticity: pattern={report.pattern_id}, "
-                                          f"delta_centers={report.delta_centers:.4f}, "
-                                          f"delta_mus={report.delta_mus:.4f}")
-                except Exception as e:
-                    print(f"  ⚠️  Syntax plasticity error: {e}")
-            
-            # Apply contrastive learning from conversation pairs
-            contrastive_interval = self.plasticity_config['contrastive_interval']
-            if composer.syntax_stage and interaction_count % contrastive_interval == 0:
-                print(f"  🎓 Applying contrastive learning (interaction {interaction_count})...")
-                try:
-                    if hasattr(composer.syntax_stage, 'apply_contrastive_learning'):
-                        # Apply general contrastive learning on collected patterns
-                        report = composer.syntax_stage.apply_contrastive_learning()
-                        if report:
-                            print(f"     Contrastive: pattern={report.pattern_id}, type={report.plasticity_type}")
-                except Exception as e:
-                    print(f"  ⚠️  Contrastive learning error: {e}")
+        # Show learned declarative fact if any
+        if response.learned_fact:
+            print(f"  📝 Learned declarative fact: {response.learned_fact}")
         
         # Build response text
         response_text = response.text
@@ -902,21 +656,22 @@ class LilithDiscordBot:
                     inline=False
                 )
             
-            # Get pattern stats from context-aware store
-            store = self._user_stores.get(cache_key)
-            if store:
-                counts = store.get_pattern_count()
+            # Get pattern stats from session if active
+            session = self._user_sessions.get(cache_key)
+            if session:
+                stats = session.get_stats()
+                counts = stats.get('pattern_counts', {})
                 # Display based on context
                 if guild_id:
                     embed.add_field(
                         name="Server Patterns",
-                        value=str(counts.get(f'server:{guild_id}', 0)),
+                        value=str(counts.get('user', 0)),
                         inline=True
                     )
                 else:
                     embed.add_field(
                         name="Your Personal Patterns",
-                        value=str(counts.get(f'user:{user_id}', counts.get('user', 0))),
+                        value=str(counts.get('user', 0)),
                         inline=True
                     )
                 embed.add_field(
@@ -935,6 +690,8 @@ class LilithDiscordBot:
         async def stats(interaction):
             """Show bot statistics."""
             user_id = self._get_user_id(interaction.user)
+            guild_id = str(interaction.guild.id) if interaction.guild else None
+            cache_key = f"{user_id}:{guild_id or 'dm'}"
             
             embed = discord.Embed(
                 title="📊 Lilith Statistics",
@@ -942,8 +699,8 @@ class LilithDiscordBot:
             )
             
             embed.add_field(
-                name="Active Users",
-                value=str(len(self._user_composers)),
+                name="Active Sessions",
+                value=str(len(self._user_sessions)),
                 inline=True
             )
             
@@ -954,14 +711,15 @@ class LilithDiscordBot:
             )
             
             # User-specific stats
-            tracker = self._user_trackers.get(user_id)
-            if tracker:
-                fb_stats = tracker.get_stats()
-                embed.add_field(
-                    name="Your Interactions",
-                    value=str(fb_stats['total_interactions']),
-                    inline=True
-                )
+            session = self._user_sessions.get(cache_key)
+            if session:
+                fb_stats = session.get_feedback_stats()
+                if fb_stats:
+                    embed.add_field(
+                        name="Your Interactions",
+                        value=str(fb_stats.get('total_interactions', 0)),
+                        inline=True
+                    )
                 if fb_stats['total_interactions'] > 0:
                     embed.add_field(
                         name="Positive Feedback Rate",
@@ -975,10 +733,12 @@ class LilithDiscordBot:
         async def forget(interaction):
             """Clear user's session data."""
             user_id = self._get_user_id(interaction.user)
+            guild_id = str(interaction.guild.id) if interaction.guild else None
+            cache_key = f"{user_id}:{guild_id or 'dm'}"
             
-            # Clear caches
-            if user_id in self._user_trackers:
-                self._user_trackers[user_id].history.clear()
+            # Free the session (will be recreated on next message)
+            if cache_key in self._user_sessions:
+                self._free_user_session(cache_key)
             
             await interaction.response.send_message(
                 "I've forgotten our recent conversation. Let's start fresh! 🔄",
@@ -1064,19 +824,8 @@ class LilithDiscordBot:
             guild_name = interaction.guild.name if interaction.guild else ""
             cache_key = f"{user_id}:{guild_id or 'dm'}"
             
-            # Get or create store for this context
-            if cache_key not in self._user_stores:
-                # Initialize user components with context
-                self._get_or_create_composer(interaction.user, guild_id=guild_id, guild_name=guild_name)
-            
-            store = self._user_stores.get(cache_key)
-            
-            if not store:
-                await interaction.response.send_message(
-                    "❌ Sorry, I couldn't set up your learning space. Try again!",
-                    ephemeral=True
-                )
-                return
+            # Get or create session for this context
+            session = self._get_or_create_session(interaction.user, guild_id=guild_id, guild_name=guild_name)
             
             # Check if user can teach (in server context)
             if guild_id:
@@ -1090,13 +839,8 @@ class LilithDiscordBot:
                     return
             
             try:
-                # Add the pattern to the appropriate layer (server or user)
-                pattern_id = store.add_pattern(
-                    pattern=question.lower().strip(),
-                    response=answer.strip(),
-                    intent="taught",
-                    success_rate=0.8
-                )
+                # Teach the pattern
+                pattern_id = session.teach(question, answer, intent="taught")
                 
                 # Note where it was stored
                 if guild_id:
@@ -1391,13 +1135,19 @@ class LilithDiscordBot:
                 elif cmd == 'help':
                     print("""
 Console Commands:
-  stats     - Show session statistics
-  users     - List active user sessions  
-  cleanup   - Force cleanup of inactive sessions
-  clear     - Clear old user data (respects retention period)
-  ping      - Check if bot is responsive
-  servers   - List connected servers
-  quit      - Shutdown the bot gracefully
+  stats              - Show session statistics
+  users              - List active user sessions  
+  cleanup            - Force cleanup of inactive sessions
+  clear              - Clear old user data (respects retention period)
+  ping               - Check if bot is responsive
+  servers            - List connected servers
+  config <guild_id>  - Show server configuration
+  set <guild_id> <setting> <value> - Change server setting
+  quit               - Shutdown the bot gracefully
+  
+Server Settings:
+  passive_listening  - true/false (listen to all messages for learning)
+  learning_enabled   - true/false (allow knowledge updates)
 """)
                 
                 elif cmd == 'stats':
@@ -1412,18 +1162,18 @@ Session Statistics:
 """)
                 
                 elif cmd == 'users':
-                    if not self._user_composers:
+                    if not self._user_sessions:
                         print("  No active user sessions")
                     else:
-                        print(f"\nActive Sessions ({len(self._user_composers)}):")
-                        for user_id in self._user_composers.keys():
-                            last_active = self._user_last_active.get(user_id)
+                        print(f"\nActive Sessions ({len(self._user_sessions)}):")
+                        for cache_key in self._user_sessions.keys():
+                            last_active = self._user_last_active.get(cache_key)
                             if last_active:
                                 from datetime import datetime
                                 age = (datetime.now() - last_active).total_seconds() / 60
-                                print(f"  • {user_id} (active {age:.1f} min ago)")
+                                print(f"  • {cache_key} (active {age:.1f} min ago)")
                             else:
-                                print(f"  • {user_id}")
+                                print(f"  • {cache_key}")
                 
                 elif cmd == 'cleanup':
                     freed = self._cleanup_inactive_sessions()
@@ -1446,7 +1196,72 @@ Session Statistics:
                     else:
                         print(f"\nConnected Servers ({len(self.bot.guilds)}):")
                         for guild in self.bot.guilds:
-                            print(f"  • {guild.name} ({guild.member_count} members)")
+                            settings = self.server_store_manager.load_settings(str(guild.id), guild.name)
+                            passive = "✅" if settings.passive_listening else "❌"
+                            learning = "✅" if settings.learning_enabled else "❌"
+                            print(f"  • {guild.name} (ID: {guild.id})")
+                            print(f"    - {guild.member_count} members")
+                            print(f"    - Passive listening: {passive}")
+                            print(f"    - Learning: {learning}")
+                
+                elif cmd.startswith('config '):
+                    parts = cmd.split()
+                    if len(parts) != 2:
+                        print("  Usage: config <guild_id>")
+                    else:
+                        guild_id = parts[1]
+                        # Find guild
+                        guild = next((g for g in self.bot.guilds if str(g.id) == guild_id), None)
+                        if not guild:
+                            print(f"  ❌ Guild not found: {guild_id}")
+                            print(f"  Available guilds: {[str(g.id) for g in self.bot.guilds]}")
+                        else:
+                            settings = self.server_store_manager.load_settings(guild_id, guild.name)
+                            print(f"\nServer Configuration: {guild.name}")
+                            print(f"  Guild ID: {guild_id}")
+                            print(f"  Passive listening: {'✅ On' if settings.passive_listening else '❌ Off'}")
+                            print(f"  Learning enabled: {'✅ On' if settings.learning_enabled else '❌ Off'}")
+                            print(f"  Min confidence: {settings.min_confidence}")
+                            print(f"  Response prefix: '{settings.response_prefix}'")
+                
+                elif cmd.startswith('set '):
+                    parts = cmd.split()
+                    if len(parts) != 4:
+                        print("  Usage: set <guild_id> <setting> <value>")
+                        print("  Settings: passive_listening, learning_enabled")
+                        print("  Values: true, false")
+                    else:
+                        guild_id = parts[1]
+                        setting = parts[2]
+                        value_str = parts[3].lower()
+                        
+                        # Find guild
+                        guild = next((g for g in self.bot.guilds if str(g.id) == guild_id), None)
+                        if not guild:
+                            print(f"  ❌ Guild not found: {guild_id}")
+                            print(f"  Available guilds: {[str(g.id) for g in self.bot.guilds]}")
+                        else:
+                            settings = self.server_store_manager.load_settings(guild_id, guild.name)
+                            
+                            # Parse boolean value
+                            if value_str not in ['true', 'false']:
+                                print(f"  ❌ Invalid value: {value_str}")
+                                print("  Use: true or false")
+                            else:
+                                value = (value_str == 'true')
+                                
+                                # Update setting
+                                if setting == 'passive_listening':
+                                    settings.passive_listening = value
+                                    self.server_store_manager.save_settings(settings)
+                                    print(f"  ✅ Updated {guild.name}: passive_listening = {value}")
+                                elif setting == 'learning_enabled':
+                                    settings.learning_enabled = value
+                                    self.server_store_manager.save_settings(settings)
+                                    print(f"  ✅ Updated {guild.name}: learning_enabled = {value}")
+                                else:
+                                    print(f"  ❌ Unknown setting: {setting}")
+                                    print("  Available: passive_listening, learning_enabled")
                 
                 else:
                     print(f"  Unknown command: {cmd}")

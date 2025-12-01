@@ -1,12 +1,12 @@
 {
   "guild_id": "1444176198967099473",
   "guild_name": "Lilith bot test server",
-  "passive_listening": false,
+  "passive_listening": true,
   "passive_channels": [],
   "learning_enabled": true,
   "teaching_roles": [],
   "response_prefix": "",
   "min_confidence": 0.3,
   "created_at": "2025-11-29T16:21:06.761352",
-  "updated_at": "2025-11-29T16:21:06.761379"
+  "updated_at": "2025-12-01T11:10:53.123771"
 }
