@@ -430,6 +430,7 @@ class ResponseFragmentStoreSQLite:
             "Tell me about X" → "What is X?"
             "What do you know about X?" → "What is X?"
             "I want to know about X" → "What is X?"
+            "Give me info on X" → "What is X?"
             "How do X function?" → "How do X work?"
             "How does X function?" → "How does X work?"
         
@@ -465,6 +466,12 @@ class ResponseFragmentStoreSQLite:
         
         # Pattern: "describe X" → "what is X?"
         match = re.match(r"describe (?:to me |me )?(.+?)[\?\.]*$", query_lower)
+        if match:
+            topic = match.group(1).strip()
+            return f"What is {topic}?"
+        
+        # Pattern: "give/get me info/information on/about X" → "what is X?"
+        match = re.match(r"(?:give|get) me (?:info|information|details) (?:on|about|regarding) (.+?)[\?\.]*$", query_lower)
         if match:
             topic = match.group(1).strip()
             return f"What is {topic}?"
@@ -711,8 +718,12 @@ class ResponseFragmentStoreSQLite:
             patterns.append(pattern)
         
         # Encode query context for semantic matching
+        # IMPROVEMENT: Canonicalize query before encoding for better semantic similarity
+        # This ensures paraphrases like "Explain X" and "What is X?" have similar embeddings
         try:
-            tokens = context.split()
+            query_clean = self._extract_current_query(context)
+            query_canonical = self._canonicalize_query(query_clean)
+            tokens = query_canonical.split()
             query_embedding = self.encoder.encode(tokens)
             if hasattr(query_embedding, 'numpy'):
                 query_embedding = query_embedding.numpy()
@@ -759,7 +770,9 @@ class ResponseFragmentStoreSQLite:
                     pattern_embedding = np.array(pattern.embedding_cache).flatten()
                 else:
                     try:
-                        pattern_tokens = pattern.trigger_context.split()
+                        # IMPROVEMENT: Canonicalize pattern trigger for consistent embeddings
+                        pattern_canonical = self._canonicalize_query(pattern.trigger_context)
+                        pattern_tokens = pattern_canonical.split()
                         pattern_embedding = self.encoder.encode(pattern_tokens)
                         if hasattr(pattern_embedding, 'numpy'):
                             pattern_embedding = pattern_embedding.numpy()
