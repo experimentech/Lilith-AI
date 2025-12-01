@@ -588,25 +588,31 @@ class ResponseComposer:
         # 4. PATTERN ADAPTATION: Use pattern as template, not verbatim
         # Brain-like: retrieved pattern provides structure/intent, BNN adapts to context
         if user_input and best_score > 0.75:
-            # High confidence - adapt pattern to current context
-            adapted_text = self._adapt_pattern_to_context(
-                best_pattern, 
-                user_input, 
-                context,
-                activation_signature=self._get_activation_signature()
-            )
+            # EXACT MATCHES (1.0): Use verbatim - don't adapt taught Q&A pairs!
+            # These are factual responses that should be returned as-is
+            if best_score >= 0.99:
+                # Perfect match - use pattern exactly as taught
+                response_text = best_pattern.response_text
+            else:
+                # High confidence but not perfect - adapt pattern to current context
+                response_text = self._adapt_pattern_to_context(
+                    best_pattern, 
+                    user_input, 
+                    context,
+                    activation_signature=self._get_activation_signature()
+                )
             
             # GRAMMAR REFINEMENT: Use syntax stage to fix grammatical errors
             # This is the hybrid approach: adaptation for context + grammar for correctness
             if self.syntax_stage:
-                refined_text = self.syntax_stage.check_and_correct(adapted_text)
+                refined_text = self.syntax_stage.check_and_correct(response_text)
                 # Learn if correction was made
-                if refined_text != adapted_text:
-                    self.syntax_stage.learn_correction(adapted_text, refined_text)
-                adapted_text = refined_text
+                if refined_text != response_text:
+                    self.syntax_stage.learn_correction(response_text, refined_text)
+                response_text = refined_text
             
             response = ComposedResponse(
-                text=adapted_text,
+                text=response_text,
                 fragment_ids=[best_pattern.fragment_id],
                 composition_weights=[1.0],
                 coherence_score=best_score,
