@@ -1,0 +1,538 @@
+# Grammatical Training Dataset for Lilith
+# This dataset provides diverse sentence structures to bootstrap grammar learning
+# Format: One sentence per line, organized by grammatical pattern
+
+# ============================================================================
+# SIMPLE STATEMENTS (Subject-Verb-Object)
+# ============================================================================
+
+I understand your question.
+You asked about machine learning.
+She explained the concept clearly.
+He studied neural networks yesterday.
+We discussed artificial intelligence.
+They developed new algorithms.
+The system processes information quickly.
+This approach works effectively.
+That method improves performance.
+It analyzes data patterns.
+
+# ============================================================================
+# COMPOUND STATEMENTS (Coordinating conjunctions)
+# ============================================================================
+
+I like programming, and I enjoy learning new concepts.
+You can ask questions, or you can make statements.
+She understood the theory, but she needed more practice.
+We tested the model, and it performed well.
+They tried multiple approaches, yet only one succeeded.
+The algorithm is fast, but it requires optimization.
+This is interesting, and that is important.
+I'm learning Python, and you're learning machine learning.
+We can collaborate, or we can work independently.
+The system learns patterns, and it adapts over time.
+
+# ============================================================================
+# COMPLEX STATEMENTS (Subordinating conjunctions)
+# ============================================================================
+
+I understand this because you explained it clearly.
+You should study algorithms if you want to improve.
+We can proceed when you're ready.
+They succeeded because they practiced consistently.
+She learns quickly while reading documentation.
+He progresses faster when he focuses.
+The model improves as it trains.
+This works better since we optimized it.
+That makes sense now that you've explained it.
+It adapts whenever new data arrives.
+
+# ============================================================================
+# QUESTIONS - WH Questions (What, Where, When, Why, Who, How)
+# ============================================================================
+
+What is machine learning?
+What are neural networks?
+What does this algorithm do?
+What can you tell me about AI?
+Where does this process occur?
+Where is the data stored?
+When should I use this method?
+When does training happen?
+Why is this important?
+Why does it work that way?
+Who developed this technique?
+Who uses machine learning?
+How does this work?
+How can I learn more?
+How do neural networks learn?
+How would you explain this?
+
+# ============================================================================
+# QUESTIONS - Yes/No Questions
+# ============================================================================
+
+Is this correct?
+Is machine learning difficult?
+Are you familiar with Python?
+Are neural networks similar to biological neurons?
+Do you understand the concept?
+Do algorithms learn from data?
+Does this make sense?
+Does the system adapt automatically?
+Did you learn something new?
+Did the training complete successfully?
+Can you explain this?
+Can I ask another question?
+Could you provide more details?
+Could this approach work better?
+Will it improve over time?
+Will you remember this conversation?
+Would you recommend this method?
+Would that be a good approach?
+
+# ============================================================================
+# QUESTIONS - Choice Questions
+# ============================================================================
+
+Should I use supervised or unsupervised learning?
+Do you prefer Python or R for data science?
+Is this method better or worse than alternatives?
+Would you study theory or practice first?
+Can we discuss algorithms or applications?
+
+# ============================================================================
+# IMPERATIVE STATEMENTS (Commands/Requests)
+# ============================================================================
+
+Explain the concept.
+Tell me about neural networks.
+Describe how this works.
+Show me an example.
+Help me understand this topic.
+Please clarify your answer.
+Consider this alternative approach.
+Try a different method.
+Remember this information.
+Learn from this example.
+
+# ============================================================================
+# CONDITIONAL STATEMENTS
+# ============================================================================
+
+If you study consistently, you will improve quickly.
+If this works, we can proceed to the next step.
+If I ask a question, you provide an answer.
+If the model trains longer, it performs better.
+Unless you practice, you won't master the skill.
+Provided you understand the basics, advanced topics become easier.
+Assuming the data is clean, the results will be accurate.
+
+# ============================================================================
+# COMPARATIVE AND SUPERLATIVE STATEMENTS
+# ============================================================================
+
+This method is faster than the previous one.
+Neural networks are more complex than simple algorithms.
+That approach is better for large datasets.
+Machine learning is becoming more important every year.
+This is the best explanation I've heard.
+That was the most challenging problem.
+These are the most useful techniques.
+This algorithm is less complicated than others.
+That solution is simpler to implement.
+
+# ============================================================================
+# PRESENT CONTINUOUS/PROGRESSIVE
+# ============================================================================
+
+I am learning about artificial intelligence.
+You are asking interesting questions.
+She is studying neural network architecture.
+We are discussing machine learning concepts.
+They are developing new algorithms.
+The system is processing your request.
+It is adapting to new patterns.
+I'm thinking about your question.
+You're making good progress.
+We're exploring different approaches.
+
+# ============================================================================
+# PAST TENSE STATEMENTS
+# ============================================================================
+
+I learned about machine learning yesterday.
+You explained the concept very well.
+She studied algorithms last week.
+We discussed neural networks earlier.
+They developed this technique years ago.
+The system processed all the data.
+It adapted to the new patterns quickly.
+I understood your explanation.
+You asked a good question.
+We completed the training successfully.
+
+# ============================================================================
+# FUTURE TENSE STATEMENTS
+# ============================================================================
+
+I will learn more about this topic.
+You will understand it better with practice.
+She will master these concepts eventually.
+We will discuss advanced topics next.
+They will develop better algorithms.
+The system will improve over time.
+It will adapt to new situations.
+I'm going to study neural networks.
+You're going to make great progress.
+We're going to explore new techniques.
+
+# ============================================================================
+# PERFECT TENSES
+# ============================================================================
+
+I have learned a lot today.
+You have asked excellent questions.
+She has studied this extensively.
+We have discussed this before.
+They have developed innovative solutions.
+The system has processed millions of examples.
+It has adapted successfully.
+I had learned this previously.
+You had mentioned that earlier.
+We had discussed similar topics.
+I will have completed the course by next month.
+You will have mastered the basics soon.
+
+# ============================================================================
+# MODAL VERBS (Can, Could, May, Might, Must, Should, Would)
+# ============================================================================
+
+I can help you with that.
+You can learn this quickly.
+She could explain it better.
+We could try a different approach.
+They might have a solution.
+It might work if we optimize it.
+You must understand the fundamentals first.
+We must practice consistently.
+You should study the documentation.
+They should consider alternatives.
+I would recommend starting with basics.
+You would benefit from more examples.
+
+# ============================================================================
+# PASSIVE VOICE
+# ============================================================================
+
+Machine learning is used in many applications.
+The algorithm was developed by researchers.
+Data is processed by the system automatically.
+Neural networks are inspired by biological neurons.
+This technique was discovered decades ago.
+Patterns are recognized through training.
+The model will be optimized further.
+Results have been achieved through practice.
+Improvements were made to the architecture.
+The concept is understood by many people.
+
+# ============================================================================
+# NEGATIVE STATEMENTS
+# ============================================================================
+
+I don't understand that part.
+You didn't explain the details.
+She doesn't know about this yet.
+We haven't discussed that topic.
+They aren't familiar with the technique.
+This doesn't work as expected.
+That isn't the correct approach.
+It won't improve without training.
+I'm not sure about that.
+You're not making mistakes.
+We won't proceed without more information.
+They can't solve it without data.
+
+# ============================================================================
+# GERUNDS AND INFINITIVES
+# ============================================================================
+
+Learning machine learning is challenging but rewarding.
+Understanding neural networks requires practice.
+Teaching others helps reinforce knowledge.
+Studying consistently leads to mastery.
+I want to learn more about AI.
+You need to understand the basics first.
+She plans to study advanced topics.
+We hope to improve our skills.
+They decided to try a new approach.
+I enjoy learning new concepts.
+You prefer working with real data.
+We appreciate receiving good explanations.
+
+# ============================================================================
+# RELATIVE CLAUSES (Who, Which, That, Whose)
+# ============================================================================
+
+The algorithm that learns from data is powerful.
+The method which works best depends on the problem.
+The researcher who developed this won an award.
+The concept that you explained makes sense.
+The system which processes data is efficient.
+The student whose project impressed everyone graduated.
+The approach that we discussed seems promising.
+The technique which they invented is revolutionary.
+
+# ============================================================================
+# QUANTIFIERS AND DETERMINERS
+# ============================================================================
+
+Many people use machine learning.
+Some algorithms are more efficient than others.
+Few techniques work in all situations.
+Several methods can solve this problem.
+All data must be preprocessed.
+Most models require training.
+Each algorithm has advantages and disadvantages.
+Every example helps with learning.
+Both approaches have merit.
+Neither method is perfect.
+Any question is welcome.
+No problem is too difficult with practice.
+
+# ============================================================================
+# ADVERBIAL PHRASES
+# ============================================================================
+
+I learn quickly by practicing regularly.
+You understand better through examples.
+She improves rapidly with consistent effort.
+We progress steadily over time.
+They work efficiently using modern tools.
+The system adapts automatically to changes.
+It processes data very quickly.
+I completely understand your point.
+You absolutely should continue learning.
+We really appreciate your questions.
+
+# ============================================================================
+# DESCRIPTIVE STATEMENTS (Adjectives)
+# ============================================================================
+
+Machine learning is fascinating and powerful.
+Neural networks are complex but effective.
+This explanation is clear and helpful.
+That algorithm is fast and accurate.
+The approach is simple yet elegant.
+Your question is interesting and thoughtful.
+The concept is important and fundamental.
+This method is reliable and proven.
+That technique is innovative and creative.
+The results are impressive and significant.
+
+# ============================================================================
+# CONVERSATIONAL PATTERNS - Acknowledgments
+# ============================================================================
+
+I see what you mean.
+That makes sense.
+I understand now.
+Good point.
+That's interesting.
+I hadn't thought of that.
+You're right about that.
+That's a good question.
+I appreciate your explanation.
+Thank you for clarifying.
+
+# ============================================================================
+# CONVERSATIONAL PATTERNS - Clarifications
+# ============================================================================
+
+Could you clarify what you mean?
+I'm not sure I understand completely.
+Do you mean to say that...?
+In other words, you're asking about...?
+Let me make sure I understand correctly.
+To clarify, are you asking whether...?
+Just to confirm, you want to know about...?
+If I understand correctly, you're saying...?
+
+# ============================================================================
+# CONVERSATIONAL PATTERNS - Elaborations
+# ============================================================================
+
+Let me explain further.
+In other words, this means that...
+To put it another way, consider this...
+For example, imagine a scenario where...
+Specifically, this refers to...
+More precisely, the process involves...
+In particular, pay attention to...
+Additionally, it's worth noting that...
+
+# ============================================================================
+# CONVERSATIONAL PATTERNS - Transitions
+# ============================================================================
+
+Moving on to the next topic...
+Now let's consider another aspect.
+Furthermore, we should discuss...
+Moreover, there's an important detail.
+However, there's an exception.
+Nevertheless, the principle holds.
+In contrast, this approach differs.
+On the other hand, consider the alternative.
+Similarly, this concept relates to...
+Likewise, the same logic applies.
+
+# ============================================================================
+# CONVERSATIONAL PATTERNS - Conclusions
+# ============================================================================
+
+In conclusion, machine learning is powerful.
+To summarize, we discussed several key points.
+Overall, the approach is effective.
+In essence, this is about learning from data.
+Ultimately, practice leads to mastery.
+All things considered, this method works well.
+The bottom line is consistency matters.
+In the end, understanding comes through experience.
+
+# ============================================================================
+# TECHNICAL EXPLANATIONS
+# ============================================================================
+
+Neural networks consist of interconnected layers of nodes.
+Machine learning algorithms learn patterns from training data.
+Supervised learning requires labeled examples.
+Unsupervised learning discovers hidden patterns.
+Deep learning uses multiple neural network layers.
+Reinforcement learning optimizes through trial and error.
+Natural language processing enables computer understanding of text.
+Computer vision allows machines to interpret images.
+Data preprocessing improves model performance.
+Feature engineering creates useful input variables.
+
+# ============================================================================
+# ANALOGIES AND METAPHORS
+# ============================================================================
+
+Neural networks work like the human brain.
+Training a model is like teaching a student.
+Data is the fuel that powers machine learning.
+Algorithms are recipes for solving problems.
+Learning is a journey, not a destination.
+Understanding grows like a tree, branching outward.
+Knowledge builds upon itself like layers.
+Practice is the bridge between theory and mastery.
+
+# ============================================================================
+# CAUSE AND EFFECT
+# ============================================================================
+
+Because you practice regularly, you improve quickly.
+Since the data is clean, the results are accurate.
+Training the model leads to better performance.
+More examples result in improved learning.
+Consistent effort produces mastery.
+Good preprocessing causes better outcomes.
+Optimization improves efficiency significantly.
+Regular practice creates lasting understanding.
+
+# ============================================================================
+# EXPRESSING UNCERTAINTY AND CERTAINTY
+# ============================================================================
+
+I'm certain this approach will work.
+You're probably right about that.
+She's definitely making progress.
+We're quite sure this is correct.
+They're possibly considering alternatives.
+It's likely to improve with time.
+I'm confident in this method.
+You're absolutely correct.
+We're fairly certain about the results.
+This might work in some cases.
+That could be a solution.
+It may require further testing.
+Perhaps we should try another way.
+Maybe this approach is better.
+
+# ============================================================================
+# EXPRESSING OPINIONS AND PREFERENCES
+# ============================================================================
+
+I think machine learning is fascinating.
+I believe practice is essential.
+In my opinion, this approach works best.
+From my perspective, consistency matters most.
+I prefer learning through examples.
+I'd rather study practical applications.
+I tend to favor simpler methods.
+I find this topic particularly interesting.
+I consider this a fundamental concept.
+I regard this as an important skill.
+
+# ============================================================================
+# EXPRESSING AGREEMENT AND DISAGREEMENT
+# ============================================================================
+
+I agree with your assessment.
+You're absolutely right about that.
+I completely concur with your point.
+That's exactly what I think.
+I see it the same way.
+I respectfully disagree with that view.
+I'm not sure I agree completely.
+That's not quite how I see it.
+I have a different perspective on this.
+While I understand your point, I think differently.
+
+# ============================================================================
+# SUGGESTIONS AND RECOMMENDATIONS
+# ============================================================================
+
+I suggest starting with the basics.
+You might want to try this approach.
+I recommend practicing regularly.
+You should consider studying examples.
+It would be helpful to review the fundamentals.
+Perhaps you could explore this topic further.
+You may want to look into advanced techniques.
+I advise focusing on understanding first.
+You ought to experiment with different methods.
+Why don't you try a practical project?
+
+# ============================================================================
+# EMOTIONAL RESPONSES
+# ============================================================================
+
+I'm excited to learn about this.
+You seem enthusiastic about the topic.
+I'm pleased with your progress.
+That's disappointing, but we can improve.
+I'm frustrated by this complexity.
+You should be proud of your understanding.
+I'm impressed by your questions.
+That's encouraging to hear.
+I'm curious about how this works.
+You appear interested in learning more.
+
+# ============================================================================
+# TEMPORAL EXPRESSIONS
+# ============================================================================
+
+I learned this recently.
+You asked about this earlier.
+We discussed it yesterday.
+They started studying last week.
+It happened a while ago.
+Currently, I'm focusing on basics.
+Right now, we're exploring concepts.
+At the moment, I'm processing your question.
+Soon, you'll understand completely.
+Eventually, mastery comes with practice.
+Meanwhile, keep practicing consistently.
+Previously, we covered simpler topics.
+Afterwards, we'll move to advanced material.
