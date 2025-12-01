@@ -420,6 +420,72 @@ class ResponseFragmentStoreSQLite:
             return context.split(" | Current: ")[-1]
         return context
     
+    def _canonicalize_query(self, query: str) -> str:
+        """
+        Convert paraphrased queries to canonical form for better matching.
+        
+        Examples:
+            "Can you tell me about X?" → "What is X?"
+            "Explain X" → "What is X?"
+            "Tell me about X" → "What is X?"
+            "What do you know about X?" → "What is X?"
+            "I want to know about X" → "What is X?"
+            "How do X function?" → "How do X work?"
+            "How does X function?" → "How does X work?"
+        
+        This helps paraphrases match their canonical Q&A patterns.
+        """
+        import re
+        
+        query_lower = query.lower().strip()
+        
+        # Pattern: "can you tell me about X?" → "what is X?"
+        match = re.match(r"(?:can you |could you |please )?tell me (?:about |more about )?(.+?)[\?\.]*$", query_lower)
+        if match:
+            topic = match.group(1).strip()
+            return f"What is {topic}?"
+        
+        # Pattern: "explain X" → "what is X?"
+        match = re.match(r"explain (?:to me |me )?(.+?)[\?\.]*$", query_lower)
+        if match:
+            topic = match.group(1).strip()
+            return f"What is {topic}?"
+        
+        # Pattern: "what do you know about X?" → "what is X?"
+        match = re.match(r"what (?:do|does) (?:you|lilith) know (?:about |of )?(.+?)[\?\.]*$", query_lower)
+        if match:
+            topic = match.group(1).strip()
+            return f"What is {topic}?"
+        
+        # Pattern: "I want to know about X" → "what is X?"
+        match = re.match(r"i (?:want|would like|need) to know (?:about |more about )?(.+?)[\?\.]*$", query_lower)
+        if match:
+            topic = match.group(1).strip()
+            return f"What is {topic}?"
+        
+        # Pattern: "describe X" → "what is X?"
+        match = re.match(r"describe (?:to me |me )?(.+?)[\?\.]*$", query_lower)
+        if match:
+            topic = match.group(1).strip()
+            return f"What is {topic}?"
+        
+        # Pattern: "how do/does X function?" → "how do/does X work?"
+        match = re.match(r"how (do|does) (.+?) function[\?\.]*$", query_lower)
+        if match:
+            verb = match.group(1)
+            topic = match.group(2).strip()
+            return f"How {verb} {topic} work?"
+        
+        # Pattern: "how do/does X operate?" → "how do/does X work?"
+        match = re.match(r"how (do|does) (.+?) operate[\?\.]*$", query_lower)
+        if match:
+            verb = match.group(1)
+            topic = match.group(2).strip()
+            return f"How {verb} {topic} work?"
+        
+        # No canonicalization needed - return original
+        return query
+    
     def _compute_exact_match_score(self, query: str, trigger: str) -> float:
         """
         Compute exact match score for query vs trigger context.
@@ -428,6 +494,7 @@ class ResponseFragmentStoreSQLite:
             1.0 for perfect match
             0.98 for case-insensitive match
             0.95 for normalized match (punctuation/whitespace insensitive)
+            0.90 for canonical match (paraphrase normalization)
             0.0 for no match
         """
         # Extract just the current query if it's enriched
@@ -450,6 +517,14 @@ class ResponseFragmentStoreSQLite:
         
         if query_norm == trigger_norm:
             return 0.95
+        
+        # Canonical match (paraphrase normalization)
+        # "Can you tell me about Python?" → "What is Python?"
+        query_canonical = self._canonicalize_query(query_clean)
+        trigger_canonical = self._canonicalize_query(trigger)
+        
+        if query_canonical.lower() == trigger_canonical.lower():
+            return 0.90  # High confidence for canonical paraphrase match
         
         return 0.0
     

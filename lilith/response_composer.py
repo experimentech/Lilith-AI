@@ -588,10 +588,11 @@ class ResponseComposer:
         # 4. PATTERN ADAPTATION: Use pattern as template, not verbatim
         # Brain-like: retrieved pattern provides structure/intent, BNN adapts to context
         if user_input and best_score > 0.75:
-            # EXACT MATCHES (1.0): Use verbatim - don't adapt taught Q&A pairs!
+            # EXACT MATCHES (≥0.90): Use verbatim - don't adapt taught Q&A pairs!
             # These are factual responses that should be returned as-is
-            if best_score >= 0.99:
-                # Perfect match - use pattern exactly as taught
+            # Includes: 1.0 (perfect), 0.98 (case), 0.95 (normalized), 0.90 (canonical paraphrase)
+            if best_score >= 0.90:
+                # Perfect/canonical match - use pattern exactly as taught
                 response_text = best_pattern.response_text
             else:
                 # High confidence but not perfect - adapt pattern to current context
