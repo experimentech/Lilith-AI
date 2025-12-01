@@ -32,6 +32,14 @@ class NoiseNormalizer:
 
     def __init__(self, *, extra_replacements: Iterable[tuple[str, str]] | None = None) -> None:
         self._extra = dict(extra_replacements or [])
+        
+        # Filler phrases to strip from queries (language-level preprocessing)
+        self.filler_phrases = [
+            "i mean", "i meant", "well", "so", "like", "um", "uh",
+            "you know", "actually", "basically", "honestly", "literally",
+            "just", "okay so", "ok so", "alright so", "anyway",
+            "to be honest", "in fact", "the thing is"
+        ]
 
     def normalise(self, utterance: Utterance) -> str:
         text = utterance.text.lower()
@@ -56,3 +64,39 @@ class NoiseNormalizer:
             for ch in alphabet[:3]:  # constrain for speed
                 candidates.add("".join(chars[:idx] + [ch] + chars[idx:]))
         return sorted({c for c in candidates if c})
+    
+    def clean_query(self, query: str) -> str:
+        """
+        Clean a query by stripping filler phrases and discourse markers.
+        
+        This is LANGUAGE-LEVEL preprocessing that happens BEFORE symbolic processing.
+        Resolves cases like "I mean, what can you do?" → "what can you do?"
+        
+        Args:
+            query: Raw user query
+            
+        Returns:
+            Cleaned query with filler phrases removed
+        """
+        cleaned = query.lower().strip()
+        
+        # Strip filler phrases from the beginning
+        for filler in self.filler_phrases:
+            if cleaned.startswith(filler):
+                # Remove filler and any following comma/space
+                cleaned = cleaned[len(filler):].lstrip(", ")
+                
+        # Also strip from middle (e.g., "what, like, can you do")
+        for filler in self.filler_phrases:
+            cleaned = cleaned.replace(f", {filler},", ",")
+            cleaned = cleaned.replace(f", {filler} ", " ")
+            
+        # Restore original case pattern
+        original_words = query.split()
+        cleaned_words = cleaned.split()
+        
+        # If cleaned query is shorter, capitalize first letter
+        if len(cleaned_words) < len(original_words):
+            cleaned = cleaned[0].upper() + cleaned[1:] if cleaned else cleaned
+            
+        return cleaned

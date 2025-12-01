@@ -18,6 +18,7 @@ import numpy as np
 from .response_fragments import ResponseFragmentStore, ResponsePattern
 from .conversation_state import ConversationState
 from .bnn_intent_classifier import BNNIntentClassifier
+from .intake import NoiseNormalizer  # For query cleaning at intake layer
 
 # Optional: Import query pattern matcher for query understanding
 try:
@@ -130,6 +131,9 @@ class ResponseComposer:
         self.fragments = fragment_store
         self.state = conversation_state
         self.composition_mode = composition_mode
+        
+        # Initialize normalizer for query cleaning (INTAKE layer)
+        self.normalizer = NoiseNormalizer()
         
         # Initialize BNN intent classifier if encoder provided
         self.intent_classifier = None
@@ -396,20 +400,60 @@ class ResponseComposer:
         Separated to avoid recursion with parallel mode.
         """
         
-        # 0. EARLY REASONING: Clean query of filler phrases before any processing
+        # 0. INTAKE LAYER: Clean query of filler phrases before any processing
         # This resolves "I mean, what can you do?" → "what can you do?"
+        # NOTE: This is LANGUAGE-LEVEL preprocessing, happens at intake
         cleaned_user_input = user_input
-        if self.reasoning_stage and user_input:
-            cleaned_user_input = self.reasoning_stage.clean_query(user_input)
+        if user_input:
+            cleaned_user_input = self.normalizer.clean_query(user_input)
             if cleaned_user_input.lower() != user_input.lower().strip():
                 print(f"  🧹 Cleaned query: '{user_input}' → '{cleaned_user_input}'")
         
-        # 1. QUERY PATTERN MATCHING - Extract query structure and intent
+        # 1. SYMBOLIC REASONING: Deliberate on cleaned query (core thinking layer)
+        # This is LANGUAGE-AGNOSTIC - works on PMFlow embeddings and concepts
+        deliberation_result = None
+        if self.reasoning_stage and cleaned_user_input:
+            try:
+                deliberation_result = self.reasoning_stage.deliberate(
+                    query=cleaned_user_input,
+                    context=context,
+                    max_steps=3  # Quick deliberation
+                )
+                
+                # Log deliberation insights
+                if deliberation_result.inferences:
+                    print(f"🧠 Deliberated for {deliberation_result.deliberation_steps} steps")
+                    
+                    # Show key inferences
+                    for inf in deliberation_result.inferences[:3]:  # Top 3
+                        if inf.inference_type == "connection":
+                            print(f"  📎 Found {len(deliberation_result.inferences)} connections:")
+                            for conn in deliberation_result.inferences[:3]:
+                                print(f"     • {conn.conclusion}")
+                            break
+                    
+                    # Show implications
+                    implications = [i for i in deliberation_result.inferences if i.inference_type == "implication"]
+                    if implications:
+                        print(f"  ➡️  Found {len(implications)} implications")
+                        
+            except Exception as e:
+                print(f"  ⚠️ Deliberation failed: {e}")
+        
+        # 2. QUERY PATTERN MATCHING - Extract query structure and intent
         # Use CLEANED query for better pattern matching
         query_match = None
         main_concept = None
         intent_hint = None  # Initialize intent hint
-        if self.query_matcher and cleaned_user_input:
+        
+        # Use deliberation result if available (symbolic reasoning trumps pattern matching)
+        if deliberation_result and deliberation_result.resolved_intent:
+            intent_hint = deliberation_result.resolved_intent
+            main_concept = deliberation_result.focus_concept
+            print(f"  🎯 Reasoning resolved intent: {intent_hint}")
+            if main_concept:
+                print(f"  🔍 Focus concept: {main_concept}")
+        elif self.query_matcher and cleaned_user_input:
             query_match = self.query_matcher.match_query(cleaned_user_input)
             if query_match and query_match.confidence > 0.75:
                 # Extracted structural information from query
@@ -420,7 +464,7 @@ class ResponseComposer:
                     intent_hint = query_match.intent
                     use_intent_filtering = False  # Skip BNN, we have better intent
         
-        # 2. Classify intent using BNN if available (if not already extracted from query)
+        # 3. Classify intent using BNN if available (if not already extracted from query or reasoning)
         if intent_hint is None and use_intent_filtering and self.intent_classifier is not None and cleaned_user_input:
             # BNN extracts semantic intent
             intent_scores = self.intent_classifier.classify_intent(cleaned_user_input, topk=1)
@@ -428,7 +472,7 @@ class ResponseComposer:
             if intent_scores and intent_scores[0][1] > 0.5:  # Reasonable confidence
                 intent_hint = intent_scores[0][0]  # Top intent label
         
-        # 3. RETRIEVE PATTERNS - Choose method based on configuration  
+        # 4. RETRIEVE PATTERNS - Choose method based on configuration  
         # MULTI-TURN COHERENCE: Use enriched context (includes history + topics)
         # instead of just raw user_input for better topic continuity
         # 

@@ -121,59 +121,8 @@ class ReasoningStage:
         # Attention weights for focus
         self.attention_weights: Dict[str, float] = {}
         
-        # Filler phrases to strip from queries
-        self.filler_phrases = [
-            "i mean", "i meant", "well", "so", "like", "um", "uh",
-            "you know", "actually", "basically", "honestly", "literally",
-            "just", "okay so", "ok so", "alright so", "anyway",
-            "to be honest", "in fact", "the thing is"
-        ]
-        
-        # Cleaned query cache (for retrieval)
-        self.last_cleaned_query = None
-        
         print("  🧠 Reasoning stage enabled (deliberative thinking)!")
     
-    def clean_query(self, query: str) -> str:
-        """
-        Clean a query by stripping filler phrases.
-        
-        This resolves cases like "I mean, what can you do?" → "what can you do?"
-        
-        Args:
-            query: Raw user query
-            
-        Returns:
-            Cleaned query with filler phrases removed
-        """
-        cleaned = query.lower().strip()
-        
-        # Strip filler phrases from the beginning
-        for filler in self.filler_phrases:
-            if cleaned.startswith(filler):
-                # Remove filler and any following comma/space
-                cleaned = cleaned[len(filler):].lstrip(", ")
-                
-        # Also strip from middle (e.g., "what, like, can you do")
-        for filler in self.filler_phrases:
-            cleaned = cleaned.replace(f", {filler},", ",")
-            cleaned = cleaned.replace(f", {filler} ", " ")
-            
-        # Restore original case pattern by using cleaned words
-        # but keeping original capitalization where possible
-        original_words = query.split()
-        cleaned_words = cleaned.split()
-        
-        # Simple approach: if cleaned query is shorter, return it title-cased
-        if len(cleaned_words) < len(original_words):
-            # Capitalize first letter
-            cleaned = cleaned[0].upper() + cleaned[1:] if cleaned else cleaned
-            
-        # Cache for retrieval
-        self.last_cleaned_query = cleaned
-            
-        return cleaned
-        
     def clear_working_memory(self):
         """Clear working memory for new reasoning session."""
         self.working_memory.clear()
@@ -233,20 +182,20 @@ class ReasoningStage:
         
         This is the first step of reasoning - loading concepts into
         working memory based on the query.
-        """
-        # Clean the query first
-        cleaned_query = self.clean_query(query)
         
-        # Encode cleaned query
-        query_embedding = self.encoder.encode(cleaned_query.split())
+        NOTE: Query should already be cleaned at the INTAKE layer.
+        This operates on symbolic level only.
+        """
+        # Encode query (should already be cleaned by intake)
+        query_embedding = self.encoder.encode(query.split())
         if hasattr(query_embedding, 'numpy'):
             query_embedding = query_embedding
         
         activated = []
         
-        # Activate the cleaned query as a concept
+        # Activate the query as a concept
         query_concept = self.activate_concept(
-            term=cleaned_query,
+            term=query,
             embedding=query_embedding,
             activation=1.0,
             source="query"
@@ -257,7 +206,7 @@ class ReasoningStage:
         if self.concept_store is not None:
             try:
                 # Retrieve related concepts
-                related = self.concept_store.retrieve_concepts(cleaned_query, topk=5)
+                related = self.concept_store.retrieve_concepts(query, topk=5)
                 for concept, score in related:
                     if score > 0.3:  # Reasonable relevance
                         # Get embedding for concept
@@ -339,7 +288,7 @@ class ReasoningStage:
             resolved_intent=resolved_intent,
             deliberation_steps=steps,
             confidence=confidence,
-            cleaned_query=self.last_cleaned_query
+            cleaned_query=None  # Query already cleaned at intake layer
         )
         
     def _deliberation_step(self, step_num: int) -> List[Inference]:
