@@ -1,0 +1,168 @@
+🔤 Lilith Q&A Bootstrap Tool
+======================================================================
+
+📖 Loading Q&A training dataset...
+✓ Loaded 116 Q&A pairs
+
+🚀 Initializing Lilith session...
+  🔍 Fuzzy matching enabled for typo tolerance!
+  🔍 Fuzzy matching enabled for typo tolerance!
+  👤 User mode: User (isolated storage)
+  📖 Vocabulary tracker enabled: data/users/bootstrap/vocabulary.db
+  ✨ PMFlow retrieval extensions enabled (query expansion + hierarchical + attention)
+  🧠 Concept store enabled: data/users/bootstrap/concepts.db
+     ✨ Vocabulary-enhanced concept retrieval enabled
+  📚 Concept taxonomy initialized
+  📝 Pattern extractor enabled: data/users/bootstrap/patterns.db
+  🎯 BNN intent clustering enabled!
+  📝 BNN-based syntax stage enabled!
+  🔍 Query pattern matching enabled!
+  🧠 Reasoning stage enabled (deliberative thinking)!
+
+✓ Session initialized
+✓ Syntax stage enabled
+✓ Reasoning stage enabled
+
+📚 Teaching Q&A pairs...
+======================================================================
+Teaching:   0%|          | 0/116 [00:00<?, ?pair/s]Teaching:   1%|          | 1/116 [00:00<00:18,  6.18pair/s]Teaching:   2%|▏         | 2/116 [00:00<00:18,  6.07pair/s]Teaching:   3%|▎         | 3/116 [00:00<00:18,  6.04pair/s]Teaching:   3%|▎         | 4/116 [00:00<00:18,  5.91pair/s]Teaching:   4%|▍         | 5/116 [00:00<00:17,  6.40pair/s]Teaching:   5%|▌         | 6/116 [00:00<00:18,  5.94pair/s]Teaching:   6%|▌         | 7/116 [00:01<00:17,  6.16pair/s]Teaching:   7%|▋         | 8/116 [00:01<00:17,  6.01pair/s]Teaching:   8%|▊         | 9/116 [00:01<00:17,  6.20pair/s]Teaching:   9%|▊         | 10/116 [00:01<00:17,  6.14pair/s]Teaching:   9%|▉         | 11/116 [00:01<00:16,  6.39pair/s]Teaching:  10%|█         | 12/116 [00:01<00:14,  7.05pair/s]Teaching:  11%|█         | 13/116 [00:02<00:14,  6.93pair/s]Teaching:  12%|█▏        | 14/116 [00:02<00:13,  7.64pair/s]Teaching:  13%|█▎        | 15/116 [00:02<00:13,  7.46pair/s]Teaching:  14%|█▍        | 16/116 [00:02<00:15,  6.39pair/s]Teaching:  15%|█▍        | 17/116 [00:02<00:15,  6.58pair/s]Teaching:  16%|█▌        | 18/116 [00:02<00:15,  6.52pair/s]Teaching:  16%|█▋        | 19/116 [00:02<00:14,  6.88pair/s]Teaching:  17%|█▋        | 20/116 [00:03<00:13,  7.31pair/s]Teaching:  18%|█▊        | 21/116 [00:03<00:12,  7.89pair/s]Teaching:  19%|█▉        | 22/116 [00:03<00:11,  8.08pair/s]Teaching:  21%|██        | 24/116 [00:03<00:10,  9.03pair/s]Teaching:  22%|██▏       | 25/116 [00:03<00:10,  8.59pair/s]Teaching:  22%|██▏       | 26/116 [00:03<00:11,  7.64pair/s]Teaching:  23%|██▎       | 27/116 [00:03<00:11,  7.68pair/s]Teaching:  24%|██▍       | 28/116 [00:03<00:10,  8.06pair/s]Teaching:  25%|██▌       | 29/116 [00:04<00:12,  7.13pair/s]Teaching:  26%|██▌       | 30/116 [00:04<00:11,  7.78pair/s]Teaching:  27%|██▋       | 31/116 [00:04<00:11,  7.37pair/s]Teaching:  28%|██▊       | 32/116 [00:04<00:16,  5.05pair/s]Teaching:  28%|██▊       | 33/116 [00:04<00:15,  5.53pair/s]Teaching:  30%|███       | 35/116 [00:05<00:12,  6.59pair/s]Teaching:  31%|███       | 36/116 [00:05<00:11,  6.75pair/s]Teaching:  33%|███▎      | 38/116 [00:05<00:09,  8.01pair/s]Teaching:  34%|███▍      | 40/116 [00:05<00:08,  9.01pair/s]Teaching:  36%|███▌      | 42/116 [00:05<00:07,  9.39pair/s]Teaching:  37%|███▋      | 43/116 [00:05<00:07,  9.51pair/s]Teaching:  38%|███▊      | 44/116 [00:06<00:07,  9.61pair/s]Teaching:  39%|███▉      | 45/116 [00:06<00:07,  9.34pair/s]Teaching:  41%|████      | 47/116 [00:06<00:07,  9.02pair/s]Teaching:  41%|████▏     | 48/116 [00:06<00:07,  8.83pair/s]Teaching:  43%|████▎     | 50/116 [00:06<00:07,  9.39pair/s]Teaching:  45%|████▍     | 52/116 [00:06<00:06,  9.74pair/s]Teaching:  46%|████▌     | 53/116 [00:07<00:06,  9.33pair/s]Teaching:  47%|████▋     | 55/116 [00:07<00:06,  9.29pair/s]Teaching:  48%|████▊     | 56/116 [00:07<00:06,  8.72pair/s]Teaching:  50%|█████     | 58/116 [00:07<00:06,  9.23pair/s]Teaching:  51%|█████     | 59/116 [00:07<00:06,  9.38pair/s]Teaching:  53%|█████▎    | 61/116 [00:07<00:05,  9.32pair/s]Teaching:  53%|█████▎    | 62/116 [00:08<00:05,  9.01pair/s]Teaching:  54%|█████▍    | 63/116 [00:08<00:05,  9.06pair/s]Teaching:  55%|█████▌    | 64/116 [00:08<00:05,  8.77pair/s]Teaching:  56%|█████▌    | 65/116 [00:08<00:05,  8.89pair/s]Teaching:  57%|█████▋    | 66/116 [00:08<00:05,  8.80pair/s]Teaching:  59%|█████▊    | 68/116 [00:08<00:04,  9.61pair/s]Teaching:  60%|██████    | 70/116 [00:08<00:04,  9.92pair/s]Teaching:  62%|██████▏   | 72/116 [00:09<00:04, 10.24pair/s]Teaching:  64%|██████▍   | 74/116 [00:09<00:04, 10.02pair/s]Teaching:  66%|██████▌   | 76/116 [00:09<00:03, 10.01pair/s]Teaching:  66%|██████▋   | 77/116 [00:09<00:04,  9.55pair/s]Teaching:  67%|██████▋   | 78/116 [00:09<00:04,  9.49pair/s]Teaching:  68%|██████▊   | 79/116 [00:09<00:03,  9.42pair/s]Teaching:  69%|██████▉   | 80/116 [00:09<00:03,  9.37pair/s]Teaching:  70%|██████▉   | 81/116 [00:09<00:03,  9.34pair/s]Teaching:  72%|███████▏  | 83/116 [00:10<00:03,  9.61pair/s]Teaching:  72%|███████▏  | 84/116 [00:10<00:03,  9.52pair/s]Teaching:  74%|███████▍  | 86/116 [00:10<00:03,  9.87pair/s]Teaching:  75%|███████▌  | 87/116 [00:10<00:02,  9.89pair/s]Teaching:  77%|███████▋  | 89/116 [00:10<00:02,  9.94pair/s]Teaching:  78%|███████▊  | 90/116 [00:11<00:05,  4.82pair/s]Teaching:  78%|███████▊  | 91/116 [00:11<00:04,  5.27pair/s]Teaching:  79%|███████▉  | 92/116 [00:11<00:04,  5.84pair/s]Teaching:  80%|████████  | 93/116 [00:11<00:03,  6.38pair/s]Teaching:  81%|████████  | 94/116 [00:11<00:03,  6.52pair/s]Teaching:  83%|████████▎ | 96/116 [00:12<00:02,  7.74pair/s]Teaching:  84%|████████▍ | 98/116 [00:12<00:02,  8.04pair/s]Teaching:  86%|████████▌ | 100/116 [00:12<00:01,  8.87pair/s]Teaching:  88%|████████▊ | 102/116 [00:12<00:01,  8.99pair/s]Teaching:  89%|████████▉ | 103/116 [00:12<00:01,  8.78pair/s]Teaching:  90%|████████▉ | 104/116 [00:12<00:01,  8.60pair/s]Teaching:  91%|█████████ | 105/116 [00:13<00:01,  8.59pair/s]Teaching:  91%|█████████▏| 106/116 [00:13<00:01,  8.74pair/s]Teaching:  92%|█████████▏| 107/116 [00:13<00:01,  8.87pair/s]Teaching:  93%|█████████▎| 108/116 [00:13<00:00,  8.78pair/s]Teaching:  94%|█████████▍| 109/116 [00:13<00:00,  7.24pair/s]Teaching:  95%|█████████▍| 110/116 [00:13<00:00,  6.78pair/s]Teaching:  96%|█████████▌| 111/116 [00:13<00:00,  6.68pair/s]Teaching:  97%|█████████▋| 112/116 [00:14<00:00,  7.14pair/s]Teaching:  97%|█████████▋| 113/116 [00:14<00:00,  7.51pair/s]Teaching:  98%|█████████▊| 114/116 [00:14<00:00,  7.80pair/s]Teaching:  99%|█████████▉| 115/116 [00:14<00:00,  7.16pair/s]Teaching: 100%|██████████| 116/116 [00:14<00:00,  7.00pair/s]Teaching: 100%|██████████| 116/116 [00:14<00:00,  7.94pair/s]
+======================================================================
+
+🎯 Bootstrap Complete!
+======================================================================
+✓ Successfully taught: 116 Q&A pairs
+
+🧪 Testing learned knowledge...
+======================================================================
+
+Query: What is Python?
+  🎯 Reasoning resolved intent: definition
+  🔍 Focus concept: context:Recent topics: is python | Current: What is Python
+  🎯 Match: 'What is Python?...'
+     Exact: 1.000 | Fuzzy: 1.000 | Tokens: 1.000 | Semantic: 0.742
+     → Final: 1.000
+  🎯 Match: 'What is Python used for?...'
+     Exact: 0.000 | Fuzzy: 0.718 | Tokens: 0.533 | Semantic: 0.466
+     → Final: 0.718
+  🎯 Match: 'What is JSON?...'
+     Exact: 0.000 | Fuzzy: 0.786 | Tokens: 0.600 | Semantic: 0.464
+     → Final: 0.786
+  🎯 Match: 'What is REST?...'
+     Exact: 0.000 | Fuzzy: 0.714 | Tokens: 0.600 | Semantic: 0.548
+     → Final: 0.714
+     📗 Retrieved from user knowledge
+✓ Response: Python is a high-level programming language known for its simplicity and readability, widely used for web development, data science, and AI.
+  Confidence: 1.000
+  Source: internal
+
+Query: How does machine learning work?
+  🎯 Reasoning resolved intent: explanation
+  🔍 Focus concept: context:Recent topics: learning work, is python | Current:
+  🎯 Match: 'What is machine learning?...'
+     Exact: 0.000 | Fuzzy: 0.714 | Tokens: 0.170 | Semantic: 0.161
+     → Final: 0.714
+  🎯 Match: 'How does machine learning work?...'
+     Exact: 1.000 | Fuzzy: 1.000 | Tokens: 1.000 | Semantic: 0.661
+     → Final: 1.000
+     📗 Retrieved from user knowledge
+✓ Response: Machine learning works by training algorithms on data, allowing them to identify patterns and make predictions or decisions based on new input.
+  Confidence: 1.000
+  Source: internal
+
+Query: What are neural networks?
+  🎯 Match: 'What are neural networks?...'
+     Exact: 1.000 | Fuzzy: 1.000 | Tokens: 1.000 | Semantic: 0.765
+     → Final: 1.000
+  🎯 Match: 'What is a neuron in neural networks?...'
+     Exact: 0.000 | Fuzzy: 0.754 | Tokens: 0.600 | Semantic: 0.580
+     → Final: 0.754
+  🎯 Match: 'What are layers in neural networks?...'
+     Exact: 0.000 | Fuzzy: 0.833 | Tokens: 0.867 | Semantic: 0.732
+     → Final: 0.867
+  🎯 Match: 'What are weights in neural networks?...'
+     Exact: 0.000 | Fuzzy: 0.820 | Tokens: 0.867 | Semantic: 0.732
+     → Final: 0.867
+  🎯 Match: 'What is a recurrent neural network?...'
+     Exact: 0.000 | Fuzzy: 0.733 | Tokens: 0.400 | Semantic: 0.400
+     → Final: 0.733
+  🎯 Match: 'what is neural network...'
+     Exact: 0.000 | Fuzzy: 0.851 | Tokens: 0.433 | Semantic: 0.272
+     → Final: 0.851
+     📗 Retrieved from user knowledge
+✓ Response: Neural networks are computing systems inspired by biological neural networks, consisting of interconnected nodes that process information.
+  Confidence: 1.000
+  Source: internal
+
+Query: Can you help me?
+  🎯 Reasoning resolved intent: capability
+  🔍 Focus concept: context:Recent topics: you polar-question, are networks, l
+  🎯 Match: 'Can you help me?...'
+     Exact: 1.000 | Fuzzy: 1.000 | Tokens: 1.000 | Semantic: 0.556
+     → Final: 1.000
+  🎯 Match: 'can you help...'
+     Exact: 0.000 | Fuzzy: 0.857 | Tokens: 0.750 | Semantic: 0.401
+     → Final: 0.857
+     📘 Retrieved from base knowledge
+✓ Response: Of course! I'm here to help. What do you need?
+  Confidence: 1.000
+  Source: internal
+
+Query: What is AI?
+  🎯 Reasoning resolved intent: definition
+  🔍 Focus concept: context:Recent topics: is ai, you polar-question, are netw
+  🎯 Match: 'What are layers in neural networks?...'
+     Exact: 0.000 | Fuzzy: 0.391 | Tokens: 0.250 | Semantic: 0.729
+     → Final: 0.729
+  🎯 Match: 'What are weights in neural networks?...'
+     Exact: 0.000 | Fuzzy: 0.468 | Tokens: 0.250 | Semantic: 0.729
+     → Final: 0.729
+  🎯 Match: 'What is AI?...'
+     Exact: 1.000 | Fuzzy: 1.000 | Tokens: 1.000 | Semantic: 0.601
+     → Final: 1.000
+  🎯 Match: 'What is an API?...'
+     Exact: 0.000 | Fuzzy: 0.846 | Tokens: 0.560 | Semantic: 0.403
+     → Final: 0.846
+  🎯 Match: 'What is Git?...'
+     Exact: 0.000 | Fuzzy: 0.870 | Tokens: 0.600 | Semantic: 0.403
+     → Final: 0.870
+  🎯 Match: 'What is GitHub?...'
+     Exact: 0.000 | Fuzzy: 0.769 | Tokens: 0.600 | Semantic: 0.468
+     → Final: 0.769
+  🎯 Match: 'What is a compiler?...'
+     Exact: 0.000 | Fuzzy: 0.733 | Tokens: 0.560 | Semantic: 0.472
+     → Final: 0.733
+     📗 Retrieved from user knowledge
+✓ Response: AI (Artificial Intelligence) refers to computer systems designed to mimic human cognitive functions like learning, reasoning, and problem-solving.
+  Confidence: 1.000
+  Source: internal
+
+Query: How do I learn programming?
+  🎯 Reasoning resolved intent: explanation
+  🔍 Focus concept: context:Recent topics: i programming how, is ai, you polar
+  🎯 Match: 'How do I learn programming?...'
+     Exact: 1.000 | Fuzzy: 1.000 | Tokens: 1.000 | Semantic: 0.566
+     → Final: 1.000
+  🎯 Match: 'How long does it take to learn programming?...'
+     Exact: 0.000 | Fuzzy: 0.771 | Tokens: 0.480 | Semantic: 0.203
+     → Final: 0.771
+     📗 Retrieved from user knowledge
+✓ Response: Start with fundamentals, practice regularly, build projects, read documentation, and don't be afraid to make mistakes and learn from them.
+  Confidence: 1.000
+  Source: internal
+
+======================================================================
+📊 Test Results:
+  High confidence responses: 6/6
+  Average confidence: 1.000
+======================================================================
+
+✅ Excellent! Q&A bootstrap working well!
+
+Lilith now knows 116 Q&A pairs!
+These create direct question→answer associations for better retrieval.
+
+Next steps:
+  1. Use Lilith normally - she can now answer these questions
+  2. Add more Q&A pairs to qa_bootstrap.txt for your domain
+  3. Provide feedback (upvotes/downvotes) to refine responses
+  4. She'll continue learning from your conversations
