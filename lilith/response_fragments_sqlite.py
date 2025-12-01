@@ -731,10 +731,16 @@ class ResponseFragmentStoreSQLite:
             for pattern, score in patterns:
                 if pattern.intent == intent_filter:
                     # Strong boost for exact intent match
-                    boosted_score = score * 2.0
+                    boosted_score = score * 1.3  # Gentle boost
                 else:
-                    # Keep other patterns but with lower scores
-                    boosted_score = score * 0.3
+                    # For high-confidence matches (exact/fuzzy), don't penalize based on intent
+                    # Intent filtering should only affect low-confidence semantic matches
+                    if score >= 0.75:
+                        # High confidence - trust the match regardless of intent
+                        boosted_score = score
+                    else:
+                        # Low confidence - apply intent penalty
+                        boosted_score = score * 0.5  # Gentle penalty
                 boosted.append((pattern, boosted_score))
             
             # Re-sort and limit
