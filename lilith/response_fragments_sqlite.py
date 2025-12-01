@@ -505,6 +505,78 @@ class ResponseFragmentStoreSQLite:
                 return score
             return 0.0
     
+    def _compute_content_penalty(
+        self,
+        query: str,
+        pattern: 'ResponsePattern'
+    ) -> float:
+        """
+        Compute penalty if query has content words not addressed in response.
+        
+        This prevents structural matches like:
+          Query: "Do you know about vampires?"
+          Pattern: "Do you know what a Nintendo Switch is?" → High fuzzy score
+          Response: "Nintendo Switch is a video game console..."
+          
+        Even though question structure matches, content is completely different!
+        
+        Args:
+            query: User query
+            pattern: Candidate pattern
+            
+        Returns:
+            Penalty factor (0.0 = no penalty, 1.0 = complete mismatch)
+        """
+        # Extract clean query (handle context enrichment)
+        clean_query = self._extract_current_query(query)
+        
+        # Stop words and question words to ignore
+        stop_words = {
+            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+            'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
+            'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+            'should', 'could', 'may', 'might', 'must', 'can', 'i', 'you', 'we',
+            'they', 'he', 'she', 'it', 'my', 'your', 'his', 'her', 'their',
+            'this', 'that', 'these', 'those', 'what', 'which', 'who', 'when',
+            'where', 'why', 'how', 'about', 'know', 'tell', 'me', '?', '!', '.'
+        }
+        
+        # Extract content words from query
+        query_words = set(w.lower().strip('.,!?') for w in clean_query.split())
+        content_words = query_words - stop_words
+        
+        # If no content words, no penalty (structural question like "Can you help?")
+        if not content_words:
+            return 0.0
+        
+        # Check if response addresses the content
+        response_text = (pattern.trigger_context + " " + pattern.response_text).lower()
+        response_words = set(response_text.split())
+        
+        # Count how many content words appear in response
+        matched_content = content_words & response_words
+        
+        if len(content_words) == 0:
+            return 0.0
+        
+        # Calculate coverage: what fraction of content words are in response?
+        coverage = len(matched_content) / len(content_words)
+        
+        # Penalty increases as coverage decreases
+        # coverage 1.0 → penalty 0.0 (all content words present)
+        # coverage 0.5 → penalty 0.5 (half the content words present)
+        # coverage 0.0 → penalty 1.0 (no content words present - complete mismatch!)
+        penalty = 1.0 - coverage
+        
+        # Only apply strong penalty if there's significant mismatch
+        # If less than 30% of content words match, it's probably wrong topic
+        if coverage < 0.3:
+            return 0.8  # Strong penalty
+        elif coverage < 0.5:
+            return 0.5  # Moderate penalty
+        else:
+            return 0.0  # Good coverage, no penalty
+    
     def retrieve_patterns(
         self,
         context: str,
@@ -631,6 +703,13 @@ class ResponseFragmentStoreSQLite:
             
             # COMBINE SCORES: Use maximum (best matching method wins)
             final_score = max(scores.values())
+            
+            # CONTENT RELEVANCE CHECK: Penalize if query has content words
+            # but response doesn't address them (prevents "Do you know X?" 
+            # matching "Do you know Y?" when X != Y)
+            content_penalty = self._compute_content_penalty(context, pattern)
+            if content_penalty > 0:
+                final_score *= (1.0 - content_penalty)
             
             # Optional: Log scoring breakdown for high-confidence matches
             if final_score > 0.7:
