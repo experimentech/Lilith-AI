@@ -17,6 +17,7 @@ import numpy as np
 
 from .response_fragments import ResponseFragmentStore, ResponsePattern
 from .conversation_state import ConversationState
+from .conversation_history import ConversationHistory
 from .bnn_intent_classifier import BNNIntentClassifier
 from .intake import NoiseNormalizer  # For query cleaning at intake layer
 
@@ -105,6 +106,7 @@ class ResponseComposer:
         self, 
         fragment_store: Union[ResponseFragmentStore, 'MultiTenantFragmentStore'],
         conversation_state: ConversationState,
+        conversation_history: Optional[ConversationHistory] = None,
         composition_mode: str = "weighted_blend",
         use_grammar: bool = False,
         semantic_encoder = None,
@@ -119,6 +121,7 @@ class ResponseComposer:
         Args:
             fragment_store: Store of learned response patterns
             conversation_state: Working memory state
+            conversation_history: Short-term memory (recent turns, sliding window)
             composition_mode: How to compose responses
                 - "best_match": Use highest-weighted pattern only
                 - "weighted_blend": Blend multiple patterns
@@ -134,6 +137,7 @@ class ResponseComposer:
         """
         self.fragments = fragment_store
         self.state = conversation_state
+        self.conversation_history = conversation_history
         self.composition_mode = composition_mode
         
         # Initialize normalizer for query cleaning (INTAKE layer)
@@ -413,6 +417,41 @@ class ResponseComposer:
             if cleaned_user_input.lower() != user_input.lower().strip():
                 print(f"  🧹 Cleaned query: '{user_input}' → '{cleaned_user_input}'")
         
+        # 0.5 CONVERSATION HISTORY: Check for repetition and build conversational context
+        # This enables "As you mentioned..." style continuity and prevents repetitive responses
+        conversational_context = None
+        previous_response = None
+        is_repetition = False
+        
+        if self.conversation_history and cleaned_user_input:
+            # Check if user is repeating themselves
+            is_repetition = self.conversation_history.detect_repetition(cleaned_user_input)
+            
+            if is_repetition:
+                print(f"  🔁 Detected query repetition - varying response")
+                # User is repeating their query - we should acknowledge this
+                # and try a different approach or ask for clarification
+                conversational_context = "user_repeated_query"
+            
+            # Get recent turns for context awareness
+            recent_turns = self.conversation_history.get_recent_turns(n=3)
+            if recent_turns:
+                # Build context from recent conversation
+                # This enables reference to previous topics like "As you mentioned..."
+                previous_response = recent_turns[-1].bot_response
+                
+                # Extract topics from recent turns for continuity
+                recent_topics = []
+                for turn in recent_turns:
+                    user_msg = turn.user_input.lower()
+                    # Simple topic extraction (could be enhanced)
+                    if user_msg:
+                        recent_topics.append(user_msg)
+                
+                if recent_topics:
+                    conversational_context = f"recent_topics: {'; '.join(recent_topics[-2:])}"
+                    print(f"  💬 Conversation context: {len(recent_turns)} recent turns")
+        
         # 1. SYMBOLIC REASONING: Deliberate on cleaned query (core thinking layer)
         # This is LANGUAGE-AGNOSTIC - works on PMFlow embeddings and concepts
         deliberation_result = None
@@ -533,6 +572,21 @@ class ResponseComposer:
         # 2d. Check if best pattern has sufficient relevance
         # If not, provide a graceful fallback instead of hallucinating
         best_pattern, best_score = patterns[0]
+        
+        # CONVERSATION HISTORY: Avoid repeating exact same response for repeated queries
+        # If user is repeating their question, try a different pattern or add variation
+        if is_repetition and previous_response:
+            # Check if best pattern would give same response as before
+            if best_pattern.response_text.strip().lower() == previous_response.strip().lower():
+                print(f"  🔄 Would repeat same response - trying alternative")
+                # Try second-best pattern if available
+                if len(patterns) > 1:
+                    best_pattern, best_score = patterns[1]
+                    print(f"  ✨ Using alternative pattern (score: {best_score:.3f})")
+                else:
+                    # Only one pattern - add conversational variation
+                    # This will be handled in pattern adaptation phase
+                    pass
         
         # ADAPTIVE CONFIDENCE THRESHOLD
         # Lower threshold for newly learned patterns (teaching scenarios)

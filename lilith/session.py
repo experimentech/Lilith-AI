@@ -95,6 +95,7 @@ class LilithSession:
         from lilith.embedding import PMFlowEmbeddingEncoder
         from lilith.response_composer import ResponseComposer
         from lilith.conversation_state import ConversationState
+        from lilith.conversation_history import ConversationHistory
         
         self.user_id = user_id
         self.context_id = context_id or "default"
@@ -123,13 +124,17 @@ class LilithSession:
                 base_data_path=self.config.data_path
             )
         
-        # Create conversation state
+        # Create conversation state (working memory - active topics with decay)
         self.state = ConversationState(self.encoder)
         
-        # Create composer
+        # Create conversation history (short-term memory - recent turns, sliding window)
+        self.conversation_history = ConversationHistory(max_turns=10)
+        
+        # Create composer with conversation history
         self.composer = ResponseComposer(
             self.store,
             self.state,
+            self.conversation_history,
             semantic_encoder=self.encoder,
             enable_knowledge_augmentation=self.config.enable_knowledge_augmentation,
             enable_modal_routing=self.config.enable_modal_routing,
@@ -241,6 +246,32 @@ class LilithSession:
         
         # Generate response using enriched context (includes topic history for pronoun resolution)
         response = self.composer.compose_response(context=enriched_context, user_input=content)
+        
+        # Record turn in conversation history for continuity tracking
+        if self.conversation_history:
+            # Get current working memory state for this turn
+            state_snapshot = self.state.snapshot()
+            working_memory_state = {
+                'activation_energy': state_snapshot.activation_energy,
+                'novelty': state_snapshot.novelty,
+                'topic_count': len(state_snapshot.topics),
+                'dominant_topic': state_snapshot.dominant.summary if state_snapshot.dominant else None
+            }
+            
+            self.conversation_history.add_turn(
+                user_input=content,
+                bot_response=response.text,
+                user_embedding=None,  # Could add embeddings if needed
+                response_embedding=None,
+                working_memory_state=working_memory_state
+            )
+            
+            # Update success score based on response confidence
+            success_score = response.confidence if hasattr(response, 'confidence') else 0.5
+            if getattr(response, 'is_fallback', False):
+                success_score = 0.3  # Fallback responses are lower success
+            
+            self.conversation_history.update_last_success(success_score)
         
         # Track for feedback
         if self.feedback_tracker and self.config.learning_enabled:
