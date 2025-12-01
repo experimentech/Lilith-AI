@@ -409,6 +409,102 @@ class ResponseFragmentStoreSQLite:
         conn.close()
         return fragment_id
     
+    def _extract_current_query(self, context: str) -> str:
+        """
+        Extract the actual current query from enriched context.
+        
+        Enriched context format: "Recent topics: X | Current: Y"
+        We want just "Y" for exact matching.
+        """
+        if " | Current: " in context:
+            return context.split(" | Current: ")[-1]
+        return context
+    
+    def _compute_exact_match_score(self, query: str, trigger: str) -> float:
+        """
+        Compute exact match score for query vs trigger context.
+        
+        Returns:
+            1.0 for perfect match
+            0.98 for case-insensitive match
+            0.95 for normalized match (punctuation/whitespace insensitive)
+            0.0 for no match
+        """
+        # Extract just the current query if it's enriched
+        query_clean = self._extract_current_query(query)
+        
+        # Perfect exact match
+        if query_clean == trigger:
+            return 1.0
+        
+        # Case-insensitive match
+        if query_clean.lower() == trigger.lower():
+            return 0.98
+        
+        # Normalized match (remove punctuation, extra spaces)
+        import string
+        translator = str.maketrans('', '', string.punctuation)
+        
+        query_norm = ' '.join(query_clean.translate(translator).split()).lower()
+        trigger_norm = ' '.join(trigger.translate(translator).split()).lower()
+        
+        if query_norm == trigger_norm:
+            return 0.95
+        
+        return 0.0
+    
+    def _compute_token_overlap_score(self, query: str, trigger: str) -> float:
+        """
+        Compute token overlap score (keyword matching).
+        
+        Uses Jaccard similarity and coverage for robust matching.
+        
+        Returns:
+            0.0-1.0 based on combination of Jaccard and coverage
+        """
+        # Extract just the current query if it's enriched
+        query_clean = self._extract_current_query(query)
+        
+        query_tokens = set(query_clean.lower().split())
+        trigger_tokens = set(trigger.lower().split())
+        
+        if not query_tokens or not trigger_tokens:
+            return 0.0
+        
+        intersection = query_tokens & trigger_tokens
+        union = query_tokens | trigger_tokens
+        
+        # Jaccard similarity (mutual overlap)
+        jaccard = len(intersection) / len(union) if union else 0.0
+        
+        # Coverage (what % of query tokens appear in trigger)
+        coverage = len(intersection) / len(query_tokens)
+        
+        # Weighted average favoring coverage (query containment)
+        return 0.4 * jaccard + 0.6 * coverage
+    
+    def _compute_fuzzy_match_score(self, query: str, trigger: str) -> float:
+        """
+        Compute fuzzy string similarity using rapidfuzz.
+        
+        Returns:
+            0.0-1.0 based on fuzzy ratio
+        """
+        # Extract just the current query if it's enriched
+        query_clean = self._extract_current_query(query)
+        
+        try:
+            from rapidfuzz import fuzz
+            # Use token sort ratio for word order independence
+            ratio = fuzz.token_sort_ratio(query_clean.lower(), trigger.lower())
+            return ratio / 100.0
+        except ImportError:
+            # Fallback to existing fuzzy matcher
+            if self.fuzzy_matcher:
+                _, score = self.fuzzy_matcher.fuzzy_match(query_clean, trigger, min_similarity=0.0)
+                return score
+            return 0.0
+    
     def retrieve_patterns(
         self,
         context: str,
@@ -416,15 +512,23 @@ class ResponseFragmentStoreSQLite:
         min_score: float = 0.0
     ) -> List[Tuple[ResponsePattern, float]]:
         """
-        Retrieve best matching patterns for context.
+        Retrieve best matching patterns using HYBRID scoring.
+        
+        Scoring methods (in priority order):
+        1. Exact text matching (1.0 confidence for perfect matches)
+        2. Fuzzy string matching (0.75-1.0 for similar text)
+        3. Token overlap (0.0-1.0 for keyword matching)
+        4. Semantic similarity (0.0-1.0 for concept matching via BNN)
+        
+        Final score: max(exact, fuzzy, token_overlap, semantic)
         
         Args:
             context: Query context
             topk: Number of results
-            min_score: Minimum success score threshold
+            min_score: Minimum success score threshold (for database patterns)
         
         Returns:
-            List of (pattern, similarity_score) tuples
+            List of (pattern, confidence_score) tuples
         """
         conn = self._get_connection()
         
@@ -459,114 +563,85 @@ class ResponseFragmentStoreSQLite:
             )
             patterns.append(pattern)
         
-        # Encode query context
+        # Encode query context for semantic matching
         try:
             tokens = context.split()
             query_embedding = self.encoder.encode(tokens)
             if hasattr(query_embedding, 'numpy'):
                 query_embedding = query_embedding.numpy()
             query_embedding = np.array(query_embedding).flatten()
+            semantic_available = True
         except Exception as e:
             print(f"  ⚠️  Encoding error for '{context}': {e}")
-            print(f"      Tokens: {context.split()}")
-            import traceback
-            traceback.print_exc()
-            return []
+            query_embedding = None
+            semantic_available = False
         
-        # Compute similarities (hybrid: semantic + fuzzy matching)
+        # HYBRID SCORING: Compute all matching scores
         scored_patterns = []
         
-        # Parse query to extract SUBJECT slot for comparison
-        query_subject = None
-        try:
-            from .query_pattern_matcher import QueryPatternMatcher
-            qpm = QueryPatternMatcher()
-            query_match = qpm.match_query(context)
-            if query_match and 'SUBJECT' in query_match.slots:
-                query_subject = query_match.slots['SUBJECT'].lower()
-        except Exception:
-            pass  # Pattern matching not available, skip subject check
-        
         for pattern in patterns:
-            # First try fuzzy matching for exact/near-exact matches
-            fuzzy_score = 0.0
-            if self.fuzzy_matcher:
-                is_match, fuzzy_score = self.fuzzy_matcher.fuzzy_match(
-                    context, 
-                    pattern.trigger_context,
-                    min_similarity=0.75
-                )
-                # If fuzzy match is strong, verify subjects match before accepting
-                if is_match and fuzzy_score >= 0.9:
-                    # Subject-level guard: if we extracted a SUBJECT from the query,
-                    # check that the pattern's trigger has the same subject
-                    if query_subject:
-                        pattern_match = qpm.match_query(pattern.trigger_context)
-                        if pattern_match and 'SUBJECT' in pattern_match.slots:
-                            pattern_subject = pattern_match.slots['SUBJECT'].lower()
-                            if query_subject != pattern_subject:
-                                # Subjects differ! Don't accept as direct fuzzy match
-                                # Let it go through semantic scoring instead
-                                fuzzy_score = fuzzy_score * 0.3  # Heavily penalize
-                            else:
-                                # Subjects match, accept direct fuzzy match
-                                scored_patterns.append((pattern, float(fuzzy_score)))
-                                continue
-                        else:
-                            # Pattern has no SUBJECT slot, accept fuzzy match
-                            scored_patterns.append((pattern, float(fuzzy_score)))
-                            continue
-                    else:
-                        # No query subject extracted, accept fuzzy match as-is
-                        scored_patterns.append((pattern, float(fuzzy_score)))
-                        continue
+            scores = {
+                'exact': 0.0,
+                'fuzzy': 0.0,
+                'token_overlap': 0.0,
+                'semantic': 0.0
+            }
             
-            # Get or compute embedding for semantic matching
-            if pattern.embedding_cache:
-                pattern_embedding = np.array(pattern.embedding_cache)
-            else:
-                try:
-                    pattern_embedding = self.encoder.encode(pattern.trigger_context.split())
-                    if hasattr(pattern_embedding, 'numpy'):
-                        pattern_embedding = pattern_embedding.numpy()
-                    pattern_embedding = np.array(pattern_embedding).flatten()
-                except Exception:
-                    continue
+            # 1. Exact match score
+            scores['exact'] = self._compute_exact_match_score(
+                context, 
+                pattern.trigger_context
+            )
             
-            # Compute cosine similarity
-            norm_q = np.linalg.norm(query_embedding)
-            norm_p = np.linalg.norm(pattern_embedding)
+            # 2. Fuzzy match score (rapidfuzz or fallback)
+            scores['fuzzy'] = self._compute_fuzzy_match_score(
+                context,
+                pattern.trigger_context
+            )
             
-            if norm_q > 0 and norm_p > 0:
-                semantic_sim = np.dot(query_embedding, pattern_embedding) / (norm_q * norm_p)
-                
-                # Adaptive weighting based on phrase length
-                # For short phrases (<=3 words), trust fuzzy more
-                # For long phrases, trust semantic more
-                query_words = len(context.split())
-                if query_words <= 3:
-                    # Short phrase: 70% fuzzy, 30% semantic
-                    combined_score = (0.7 * fuzzy_score) + (0.3 * semantic_sim)
+            # 3. Token overlap score
+            scores['token_overlap'] = self._compute_token_overlap_score(
+                context,
+                pattern.trigger_context
+            )
+            
+            # 4. Semantic similarity score (BNN embeddings)
+            if semantic_available and query_embedding is not None:
+                # Get or compute pattern embedding
+                if pattern.embedding_cache:
+                    pattern_embedding = np.array(pattern.embedding_cache).flatten()
                 else:
-                    # Long phrase: 40% fuzzy, 60% semantic
-                    combined_score = (0.4 * fuzzy_score) + (0.6 * semantic_sim)
-                
-                # Subject mismatch penalty: if query has a specific SUBJECT and
-                # pattern has a different SUBJECT, heavily penalize the score
-                if query_subject:
                     try:
-                        pattern_match = qpm.match_query(pattern.trigger_context)
-                        if pattern_match and 'SUBJECT' in pattern_match.slots:
-                            pattern_subject = pattern_match.slots['SUBJECT'].lower()
-                            if query_subject != pattern_subject:
-                                # Different subjects - this is likely a wrong match
-                                combined_score = combined_score * 0.1  # 90% penalty
+                        pattern_tokens = pattern.trigger_context.split()
+                        pattern_embedding = self.encoder.encode(pattern_tokens)
+                        if hasattr(pattern_embedding, 'numpy'):
+                            pattern_embedding = pattern_embedding.numpy()
+                        pattern_embedding = np.array(pattern_embedding).flatten()
                     except Exception:
-                        pass
+                        pattern_embedding = None
                 
-                scored_patterns.append((pattern, float(combined_score)))
+                if pattern_embedding is not None:
+                    # Compute cosine similarity
+                    norm_q = np.linalg.norm(query_embedding)
+                    norm_p = np.linalg.norm(pattern_embedding)
+                    
+                    if norm_q > 0 and norm_p > 0:
+                        scores['semantic'] = np.dot(query_embedding, pattern_embedding) / (norm_q * norm_p)
+                        scores['semantic'] = max(0.0, float(scores['semantic']))  # Clamp to [0,1]
+            
+            # COMBINE SCORES: Use maximum (best matching method wins)
+            final_score = max(scores.values())
+            
+            # Optional: Log scoring breakdown for high-confidence matches
+            if final_score > 0.7:
+                print(f"  🎯 Match: '{pattern.trigger_context[:50]}...'")
+                print(f"     Exact: {scores['exact']:.3f} | Fuzzy: {scores['fuzzy']:.3f} | "
+                      f"Tokens: {scores['token_overlap']:.3f} | Semantic: {scores['semantic']:.3f}")
+                print(f"     → Final: {final_score:.3f}")
+            
+            scored_patterns.append((pattern, final_score))
         
-        # Sort by similarity and take top-k
+        # Sort by final score (descending) and return top-k
         scored_patterns.sort(key=lambda x: x[1], reverse=True)
         return scored_patterns[:topk]
     
