@@ -455,3 +455,76 @@ class PragmaticTemplateStore:
             "total_templates": len(self.templates),
             "by_category": categories
         }
+    
+    def save(self, path: str):
+        """
+        Save templates to JSON file.
+        
+        Args:
+            path: Path to save file (will add .json if not present)
+        """
+        import json
+        from pathlib import Path
+        
+        # Ensure .json extension
+        if not path.endswith('.json'):
+            path = path + '.json'
+        
+        # Create directory if needed
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        
+        # Convert templates to serializable format
+        data = {
+            "templates": [
+                {
+                    "template_id": t.template_id,
+                    "category": t.category,
+                    "intent": t.intent,
+                    "template": t.template,
+                    "slots": t.slots,
+                    "priority": t.priority,
+                    "examples": t.examples
+                }
+                for t in self.templates.values()
+            ]
+        }
+        
+        with open(path, 'w') as f:
+            json.dump(data, f, indent=2)
+    
+    @classmethod
+    def load(cls, path: str) -> 'PragmaticTemplateStore':
+        """
+        Load templates from JSON file.
+        
+        Args:
+            path: Path to load file
+            
+        Returns:
+            PragmaticTemplateStore instance
+        """
+        import json
+        
+        # Ensure .json extension
+        if not path.endswith('.json'):
+            path = path + '.json'
+        
+        store = cls()
+        store.templates = {}  # Clear defaults
+        
+        with open(path, 'r') as f:
+            data = json.load(f)
+        
+        for t_data in data["templates"]:
+            template = PragmaticTemplate(
+                template_id=t_data["template_id"],
+                category=t_data["category"],
+                intent=t_data["intent"],
+                template=t_data["template"],
+                slots=t_data["slots"],
+                priority=t_data["priority"],
+                examples=t_data["examples"]
+            )
+            store.templates[template.template_id] = template
+        
+        return store

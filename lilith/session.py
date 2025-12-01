@@ -23,6 +23,11 @@ class SessionConfig:
     enable_modal_routing: bool = True
     use_grammar: bool = True
     
+    # Compositional response settings (Layer 4 restructured)
+    enable_compositional: bool = True  # Enable concept store for compositional responses
+    enable_pragmatic_templates: bool = True  # Enable pragmatic template-based composition
+    composition_mode: str = "pragmatic"  # "pattern", "concept", "parallel", or "pragmatic"
+    
     # Learning settings
     learning_enabled: bool = True
     enable_auto_learning: bool = True
@@ -130,7 +135,38 @@ class LilithSession:
         # Create conversation history (short-term memory - recent turns, sliding window)
         self.conversation_history = ConversationHistory(max_turns=10)
         
-        # Create composer with conversation history
+        # Initialize pragmatic templates (Layer 4: linguistic patterns)
+        pragmatic_templates = None
+        if self.config.enable_pragmatic_templates:
+            try:
+                from lilith.pragmatic_templates import PragmaticTemplateStore
+                templates_path = Path(self.config.data_path) / "pragmatic_templates.json"
+                
+                if templates_path.exists():
+                    # Load existing templates
+                    pragmatic_templates = PragmaticTemplateStore.load(str(templates_path))
+                else:
+                    # Create with default templates
+                    pragmatic_templates = PragmaticTemplateStore()
+                    # Save for next time
+                    pragmatic_templates.save(str(templates_path))
+            except ImportError:
+                pass
+        
+        # Initialize concept store (Layer 4: semantic knowledge)
+        concept_store = None
+        if self.config.enable_compositional:
+            try:
+                from lilith.production_concept_store import ProductionConceptStore
+                concept_db_path = Path(self.config.data_path) / "concept_store.db"
+                concept_store = ProductionConceptStore(
+                    semantic_encoder=self.encoder,
+                    db_path=str(concept_db_path)
+                )
+            except ImportError:
+                pass
+        
+        # Create composer with conversation history, pragmatic templates, and concept store
         self.composer = ResponseComposer(
             self.store,
             self.state,
@@ -138,7 +174,11 @@ class LilithSession:
             semantic_encoder=self.encoder,
             enable_knowledge_augmentation=self.config.enable_knowledge_augmentation,
             enable_modal_routing=self.config.enable_modal_routing,
-            use_grammar=self.config.use_grammar
+            use_grammar=self.config.use_grammar,
+            concept_store=concept_store,
+            pragmatic_templates=pragmatic_templates,
+            enable_pragmatic_templates=self.config.enable_pragmatic_templates,
+            composition_mode=self.config.composition_mode
         )
         
         # Load contrastive weights if available
