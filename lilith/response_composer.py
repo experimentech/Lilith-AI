@@ -77,6 +77,13 @@ try:
 except ImportError:
     REASONING_AVAILABLE = False
 
+# Optional: Import pragmatic templates for conversational patterns
+try:
+    from .pragmatic_templates import PragmaticTemplateStore
+    PRAGMATIC_TEMPLATES_AVAILABLE = True
+except ImportError:
+    PRAGMATIC_TEMPLATES_AVAILABLE = False
+
 
 @dataclass
 class ComposedResponse:
@@ -113,7 +120,9 @@ class ResponseComposer:
         enable_knowledge_augmentation: bool = True,
         concept_store: Optional['ProductionConceptStore'] = None,
         enable_compositional: bool = True,
-        enable_modal_routing: bool = True
+        enable_modal_routing: bool = True,
+        pragmatic_templates: Optional['PragmaticTemplateStore'] = None,
+        enable_pragmatic_templates: bool = True
     ):
         """
         Initialize response composer.
@@ -128,12 +137,15 @@ class ResponseComposer:
                 - "grammar_guided": Use grammatical templates (requires syntax stage)
                 - "adaptive": Choose based on confidence
                 - "parallel": Try both patterns AND concepts, use best
+                - "pragmatic": Use pragmatic templates + concepts (Layer 4 restructured)
             use_grammar: Enable grammar-guided composition
             semantic_encoder: BNN encoder for intent clustering (optional)
             enable_knowledge_augmentation: Enable external knowledge lookup (Wikipedia, etc.)
             concept_store: Optional ConceptStore for compositional responses
             enable_compositional: Enable compositional response generation
             enable_modal_routing: Enable modal routing (math, code, etc.)
+            pragmatic_templates: Optional PragmaticTemplateStore for conversational patterns
+            enable_pragmatic_templates: Enable pragmatic template-based composition
         """
         self.fragments = fragment_store
         self.state = conversation_state
@@ -173,6 +185,15 @@ class ResponseComposer:
             print("  🧩 Compositional architecture enabled (concepts + templates)!")
         elif enable_compositional and not COMPOSITIONAL_AVAILABLE:
             print("  ⚠️  Compositional architecture not available")
+        
+        # Initialize pragmatic templates for conversational patterns (Layer 4 restructuring)
+        self.pragmatic_templates = pragmatic_templates
+        if self.pragmatic_templates is None and enable_pragmatic_templates and PRAGMATIC_TEMPLATES_AVAILABLE:
+            # Auto-create with defaults if not provided
+            self.pragmatic_templates = PragmaticTemplateStore()
+            print("  💬 Pragmatic templates enabled (conversational patterns)!")
+        elif enable_pragmatic_templates and not PRAGMATIC_TEMPLATES_AVAILABLE:
+            print("  ⚠️  Pragmatic templates not available")
         
         # Initialize modal routing (math, code, etc.)
         self.modal_classifier = None
@@ -216,7 +237,8 @@ class ResponseComposer:
             'pattern_success': 0,
             'concept_success': 0,
             'parallel_uses': 0,
-            'math_count': 0  # NEW: Track math backend usage
+            'math_count': 0,  # Track math backend usage
+            'pragmatic_count': 0  # NEW: Track pragmatic template usage
         }
         
         # Track last query and response for success learning
@@ -383,6 +405,16 @@ class ResponseComposer:
                     self.last_approach = 'math'
                     return math_response
                 # If math backend failed, fall through to linguistic
+        
+        # PRAGMATIC MODE: Use template + concept composition (Layer 4 restructured)
+        if self.composition_mode == "pragmatic" and self.pragmatic_templates and self.concept_store:
+            pragmatic_response = self._compose_with_pragmatic_templates(context, user_input)
+            if pragmatic_response and pragmatic_response.confidence >= 0.70:
+                self.last_response = pragmatic_response
+                self.last_approach = 'pragmatic'
+                self.metrics['pragmatic_count'] = self.metrics.get('pragmatic_count', 0) + 1
+                return pragmatic_response
+            # If pragmatic composition failed/low confidence, fall through
         
         # PARALLEL MODE: Try both pattern-based AND concept-based approaches
         if self.composition_mode == "parallel" and self.concept_store is not None:
@@ -2060,6 +2092,196 @@ class ResponseComposer:
         self.metrics['pattern_count'] += 1
         self.last_approach = 'pattern'
         return pattern_response
+    
+    def _compose_with_pragmatic_templates(
+        self,
+        context: str,
+        user_input: str
+    ) -> Optional[ComposedResponse]:
+        """
+        Compose response using pragmatic templates + concept store.
+        
+        This is the Layer 4 restructuring: Separate linguistic patterns (templates)
+        from semantic knowledge (concepts).
+        
+        Flow:
+        1. BNN classifies intent (definition, greeting, acknowledgment, etc.)
+        2. Select appropriate pragmatic template for that intent
+        3. BNN retrieves relevant concepts from concept store
+        4. Fill template slots with concept properties
+        5. Return composed response
+        
+        Args:
+            context: Conversation context
+            user_input: Raw user input
+            
+        Returns:
+            Composed response or None if can't compose
+        """
+        if not self.pragmatic_templates or not self.concept_store:
+            return None
+        
+        # Step 1: Detect conversational category from history
+        category = self._detect_conversation_category(user_input)
+        
+        # Step 2: Extract concept from query (if definition/elaboration)
+        concept_term = None
+        if category in ["definition", "elaboration"]:
+            # Simple extraction - in production would use syntax stage
+            concept_term = self._extract_concept_from_query(user_input)
+        
+        # Step 3: Retrieve concept from store (if we have a term)
+        concept = None
+        if concept_term and self.concept_store:
+            # Encode concept term
+            embedding = self.encoder.encode(concept_term) if hasattr(self, 'encoder') else None
+            
+            if embedding is not None:
+                # Retrieve similar concepts
+                results = self.concept_store.retrieve_similar(embedding, top_k=1)
+                if results:
+                    concept_id, similarity = results[0]
+                    if similarity > 0.60:  # Reasonable threshold
+                        concept_data = self.concept_store.get_concept(concept_id)
+                        if concept_data:
+                            concept = concept_data
+        
+        # Step 4: Build available slots based on what we have
+        available_slots = {}
+        
+        if category == "greeting":
+            available_slots["offer_help"] = "How can I help you?"
+            if self.conversation_history:
+                recent = self.conversation_history.get_recent_turns(n=1)
+                if recent:
+                    last_topic = self._extract_topic_from_turn(recent[-1])
+                    if last_topic:
+                        available_slots["continue_previous_topic"] = f"Want to continue talking about {last_topic}?"
+        
+        elif category == "acknowledgment":
+            # Build acknowledgment from context
+            available_slots["elaboration"] = "That's interesting."
+            if concept:
+                available_slots["related_concept"] = f"That relates to {concept.term}."
+        
+        elif category == "definition" and concept:
+            # Fill from concept properties
+            available_slots["concept"] = concept.term
+            if concept.properties:
+                available_slots["primary_property"] = concept.properties[0]
+                if len(concept.properties) > 1:
+                    available_slots["elaboration"] = concept.properties[1]
+                if len(concept.properties) > 2:
+                    available_slots["properties"] = ", ".join(concept.properties[1:3])
+        
+        elif category == "continuation":
+            if self.conversation_history:
+                recent = self.conversation_history.get_recent_turns(n=1)
+                if recent:
+                    prev_topic = self._extract_topic_from_turn(recent[-1])
+                    if prev_topic:
+                        available_slots["previous_topic"] = prev_topic
+                        if concept:
+                            available_slots["new_info"] = f"{concept.term} {concept.properties[0] if concept.properties else ''}"
+        
+        elif category == "elaboration" and concept:
+            available_slots["concept"] = concept.term
+            if concept.properties:
+                available_slots["examples"] = ", ".join(concept.properties[:2])
+                available_slots["properties"] = ", ".join(concept.properties)
+        
+        # Step 5: Match template that we can fill
+        if not available_slots:
+            return None
+        
+        template = self.pragmatic_templates.match_best_template(category, available_slots)
+        if not template:
+            return None
+        
+        # Step 6: Fill template
+        response_text = self.pragmatic_templates.fill_template(template, available_slots)
+        
+        # Step 7: Return composed response
+        return ComposedResponse(
+            text=response_text,
+            fragment_ids=[template.template_id],
+            composition_weights=[1.0],
+            coherence_score=0.85,
+            confidence=0.85,
+            is_fallback=False,
+            is_low_confidence=False
+        )
+    
+    def _detect_conversation_category(self, user_input: str) -> str:
+        """
+        Detect conversational category from user input.
+        
+        Simple heuristic version - in production would use BNN intent classifier.
+        
+        Args:
+            user_input: User message
+            
+        Returns:
+            Category: "greeting", "definition", "acknowledgment", etc.
+        """
+        user_lower = user_input.lower().strip()
+        
+        # Greetings
+        if any(word in user_lower for word in ["hello", "hi", "hey", "greetings"]):
+            return "greeting"
+        
+        # Definitions
+        if any(phrase in user_lower for phrase in ["what is", "what are", "define", "definition of"]):
+            return "definition"
+        
+        # Acknowledgments (short affirmations)
+        if user_lower in ["ok", "okay", "i see", "got it", "thanks", "thank you", "interesting", "cool", "nice"]:
+            return "acknowledgment"
+        
+        # Elaborations
+        if any(phrase in user_lower for phrase in ["tell me more", "elaborate", "explain", "tell me about"]):
+            return "elaboration"
+        
+        # Continuations (building on previous)
+        if any(phrase in user_lower for phrase in ["and", "also", "what about", "how about"]):
+            return "continuation"
+        
+        # Default to elaboration
+        return "elaboration"
+    
+    def _extract_concept_from_query(self, query: str) -> Optional[str]:
+        """
+        Extract concept term from query.
+        
+        Simple version - strips question patterns.
+        
+        Args:
+            query: User query
+            
+        Returns:
+            Concept term or None
+        """
+        query_lower = query.lower()
+        
+        # Remove question patterns
+        for pattern in ["what is", "what are", "define", "definition of", "tell me about", "explain"]:
+            query_lower = query_lower.replace(pattern, "").strip()
+        
+        # Remove question mark
+        query_lower = query_lower.replace("?", "").strip()
+        
+        # Remove question words
+        words = query_lower.split()
+        concept_words = [w for w in words if w not in ["what", "how", "why", "when", "where", "who", "the", "a", "an"]]
+        
+        return " ".join(concept_words) if concept_words else None
+    
+    def _extract_topic_from_turn(self, turn) -> Optional[str]:
+        """Extract main topic from a conversation turn."""
+        # Simple: just use first few words of user input
+        user_input = turn.user_input if hasattr(turn, 'user_input') else turn.get('user_input', '')
+        words = user_input.split()[:3]  # First 3 words
+        return " ".join(words) if words else None
     
     def get_metrics(self) -> Dict:
         """Get metrics comparing pattern vs concept approaches."""

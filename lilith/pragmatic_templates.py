@@ -1,0 +1,457 @@
+"""
+Pragmatic Templates Database - Conversational Patterns for Layer 4
+
+This is the SMALL, FIXED-SIZE database that handles conversational flow.
+Stores dialogue act templates (~50 total), NOT factual knowledge.
+
+Key distinction:
+- pragmatic_templates.db: Conversational patterns (grows slowly, linguistic)
+- concept_store.db: Factual knowledge (grows with learning, semantic)
+
+Layer 4 does COMPOSITION, not STORAGE!
+"""
+
+from dataclasses import dataclass
+from typing import List, Dict, Optional
+import json
+from pathlib import Path
+
+
+@dataclass
+class PragmaticTemplate:
+    """A conversational template for dialogue acts"""
+    template_id: str
+    category: str                  # "greeting", "acknowledgment", "definition", etc.
+    intent: str                    # Specific intent within category
+    template: str                  # "{greeting}! {topic_acknowledgment}"
+    slots: List[str]               # Required slots to fill
+    priority: int = 5              # Higher = more preferred (1-10)
+    examples: List[str] = None     # Example outputs
+    
+    def __post_init__(self):
+        if self.examples is None:
+            self.examples = []
+
+
+class PragmaticTemplateStore:
+    """
+    Store of conversational templates for dialogue acts.
+    
+    This is Layer 4's "linguistic knowledge" - how to structure conversation.
+    Factual knowledge lives in ConceptStore instead.
+    
+    Size: ~50 templates (small, fixed, grows like grammar rules)
+    """
+    
+    def __init__(self, storage_path: Optional[str] = None):
+        """
+        Initialize pragmatic template store.
+        
+        Args:
+            storage_path: JSON file path (optional, uses defaults if None)
+        """
+        self.storage_path = Path(storage_path) if storage_path else None
+        self.templates: Dict[str, PragmaticTemplate] = {}
+        
+        # Load or bootstrap
+        if self.storage_path and self.storage_path.exists():
+            self._load_templates()
+        else:
+            self._bootstrap_default_templates()
+            if self.storage_path:
+                self._save_templates()
+    
+    def _bootstrap_default_templates(self):
+        """Bootstrap with default conversational templates"""
+        
+        # ============================================================
+        # GREETING TEMPLATES (5)
+        # ============================================================
+        
+        self.templates["greeting_simple"] = PragmaticTemplate(
+            template_id="greeting_simple",
+            category="greeting",
+            intent="simple_greeting",
+            template="Hello! {offer_help}",
+            slots=["offer_help"],
+            priority=7,
+            examples=["Hello! How can I help you?"]
+        )
+        
+        self.templates["greeting_continue_topic"] = PragmaticTemplate(
+            template_id="greeting_continue_topic",
+            category="greeting",
+            intent="greeting_with_context",
+            template="Hi! {continue_previous_topic}",
+            slots=["continue_previous_topic"],
+            priority=8,
+            examples=["Hi! Want to continue talking about Python?"]
+        )
+        
+        self.templates["greeting_time_aware"] = PragmaticTemplate(
+            template_id="greeting_time_aware",
+            category="greeting",
+            intent="time_aware_greeting",
+            template="{time_greeting}! {offer_help}",
+            slots=["time_greeting", "offer_help"],
+            priority=6,
+            examples=["Good morning! What can I help you with?"]
+        )
+        
+        # ============================================================
+        # ACKNOWLEDGMENT TEMPLATES (10)
+        # ============================================================
+        
+        self.templates["ack_simple"] = PragmaticTemplate(
+            template_id="ack_simple",
+            category="acknowledgment",
+            intent="simple_acknowledgment",
+            template="I see. {elaboration}",
+            slots=["elaboration"],
+            priority=7,
+            examples=["I see. That's an interesting topic."]
+        )
+        
+        self.templates["ack_understanding"] = PragmaticTemplate(
+            template_id="ack_understanding",
+            category="acknowledgment",
+            intent="show_understanding",
+            template="That makes sense. {related_concept}",
+            slots=["related_concept"],
+            priority=8,
+            examples=["That makes sense. It's related to object-oriented programming."]
+        )
+        
+        self.templates["ack_interest"] = PragmaticTemplate(
+            template_id="ack_interest",
+            category="acknowledgment",
+            intent="express_interest",
+            template="Interesting! {follow_up_question}",
+            slots=["follow_up_question"],
+            priority=6,
+            examples=["Interesting! What aspect are you most curious about?"]
+        )
+        
+        self.templates["ack_summary"] = PragmaticTemplate(
+            template_id="ack_summary",
+            category="acknowledgment",
+            intent="summarize_understanding",
+            template="Got it. {summary}",
+            slots=["summary"],
+            priority=7,
+            examples=["Got it. So we're talking about neural networks."]
+        )
+        
+        self.templates["ack_agreement"] = PragmaticTemplate(
+            template_id="ack_agreement",
+            category="acknowledgment",
+            intent="agree",
+            template="Exactly. {elaboration}",
+            slots=["elaboration"],
+            priority=6,
+            examples=["Exactly. That's a key concept in machine learning."]
+        )
+        
+        # ============================================================
+        # DEFINITION TEMPLATES (15)
+        # ============================================================
+        
+        self.templates["def_simple"] = PragmaticTemplate(
+            template_id="def_simple",
+            category="definition",
+            intent="simple_definition",
+            template="{concept} is {primary_property}.",
+            slots=["concept", "primary_property"],
+            priority=8,
+            examples=["Machine learning is a branch of artificial intelligence."]
+        )
+        
+        self.templates["def_with_elaboration"] = PragmaticTemplate(
+            template_id="def_with_elaboration",
+            category="definition",
+            intent="definition_with_detail",
+            template="{concept} is {primary_property}. {elaboration}",
+            slots=["concept", "primary_property", "elaboration"],
+            priority=9,
+            examples=["Python is a high-level programming language. It's known for its readability."]
+        )
+        
+        self.templates["def_with_example"] = PragmaticTemplate(
+            template_id="def_with_example",
+            category="definition",
+            intent="definition_with_example",
+            template="{concept} refers to {properties}. For example, {example}",
+            slots=["concept", "properties", "example"],
+            priority=7,
+            examples=["Supervised learning refers to training with labeled data. For example, image classification."]
+        )
+        
+        self.templates["def_essence"] = PragmaticTemplate(
+            template_id="def_essence",
+            category="definition",
+            intent="essential_definition",
+            template="In essence, {concept} {description}.",
+            slots=["concept", "description"],
+            priority=6,
+            examples=["In essence, neural networks mimic biological brain structures."]
+        )
+        
+        self.templates["def_functional"] = PragmaticTemplate(
+            template_id="def_functional",
+            category="definition",
+            intent="functional_definition",
+            template="{concept} is used to {purpose}. {mechanism}",
+            slots=["concept", "purpose", "mechanism"],
+            priority=7,
+            examples=["Gradient descent is used to optimize neural networks. It iteratively adjusts weights."]
+        )
+        
+        self.templates["def_comparative"] = PragmaticTemplate(
+            template_id="def_comparative",
+            category="definition",
+            intent="comparative_definition",
+            template="{concept} is similar to {comparison}, but {distinction}.",
+            slots=["concept", "comparison", "distinction"],
+            priority=6,
+            examples=["Deep learning is similar to machine learning, but uses multi-layer networks."]
+        )
+        
+        # ============================================================
+        # CONTINUATION TEMPLATES (10)
+        # ============================================================
+        
+        self.templates["cont_building_on"] = PragmaticTemplate(
+            template_id="cont_building_on",
+            category="continuation",
+            intent="build_on_previous",
+            template="Building on {previous_topic}, {new_info}",
+            slots=["previous_topic", "new_info"],
+            priority=9,
+            examples=["Building on what you said about Python, it's also great for data science."]
+        )
+        
+        self.templates["cont_as_mentioned"] = PragmaticTemplate(
+            template_id="cont_as_mentioned",
+            category="continuation",
+            intent="reference_previous",
+            template="As you mentioned about {topic}, {related_fact}",
+            slots=["topic", "related_fact"],
+            priority=8,
+            examples=["As you mentioned about machine learning, it requires large datasets."]
+        )
+        
+        self.templates["cont_relates_to"] = PragmaticTemplate(
+            template_id="cont_relates_to",
+            category="continuation",
+            intent="show_connection",
+            template="That relates to {concept} because {connection}.",
+            slots=["concept", "connection"],
+            priority=7,
+            examples=["That relates to supervised learning because it uses labeled data."]
+        )
+        
+        self.templates["cont_following_up"] = PragmaticTemplate(
+            template_id="cont_following_up",
+            category="continuation",
+            intent="follow_up",
+            template="Following up on {previous_topic}, {additional_info}",
+            slots=["previous_topic", "additional_info"],
+            priority=7,
+            examples=["Following up on neural networks, they can have millions of parameters."]
+        )
+        
+        self.templates["cont_in_context"] = PragmaticTemplate(
+            template_id="cont_in_context",
+            category="continuation",
+            intent="contextualize",
+            template="In the context of {context}, {statement}",
+            slots=["context", "statement"],
+            priority=6,
+            examples=["In the context of deep learning, activation functions are crucial."]
+        )
+        
+        # ============================================================
+        # ELABORATION TEMPLATES (10)
+        # ============================================================
+        
+        self.templates["elab_example"] = PragmaticTemplate(
+            template_id="elab_example",
+            category="elaboration",
+            intent="provide_example",
+            template="For example, {examples}",
+            slots=["examples"],
+            priority=8,
+            examples=["For example, Python is used in web development and data science."]
+        )
+        
+        self.templates["elab_application"] = PragmaticTemplate(
+            template_id="elab_application",
+            category="elaboration",
+            intent="show_application",
+            template="This is useful for {applications}.",
+            slots=["applications"],
+            priority=7,
+            examples=["This is useful for image recognition and natural language processing."]
+        )
+        
+        self.templates["elab_related"] = PragmaticTemplate(
+            template_id="elab_related",
+            category="elaboration",
+            intent="show_relations",
+            template="It's related to {related_concepts}.",
+            slots=["related_concepts"],
+            priority=7,
+            examples=["It's related to optimization algorithms and backpropagation."]
+        )
+        
+        self.templates["elab_properties"] = PragmaticTemplate(
+            template_id="elab_properties",
+            category="elaboration",
+            intent="list_properties",
+            template="{concept} has several key features: {properties}",
+            slots=["concept", "properties"],
+            priority=6,
+            examples=["Python has several key features: readability, extensive libraries, and dynamic typing."]
+        )
+        
+        self.templates["elab_mechanism"] = PragmaticTemplate(
+            template_id="elab_mechanism",
+            category="elaboration",
+            intent="explain_mechanism",
+            template="It works by {mechanism}. {details}",
+            slots=["mechanism", "details"],
+            priority=7,
+            examples=["It works by adjusting weights iteratively. This minimizes the error function."]
+        )
+        
+        # ============================================================
+        # CLARIFICATION TEMPLATES (5)
+        # ============================================================
+        
+        self.templates["clarify_ambiguous"] = PragmaticTemplate(
+            template_id="clarify_ambiguous",
+            category="clarification",
+            intent="ask_for_specifics",
+            template="Could you clarify - are you asking about {option1} or {option2}?",
+            slots=["option1", "option2"],
+            priority=8,
+            examples=["Could you clarify - are you asking about Python the language or Python the snake?"]
+        )
+        
+        self.templates["clarify_context"] = PragmaticTemplate(
+            template_id="clarify_context",
+            category="clarification",
+            intent="need_context",
+            template="I'd like to help, but could you provide more context about {topic}?",
+            slots=["topic"],
+            priority=7,
+            examples=["I'd like to help, but could you provide more context about what you're trying to learn?"]
+        )
+        
+    def get_template(self, template_id: str) -> Optional[PragmaticTemplate]:
+        """Get template by ID"""
+        return self.templates.get(template_id)
+    
+    def get_templates_by_category(self, category: str) -> List[PragmaticTemplate]:
+        """Get all templates in a category"""
+        return [t for t in self.templates.values() if t.category == category]
+    
+    def get_templates_by_intent(self, intent: str) -> List[PragmaticTemplate]:
+        """Get all templates matching an intent"""
+        return [t for t in self.templates.values() if t.intent == intent]
+    
+    def match_best_template(
+        self, 
+        category: str, 
+        available_slots: Dict[str, str]
+    ) -> Optional[PragmaticTemplate]:
+        """
+        Find best template for category with available slot data.
+        
+        Args:
+            category: Template category ("greeting", "definition", etc.)
+            available_slots: Slots we can fill {"concept": "Python", "property": "..."}
+            
+        Returns:
+            Best matching template or None
+        """
+        candidates = self.get_templates_by_category(category)
+        
+        # Filter to templates where we can fill all required slots
+        fillable = []
+        for template in candidates:
+            if all(slot in available_slots for slot in template.slots):
+                fillable.append(template)
+        
+        if not fillable:
+            return None
+        
+        # Return highest priority
+        fillable.sort(key=lambda t: t.priority, reverse=True)
+        return fillable[0]
+    
+    def fill_template(
+        self,
+        template: PragmaticTemplate,
+        slot_values: Dict[str, str]
+    ) -> str:
+        """
+        Fill template with slot values.
+        
+        Args:
+            template: Template to fill
+            slot_values: Values for each slot
+            
+        Returns:
+            Filled template string
+        """
+        result = template.template
+        
+        for slot, value in slot_values.items():
+            placeholder = "{" + slot + "}"
+            if placeholder in result:
+                result = result.replace(placeholder, value)
+        
+        return result
+    
+    def _save_templates(self):
+        """Save templates to JSON"""
+        if not self.storage_path:
+            return
+        
+        data = {}
+        for template_id, template in self.templates.items():
+            data[template_id] = {
+                "template_id": template.template_id,
+                "category": template.category,
+                "intent": template.intent,
+                "template": template.template,
+                "slots": template.slots,
+                "priority": template.priority,
+                "examples": template.examples
+            }
+        
+        with open(self.storage_path, 'w') as f:
+            json.dump(data, f, indent=2)
+    
+    def _load_templates(self):
+        """Load templates from JSON"""
+        if not self.storage_path or not self.storage_path.exists():
+            return
+        
+        with open(self.storage_path, 'r') as f:
+            data = json.load(f)
+        
+        for template_id, template_data in data.items():
+            self.templates[template_id] = PragmaticTemplate(**template_data)
+    
+    def get_stats(self) -> Dict:
+        """Get statistics about templates"""
+        categories = {}
+        for template in self.templates.values():
+            categories[template.category] = categories.get(template.category, 0) + 1
+        
+        return {
+            "total_templates": len(self.templates),
+            "by_category": categories
+        }
