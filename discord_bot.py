@@ -10,13 +10,25 @@ Features:
 - Explicit name setting via /setname command
 - Per-channel or DM conversations
 - Auto-feedback detection from Discord reactions
+- Multi-source knowledge: Wikipedia, Wiktionary, WordNet, Free Dictionary
 
 Requirements:
-    pip install discord.py python-dotenv
+    pip install discord.py python-dotenv nltk
+
+Setup:
+    1. Install dependencies: pip install discord.py python-dotenv nltk
+    2. Download WordNet data: python -c "import nltk; nltk.download('wordnet'); nltk.download('omw-1.4')"
+    3. Create a .env file with DISCORD_TOKEN=your_bot_token
+    4. Run: python discord_bot.py
+
+Knowledge Sources:
+    - WordNet (offline): Synonyms, antonyms, word relationships
+    - Wiktionary (online): Word definitions, etymology
+    - Free Dictionary (online): Definitions with examples
+    - Wikipedia (online): General knowledge, concepts
 
 Usage:
-    1. Create a .env file with DISCORD_TOKEN=your_bot_token
-    2. Run: python discord_bot.py
+    python discord_bot.py
 """
 
 import os

@@ -10,9 +10,26 @@ input modalities that feed into the same semantic processing pipeline.
 """
 
 import re
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any, List
 import requests
 from urllib.parse import quote
+
+# Try to import NLTK WordNet (optional)
+try:
+    import nltk
+    from nltk.corpus import wordnet as wn
+    WORDNET_AVAILABLE = True
+    
+    # Ensure WordNet data is downloaded
+    try:
+        wn.synsets('test')  # Test if data is available
+    except LookupError:
+        print("📥 Downloading WordNet data...")
+        nltk.download('wordnet', quiet=True)
+        nltk.download('omw-1.4', quiet=True)  # Open Multilingual WordNet
+except ImportError:
+    WORDNET_AVAILABLE = False
+    wn = None
 
 
 class WikipediaLookup:
@@ -174,12 +191,347 @@ class WikipediaLookup:
         return summary
 
 
+class WiktionaryLookup:
+    """
+    Wiktionary API interface for word definitions and etymology.
+    
+    Better than Wikipedia for vocabulary, word meanings, and language questions.
+    """
+    
+    def __init__(self):
+        self.base_url = "https://en.wiktionary.org/api/rest_v1/page/definition/"
+        self.user_agent = "Lilith/1.0 (Educational neuro-symbolic AI)"
+    
+    def lookup(self, word: str) -> Optional[Dict[str, Any]]:
+        """
+        Look up a word definition on Wiktionary.
+        
+        Args:
+            word: The word to define
+            
+        Returns:
+            Dict with keys: 'word', 'definitions', 'part_of_speech', 'source'
+            or None if not found
+        """
+        try:
+            # Clean the word (remove "what is", "define", etc.)
+            cleaned_word = self._clean_word(word)
+            
+            if not cleaned_word:
+                return None
+            
+            url = self.base_url + quote(cleaned_word)
+            headers = {'User-Agent': self.user_agent}
+            
+            response = requests.get(url, headers=headers, timeout=5)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Wiktionary returns definitions grouped by language
+                if 'en' in data:
+                    definitions = self._extract_definitions(data['en'])
+                    
+                    if definitions:
+                        return {
+                            'word': cleaned_word,
+                            'definitions': definitions,
+                            'confidence': 0.85,  # Wiktionary is authoritative for words
+                            'source': 'wiktionary'
+                        }
+            
+            return None
+            
+        except Exception as e:
+            print(f"  ⚠️ Wiktionary lookup failed: {e}")
+            return None
+    
+    def _clean_word(self, query: str) -> str:
+        """
+        Extract the target word from a query.
+        
+        Examples:
+            "What does ephemeral mean?" -> "ephemeral"
+            "Define recalcitrant" -> "recalcitrant"
+            "ephemeral" -> "ephemeral"
+        """
+        query = query.lower().strip('?!.')
+        
+        # Remove common question patterns
+        patterns = [
+            r'what (?:does|is|are) (.+?) mean',
+            r'what\'?s the meaning of (.+)',
+            r'define (.+)',
+            r'definition of (.+)',
+            r'meaning of (.+)',
+            r'what (?:does|do) (.+?) mean',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, query)
+            if match:
+                return match.group(1).strip()
+        
+        # If no pattern matched, assume the query is just the word
+        # Remove articles and common words
+        words = query.split()
+        if len(words) == 1:
+            return words[0]
+        
+        # Remove "a", "an", "the" from start
+        if words and words[0] in ('a', 'an', 'the'):
+            words = words[1:]
+        
+        return ' '.join(words) if words else ""
+    
+    def _extract_definitions(self, lang_data: List[Dict]) -> List[Dict[str, str]]:
+        """
+        Extract clean definitions from Wiktionary response.
+        
+        Returns list of {part_of_speech, definition} dicts.
+        """
+        definitions = []
+        
+        for entry in lang_data[:3]:  # Top 3 parts of speech
+            pos = entry.get('partOfSpeech', 'unknown')
+            
+            for defn in entry.get('definitions', [])[:2]:  # Top 2 definitions per POS
+                definition_text = defn.get('definition', '')
+                
+                # Clean HTML tags if any
+                definition_text = re.sub(r'<[^>]+>', '', definition_text)
+                
+                if definition_text:
+                    definitions.append({
+                        'part_of_speech': pos,
+                        'definition': definition_text
+                    })
+        
+        return definitions
+
+
+class WordNetLookup:
+    """
+    WordNet interface for synonyms, antonyms, and word relationships.
+    
+    Uses NLTK's WordNet corpus (offline, fast, no API calls).
+    """
+    
+    def __init__(self):
+        self.available = WORDNET_AVAILABLE
+    
+    def lookup(self, query: str) -> Optional[Dict[str, Any]]:
+        """
+        Look up word relationships in WordNet.
+        
+        Args:
+            query: Word or synonym query
+            
+        Returns:
+            Dict with keys: 'word', 'synonyms', 'definition', 'source'
+            or None if not found
+        """
+        if not self.available:
+            return None
+        
+        try:
+            # Extract the target word
+            word = self._clean_query(query)
+            
+            if not word:
+                return None
+            
+            # Get synsets for this word
+            synsets = wn.synsets(word)
+            
+            if not synsets:
+                return None
+            
+            # Get the primary synset (most common meaning)
+            primary = synsets[0]
+            
+            # Extract synonyms (lemmas from same synset)
+            synonyms = set()
+            for synset in synsets[:3]:  # Top 3 senses
+                for lemma in synset.lemmas()[:5]:  # Top 5 synonyms per sense
+                    syn_word = lemma.name().replace('_', ' ')
+                    if syn_word.lower() != word.lower():
+                        synonyms.add(syn_word)
+            
+            # Get antonyms if available
+            antonyms = set()
+            for synset in synsets[:2]:
+                for lemma in synset.lemmas():
+                    for ant in lemma.antonyms()[:3]:
+                        antonyms.add(ant.name().replace('_', ' '))
+            
+            # Get definition
+            definition = primary.definition()
+            
+            # Get examples if available
+            examples = primary.examples()[:2]
+            
+            return {
+                'word': word,
+                'definition': definition,
+                'synonyms': list(synonyms)[:8],  # Top 8 synonyms
+                'antonyms': list(antonyms)[:5] if antonyms else None,
+                'examples': examples if examples else None,
+                'confidence': 0.80,  # WordNet is reliable
+                'source': 'wordnet'
+            }
+            
+        except Exception as e:
+            print(f"  ⚠️ WordNet lookup failed: {e}")
+            return None
+    
+    def _clean_query(self, query: str) -> str:
+        """
+        Extract target word from query.
+        
+        Examples:
+            "synonym for happy" -> "happy"
+            "what's another word for sad" -> "sad"
+            "antonym of good" -> "good"
+        """
+        query = query.lower().strip('?!.')
+        
+        # Patterns for synonym/antonym queries
+        patterns = [
+            r'synonym (?:for|of) (.+)',
+            r'another word for (.+)',
+            r'antonym (?:for|of) (.+)',
+            r'opposite of (.+)',
+            r'similar (?:to|as) (.+)',
+            r'like (.+) but',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, query)
+            if match:
+                return match.group(1).strip()
+        
+        # If no pattern, assume it's just the word
+        words = query.split()
+        if len(words) <= 2:
+            return query.replace(' ', '_')  # WordNet uses underscores
+        
+        return ""
+
+
+class FreeDictionaryLookup:
+    """
+    Free Dictionary API interface for definitions with pronunciation and examples.
+    
+    Good balance of features: definitions, phonetics, usage examples.
+    """
+    
+    def __init__(self):
+        self.base_url = "https://api.dictionaryapi.dev/api/v2/entries/en/"
+    
+    def lookup(self, word: str) -> Optional[Dict[str, Any]]:
+        """
+        Look up a word in Free Dictionary.
+        
+        Args:
+            word: The word to define
+            
+        Returns:
+            Dict with keys: 'word', 'phonetic', 'definitions', 'examples', 'source'
+            or None if not found
+        """
+        try:
+            # Clean the word
+            cleaned_word = self._clean_word(word)
+            
+            if not cleaned_word:
+                return None
+            
+            url = self.base_url + quote(cleaned_word)
+            
+            response = requests.get(url, timeout=5)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if data and len(data) > 0:
+                    entry = data[0]
+                    
+                    # Extract phonetic
+                    phonetic = entry.get('phonetic', '')
+                    
+                    # Extract definitions and examples
+                    definitions = []
+                    examples = []
+                    
+                    for meaning in entry.get('meanings', [])[:3]:  # Top 3 parts of speech
+                        pos = meaning.get('partOfSpeech', '')
+                        
+                        for defn in meaning.get('definitions', [])[:2]:  # Top 2 per POS
+                            def_text = defn.get('definition', '')
+                            example = defn.get('example', '')
+                            
+                            if def_text:
+                                definitions.append({
+                                    'part_of_speech': pos,
+                                    'definition': def_text
+                                })
+                            
+                            if example:
+                                examples.append(example)
+                    
+                    if definitions:
+                        return {
+                            'word': cleaned_word,
+                            'phonetic': phonetic,
+                            'definitions': definitions,
+                            'examples': examples[:3] if examples else None,
+                            'confidence': 0.82,
+                            'source': 'free_dictionary'
+                        }
+            
+            return None
+            
+        except Exception as e:
+            print(f"  ⚠️ Free Dictionary lookup failed: {e}")
+            return None
+    
+    def _clean_word(self, query: str) -> str:
+        """Extract the target word from query."""
+        query = query.lower().strip('?!.')
+        
+        # Remove question patterns
+        patterns = [
+            r'what (?:does|is) (.+?) mean',
+            r'define (.+)',
+            r'meaning of (.+)',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, query)
+            if match:
+                return match.group(1).strip()
+        
+        # Just the word
+        words = query.split()
+        if words and words[0] in ('a', 'an', 'the'):
+            words = words[1:]
+        
+        return words[0] if words and len(words) == 1 else query
+
+
 class KnowledgeAugmenter:
     """
     Main knowledge augmentation interface.
     
     Coordinates external knowledge lookups and prepares information
     for integration into the pattern learning system.
+    
+    Tries multiple sources in order:
+    1. WordNet (offline, fast) - for synonyms, word relationships
+    2. Wiktionary - for word definitions
+    3. Free Dictionary - for definitions with examples
+    4. Wikipedia - for general knowledge, concepts
     """
     
     def __init__(self, enabled: bool = True):
@@ -188,13 +540,31 @@ class KnowledgeAugmenter:
             enabled: Whether external lookups are enabled (can be toggled)
         """
         self.enabled = enabled
+        
+        # Initialize all lookup sources
+        self.wordnet = WordNetLookup()
+        self.wiktionary = WiktionaryLookup()
+        self.free_dictionary = FreeDictionaryLookup()
         self.wikipedia = WikipediaLookup()
+        
+        # Statistics
         self.lookup_count = 0
         self.success_count = 0
-        
+        self.source_stats = {
+            'wordnet': 0,
+            'wiktionary': 0,
+            'free_dictionary': 0,
+            'wikipedia': 0
+        }
+    
     def lookup(self, query: str, min_confidence: float = 0.6) -> Optional[Tuple[str, float, str]]:
         """
         Look up external knowledge for a query.
+        
+        Tries sources in order of specificity:
+        - WordNet for synonym/antonym queries
+        - Wiktionary/Free Dictionary for word definitions
+        - Wikipedia for general knowledge
         
         Args:
             query: User's question or statement
@@ -207,26 +577,225 @@ class KnowledgeAugmenter:
             return None
         
         self.lookup_count += 1
+        query_lower = query.lower()
         
-        # Try Wikipedia first (can add other sources later)
-        try:
-            wiki_result = self.wikipedia.lookup(query)
-        except Exception as e:
-            # Silently fail on network errors
-            return None
+        # Determine query type and try appropriate sources
         
-        if wiki_result and wiki_result['confidence'] >= min_confidence:
-            self.success_count += 1
+        # 1. Synonym/antonym queries -> WordNet first
+        if any(word in query_lower for word in ['synonym', 'antonym', 'another word', 'opposite', 'similar to']):
+            result = self._try_wordnet(query, min_confidence)
+            if result:
+                return result
+        
+        # 2. Word definition queries -> Try Wiktionary, then Free Dictionary
+        if any(word in query_lower for word in ['mean', 'define', 'definition', 'meaning']):
+            # Try Wiktionary first (more comprehensive)
+            result = self._try_wiktionary(query, min_confidence)
+            if result:
+                return result
             
-            # Format response naturally
-            response = self._format_response(wiki_result)
+            # Fallback to Free Dictionary
+            result = self._try_free_dictionary(query, min_confidence)
+            if result:
+                return result
             
-            print(f"  🌐 External knowledge found: {wiki_result['title']}")
-            print(f"     Source: {wiki_result['source']}, Confidence: {wiki_result['confidence']}")
+            # Also try WordNet for basic definition
+            result = self._try_wordnet(query, min_confidence)
+            if result:
+                return result
+        
+        # 3. General knowledge -> Wikipedia
+        result = self._try_wikipedia(query, min_confidence)
+        if result:
+            return result
+        
+        # 4. Last resort: try all word sources for any single-word query
+        words = query_lower.strip('?!.').split()
+        if len(words) <= 2:
+            # Try WordNet
+            result = self._try_wordnet(query, min_confidence)
+            if result:
+                return result
             
-            return (response, wiki_result['confidence'], wiki_result['source'])
+            # Try dictionaries
+            result = self._try_wiktionary(query, min_confidence)
+            if result:
+                return result
+            
+            result = self._try_free_dictionary(query, min_confidence)
+            if result:
+                return result
         
         return None
+    
+    def _try_wordnet(self, query: str, min_confidence: float) -> Optional[Tuple[str, float, str]]:
+        """Try WordNet lookup."""
+        try:
+            result = self.wordnet.lookup(query)
+            
+            if result and result['confidence'] >= min_confidence:
+                self.success_count += 1
+                self.source_stats['wordnet'] += 1
+                
+                response = self._format_wordnet_response(result)
+                
+                print(f"  📖 WordNet found: {result['word']}")
+                print(f"     Synonyms: {len(result.get('synonyms', []))}, Confidence: {result['confidence']}")
+                
+                return (response, result['confidence'], result['source'])
+        except Exception:
+            pass
+        
+        return None
+    
+    def _try_wiktionary(self, query: str, min_confidence: float) -> Optional[Tuple[str, float, str]]:
+        """Try Wiktionary lookup."""
+        try:
+            result = self.wiktionary.lookup(query)
+            
+            if result and result['confidence'] >= min_confidence:
+                self.success_count += 1
+                self.source_stats['wiktionary'] += 1
+                
+                response = self._format_wiktionary_response(result)
+                
+                print(f"  📘 Wiktionary found: {result['word']}")
+                print(f"     Definitions: {len(result['definitions'])}, Confidence: {result['confidence']}")
+                
+                return (response, result['confidence'], result['source'])
+        except Exception:
+            pass
+        
+        return None
+    
+    def _try_free_dictionary(self, query: str, min_confidence: float) -> Optional[Tuple[str, float, str]]:
+        """Try Free Dictionary lookup."""
+        try:
+            result = self.free_dictionary.lookup(query)
+            
+            if result and result['confidence'] >= min_confidence:
+                self.success_count += 1
+                self.source_stats['free_dictionary'] += 1
+                
+                response = self._format_free_dictionary_response(result)
+                
+                print(f"  📕 Free Dictionary found: {result['word']}")
+                print(f"     Definitions: {len(result['definitions'])}, Confidence: {result['confidence']}")
+                
+                return (response, result['confidence'], result['source'])
+        except Exception:
+            pass
+        
+        return None
+    
+    def _try_wikipedia(self, query: str, min_confidence: float) -> Optional[Tuple[str, float, str]]:
+        """Try Wikipedia lookup."""
+        try:
+            wiki_result = self.wikipedia.lookup(query)
+            
+            if wiki_result and wiki_result['confidence'] >= min_confidence:
+                self.success_count += 1
+                self.source_stats['wikipedia'] += 1
+                
+                response = self._format_response(wiki_result)
+                
+                print(f"  🌐 Wikipedia found: {wiki_result['title']}")
+                print(f"     Source: {wiki_result['source']}, Confidence: {wiki_result['confidence']}")
+                
+                return (response, wiki_result['confidence'], wiki_result['source'])
+        except Exception:
+            pass
+        
+        return None
+    
+    def _format_wordnet_response(self, result: Dict[str, Any]) -> str:
+        """Format WordNet result into natural response."""
+        word = result['word']
+        definition = result.get('definition', '')
+        synonyms = result.get('synonyms', [])
+        antonyms = result.get('antonyms', [])
+        examples = result.get('examples', [])
+        
+        # Build response
+        parts = []
+        
+        # Definition
+        if definition:
+            parts.append(f"{word.capitalize()}: {definition}")
+        
+        # Synonyms
+        if synonyms:
+            syn_list = ', '.join(synonyms[:5])
+            parts.append(f"Synonyms: {syn_list}")
+        
+        # Antonyms
+        if antonyms:
+            ant_list = ', '.join(antonyms[:3])
+            parts.append(f"Antonyms: {ant_list}")
+        
+        # Example
+        if examples:
+            parts.append(f"Example: \"{examples[0]}\"")
+        
+        return '. '.join(parts) + '.' if parts else definition
+    
+    def _format_wiktionary_response(self, result: Dict[str, Any]) -> str:
+        """Format Wiktionary result into natural response."""
+        word = result['word']
+        definitions = result.get('definitions', [])
+        
+        if not definitions:
+            return f"{word.capitalize()} is a word."
+        
+        # Use first definition
+        first_def = definitions[0]
+        pos = first_def.get('part_of_speech', '').lower()
+        definition = first_def.get('definition', '')
+        
+        # Format naturally
+        if pos:
+            response = f"{word.capitalize()} ({pos}): {definition}"
+        else:
+            response = f"{word.capitalize()}: {definition}"
+        
+        # Add second definition if different part of speech
+        if len(definitions) > 1:
+            second_def = definitions[1]
+            if second_def.get('part_of_speech') != first_def.get('part_of_speech'):
+                response += f" It can also be a {second_def.get('part_of_speech', 'word')}: {second_def.get('definition', '')}"
+        
+        return response
+    
+    def _format_free_dictionary_response(self, result: Dict[str, Any]) -> str:
+        """Format Free Dictionary result into natural response."""
+        word = result['word']
+        phonetic = result.get('phonetic', '')
+        definitions = result.get('definitions', [])
+        examples = result.get('examples', [])
+        
+        if not definitions:
+            return f"{word.capitalize()} is a word."
+        
+        # Use first definition
+        first_def = definitions[0]
+        pos = first_def.get('part_of_speech', '').lower()
+        definition = first_def.get('definition', '')
+        
+        # Format with phonetic if available
+        parts = []
+        
+        if phonetic:
+            parts.append(f"{word.capitalize()} {phonetic} ({pos}): {definition}")
+        elif pos:
+            parts.append(f"{word.capitalize()} ({pos}): {definition}")
+        else:
+            parts.append(f"{word.capitalize()}: {definition}")
+        
+        # Add example if available
+        if examples:
+            parts.append(f"Example: \"{examples[0]}\"")
+        
+        return '. '.join(parts) + '.'
     
     def _format_response(self, result: Dict[str, Any]) -> str:
         """
@@ -251,5 +820,7 @@ class KnowledgeAugmenter:
             'lookups': self.lookup_count,
             'successes': self.success_count,
             'success_rate': f"{success_rate:.1f}%",
-            'enabled': self.enabled
+            'enabled': self.enabled,
+            'sources': self.source_stats,
+            'wordnet_available': self.wordnet.available if self.wordnet else False
         }

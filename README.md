@@ -42,6 +42,19 @@ lilith/
 
 ## Quick Start
 
+### Installation
+
+```bash
+# Run the installation script
+./install.sh
+
+# Or manually:
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python -c "import nltk; nltk.download('wordnet'); nltk.download('omw-1.4')"
+```
+
 ### Run Conversation Test
 
 ```bash
@@ -55,7 +68,9 @@ python tests/test_conversation.py
 - ✅ **Math Backend**: Exact symbolic computation using SymPy
 - ✅ **Database Protection**: Math queries don't pollute learning database
 - ✅ **Linguistic Learning**: Learn from conversations with 100% recall
-- ✅ **External Knowledge**: Wikipedia integration for unknown topics
+- ✅ **Multi-Source Knowledge**: Wikipedia, Wiktionary, WordNet, Free Dictionary
+- ✅ **Smart Source Selection**: Automatically chooses best source for each query type
+- ✅ **Offline WordNet**: Fast synonym/antonym lookup without API calls
 - ✅ **BNN Intent Clustering**: Neural clustering for better understanding
 - ✅ **Fuzzy Matching**: Typo tolerance in query matching
 - ✅ **Multi-Tenant Architecture**: Isolated user databases with shared base knowledge
@@ -101,3 +116,25 @@ python tools/demo_concurrent_access.py
 ## Related Projects
 
 - [PMFlow](https://github.com/experimentech/PMFlow) - Standalone PMFlow encoder package
+
+## Documentation
+
+- [Dependencies Guide](docs/DEPENDENCIES.md) - Complete dependency documentation and installation
+- [SQLite Migration](docs/SQLITE_MIGRATION.md) - SQLite backend and concurrency support
+- [Project Scope](docs/PROJECT_SCOPE.md) - Architecture and design goals
+- [PMFlow Integration](docs/PMFLOW_INTEGRATION.md) - PMFlow neural encoding details
+
+## Dependencies
+
+See [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for complete information.
+
+**Core**: numpy, torch, sympy, requests, rapidfuzz  
+**Optional**: nltk (WordNet), discord.py (Discord bot)  
+**Built-in**: sqlite3
+
+Quick install:
+```bash
+./install.sh  # Automated installation
+# OR
+pip install -r requirements.txt
+```

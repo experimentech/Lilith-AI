@@ -12,13 +12,17 @@ Pure neuro-symbolic - no LLM!
 """
 
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Union, TYPE_CHECKING
 import numpy as np
 
 from .response_fragments import ResponseFragmentStore, ResponsePattern
 from .conversation_state import ConversationState
 from .bnn_intent_classifier import BNNIntentClassifier
 from .intake import NoiseNormalizer  # For query cleaning at intake layer
+
+# Import MultiTenantFragmentStore for type hints
+if TYPE_CHECKING:
+    from .multi_tenant_store import MultiTenantFragmentStore
 
 # Optional: Import query pattern matcher for query understanding
 try:
@@ -99,7 +103,7 @@ class ResponseComposer:
     
     def __init__(
         self, 
-        fragment_store: ResponseFragmentStore,
+        fragment_store: Union[ResponseFragmentStore, 'MultiTenantFragmentStore'],
         conversation_state: ConversationState,
         composition_mode: str = "weighted_blend",
         use_grammar: bool = False,
@@ -2026,19 +2030,33 @@ class ResponseComposer:
             
     def _fallback_response(self, user_input: str = "") -> ComposedResponse:
         """
-        Fallback when no patterns available.
+        Smart fallback: Fill knowledge gaps before falling back.
         
-        Try external knowledge lookup first, then graceful fallback.
+        Strategy:
+        1. Identify unknown words/concepts in query
+        2. Look them up in external sources
+        3. Re-attempt pattern matching with enhanced understanding
+        4. If successful, teach the pattern automatically
+        5. Otherwise, try direct external knowledge lookup
+        6. Finally, graceful fallback
         
         Args:
-            user_input: User's query (for knowledge lookup)
+            user_input: User's query (for knowledge lookup and gap analysis)
         """
-        # Try external knowledge lookup if available
+        # STEP 1: Try to fill knowledge gaps and re-attempt matching
+        if self.knowledge_augmenter and user_input:
+            filled_response = self._fill_gaps_and_retry(user_input)
+            if filled_response:
+                return filled_response
+        
+        # If gap-filling didn't help, try direct external knowledge lookup
         if self.knowledge_augmenter and user_input:
             external_result = self.knowledge_augmenter.lookup(user_input, min_confidence=0.6)
             
             if external_result:
                 response_text, confidence, source = external_result
+                
+                print(f"  💡 Filled knowledge gap from {source} (confidence: {confidence:.2f})")
                 
                 # Return external knowledge as response
                 # The teaching mechanism will learn this pattern automatically
@@ -2065,6 +2083,296 @@ class ResponseComposer:
             is_low_confidence=True
         )
     
+    def _fill_gaps_and_retry(self, user_input: str) -> Optional[ComposedResponse]:
+        """
+        Attempt to fill knowledge gaps and retry pattern matching.
+        
+        ENHANCED LEARNING INTEGRATION (Phase 1 + Phase 2):
+        Instead of just memorizing query→response patterns, this now performs
+        TRANSPARENT ONLINE LEARNING with REASONING to build true understanding:
+        
+        Process:
+        1. Extract key terms from query (nouns, technical words)
+        2. Look up unknown terms in external sources
+        3. **LEARN VOCABULARY** - Track terms and their definitions
+        4. **LEARN CONCEPTS** - Extract semantic concepts from definitions
+        5. **LEARN SYNTAX** - Extract linguistic patterns from definitions
+        6. **BUILD CONNECTIONS** (Phase 2) - Use reasoning stage to find relationships
+        7. Build enhanced context with learned knowledge
+        8. Retry pattern matching with enhanced context
+        9. If match found, teach it as new pattern
+        
+        Phase 2 Integration:
+        After learning vocabulary/concepts/syntax, the reasoning stage:
+        - Activates newly learned concepts in working memory
+        - Runs deliberation to find connections with existing knowledge
+        - Generates inferences about concept relationships
+        - Builds semantic network of learned information
+        
+        This enables Lilith to not only learn individual facts, but understand
+        how they relate to existing knowledge - creating a connected knowledge graph
+        rather than isolated facts.
+        
+        Args:
+            user_input: Original user query
+            
+        Returns:
+            ComposedResponse if gaps filled and match found, None otherwise
+        """
+        # Extract potential unknown terms
+        unknown_terms = self._extract_unknown_terms(user_input)
+        
+        if not unknown_terms:
+            return None
+        
+        # Look up each unknown term AND learn from definitions
+        term_definitions = {}
+        learned_count = 0
+        
+        for term in unknown_terms:
+            # Try to get definition/explanation
+            result = self.knowledge_augmenter.lookup(f"What is {term}?", min_confidence=0.6)
+            if result:
+                definition, confidence, source = result
+                term_definitions[term] = {
+                    'definition': definition,
+                    'confidence': confidence,
+                    'source': source
+                }
+                print(f"  🔍 Learned about '{term}' from {source}")
+                
+                # ═══════════════════════════════════════════════════════
+                # PHASE 1: FULL LEARNING INTEGRATION
+                # ═══════════════════════════════════════════════════════
+                
+                # 1. VOCABULARY LEARNING
+                # Track the term and its definition for future queries
+                if self.fragments.vocabulary:
+                    try:
+                        # Track the full definition text (includes the term and related words)
+                        # VocabularyTracker.track_text() extracts terms automatically
+                        tracked = self.fragments.vocabulary.track_text(
+                            text=f"{term}: {definition}",
+                            source=source
+                        )
+                        
+                        learned_count += 1
+                        print(f"     📖 Vocabulary: Tracked '{term}' and {len(tracked)} related terms from definition")
+                    except Exception as e:
+                        print(f"     ⚠️  Vocabulary tracking failed: {e}")
+                
+                # 2. CONCEPT LEARNING
+                # Extract semantic concepts from the definition
+                if self.fragments.concept_store:
+                    try:
+                        # Extract key noun phrases from definition as concepts
+                        # Simple extraction: take capitalized terms and significant nouns
+                        import re
+                        
+                        # Extract sentences
+                        sentences = definition.split('.')
+                        concepts_added = 0
+                        
+                        for sentence in sentences[:2]:  # First 2 sentences
+                            sentence = sentence.strip()
+                            if not sentence:
+                                continue
+                            
+                            # Extract the main term and add as concept
+                            # Use the term as a concept with the sentence as a property
+                            self.fragments.concept_store.add_concept(
+                                term=term.lower(),
+                                properties=[sentence],
+                                source=source,
+                                confidence=confidence
+                            )
+                            concepts_added += 1
+                            break  # Only add the term once
+                        
+                        if concepts_added > 0:
+                            print(f"     🧠 Concepts: Added '{term}' to concept store")
+                            learned_count += 1
+                    except Exception as e:
+                        print(f"     ⚠️  Concept learning failed: {e}")
+                
+                # 3. SYNTAX PATTERN LEARNING
+                # Extract linguistic patterns from the definition
+                if self.fragments.pattern_extractor:
+                    try:
+                        # Extract patterns from well-formed definition text
+                        # This helps with generating similar explanations in the future
+                        # PatternExtractor.extract_patterns() returns PatternMatch objects
+                        patterns = self.fragments.pattern_extractor.extract_patterns(
+                            text=definition,
+                            source=source
+                        )
+                        
+                        if patterns:
+                            print(f"     📝 Syntax: Extracted {len(patterns)} linguistic patterns")
+                            learned_count += 1
+                    except Exception as e:
+                        print(f"     ⚠️  Pattern extraction failed: {e}")
+                
+                # ═══════════════════════════════════════════════════════
+                # PHASE 2: REASONING STAGE INTEGRATION
+                # ═══════════════════════════════════════════════════════
+                
+                # After learning vocabulary/concepts/syntax, use reasoning stage
+                # to build CONNECTIONS between the newly learned concepts.
+                # This operates at the SYMBOLIC LEVEL, not language level.
+                
+                if self.reasoning_stage and self.fragments.concept_store:
+                    try:
+                        # Activate the newly learned concept in reasoning stage
+                        # This allows it to interact with existing concepts
+                        concept_embedding = self.reasoning_stage.encoder.encode(term.lower().split())
+                        
+                        activated_concept = self.reasoning_stage.activate_concept(
+                            term=term.lower(),
+                            embedding=concept_embedding,
+                            activation=confidence,  # Use external source confidence
+                            source="learned_external",
+                            properties=[definition.split('.')[0]]  # First sentence as property
+                        )
+                        
+                        # Run deliberation to find connections with existing knowledge
+                        # This helps build semantic network of learned concepts
+                        deliberation = self.reasoning_stage.deliberate(
+                            query=f"{term} in context: {user_input}",
+                            context=definition,
+                            max_steps=2  # Quick deliberation for learning
+                        )
+                        
+                        # Log any inferences discovered
+                        if deliberation.inferences:
+                            print(f"     🔗 Reasoning: Found {len(deliberation.inferences)} connections for '{term}'")
+                            for inference in deliberation.inferences[:2]:  # Show top 2
+                                print(f"        → {inference.inference_type}: {inference.conclusion[:60]}...")
+                            learned_count += 1
+                        
+                    except Exception as e:
+                        print(f"     ⚠️  Reasoning stage integration failed: {e}")
+        
+        if not term_definitions:
+            return None
+        
+        if learned_count > 0:
+            print(f"  ✨ Successfully learned {learned_count} knowledge components on-the-fly!")
+        
+        # Build enhanced context
+        enhanced_context = user_input
+        for term, info in term_definitions.items():
+            # Add definition as context (simplified)
+            definition = info['definition'].split('.')[0]  # First sentence
+            enhanced_context += f" ({term}: {definition})"
+        
+        # Retry pattern matching with enhanced context
+        print(f"  🔄 Retrying with enhanced context: {enhanced_context[:100]}...")
+        
+        # Get patterns with enhanced context
+        patterns = self.fragments.retrieve_patterns(enhanced_context, topk=5, min_score=0.3)
+        
+        if not patterns:
+            return None
+        
+        best_pattern, best_score = patterns[0]
+        
+        # Check if enhanced matching improved the score
+        # Use a reasonable threshold (0.65 for gap-filled patterns)
+        if best_score >= 0.65:
+            print(f"  ✨ Gap-filling improved match! Score: {best_score:.3f}")
+            
+            # Use the matched pattern's response text directly
+            response_text = best_pattern.response_text
+            
+            # Teach a new pattern combining original query with matched response
+            # This "fills the gap" in the knowledge base
+            if hasattr(self.fragments, 'add_pattern'):
+                try:
+                    new_pattern_id = self.fragments.add_pattern(
+                        trigger_context=user_input,
+                        response_text=response_text,
+                        intent="gap_filled",
+                        success_score=best_score * 0.9  # Slightly lower than direct match
+                    )
+                    print(f"  📚 Taught gap-filled pattern: {new_pattern_id}")
+                except Exception as e:
+                    print(f"  ⚠️  Could not teach gap-filled pattern: {e}")
+            
+            return ComposedResponse(
+                text=response_text,
+                fragment_ids=[best_pattern.fragment_id],
+                composition_weights=[best_score],
+                coherence_score=best_score,
+                primary_pattern=best_pattern,
+                confidence=best_score,
+                is_fallback=False,  # Successfully filled gaps!
+                is_low_confidence=False
+            )
+        
+        return None
+    
+    def _extract_unknown_terms(self, query: str) -> List[str]:
+        """
+        Extract potentially unknown terms from a query.
+        
+        Heuristics:
+        - Capitalized words (proper nouns)
+        - Technical-sounding words (>8 chars, uncommon patterns)
+        - Words in quotes
+        - Compound technical terms
+        
+        Args:
+            query: User query
+            
+        Returns:
+            List of potentially unknown terms
+        """
+        import re
+        
+        terms = []
+        
+        # Extract quoted terms
+        quoted = re.findall(r'"([^"]+)"', query)
+        terms.extend(quoted)
+        
+        quoted = re.findall(r"'([^']+)'", query)
+        terms.extend(quoted)
+        
+        # Extract capitalized words (but not first word if it's a question)
+        words = query.split()
+        for i, word in enumerate(words):
+            word_clean = re.sub(r'[^\w]', '', word)
+            
+            # Skip first word if it's a question word
+            if i == 0 and word_clean.lower() in ['what', 'who', 'where', 'when', 'why', 'how', 'is', 'are', 'do', 'does', 'can', 'could']:
+                continue
+            
+            # Check if capitalized (potential proper noun or technical term)
+            if word_clean and word_clean[0].isupper() and len(word_clean) > 2:
+                terms.append(word_clean)
+        
+        # Extract technical-looking words (long, uncommon patterns)
+        for word in words:
+            word_clean = re.sub(r'[^\w]', '', word).lower()
+            
+            # Long words with specific patterns (technical terms)
+            if len(word_clean) > 8 and any(pattern in word_clean for pattern in ['tion', 'ment', 'ology', 'ism', 'ics', 'ness']):
+                if word_clean not in terms:
+                    terms.append(word_clean)
+        
+        # Remove common words
+        common_words = {
+            'something', 'anything', 'everything', 'nothing',
+            'someone', 'anyone', 'everyone',
+            'question', 'answer', 'information', 'knowledge'
+        }
+        
+        terms = [t for t in terms if t.lower() not in common_words]
+        
+        # Limit to top 3 most likely unknown terms
+        return terms[:3]
+    
     def _fallback_response_low_confidence(
         self, 
         user_input: str,
@@ -2072,9 +2380,13 @@ class ResponseComposer:
         best_score: float
     ) -> ComposedResponse:
         """
-        Graceful fallback when best pattern has low relevance to user query.
+        Smart fallback for low confidence matches.
         
-        Try external knowledge lookup first before acknowledging limitation.
+        Strategy:
+        1. Try to fill knowledge gaps and improve match
+        2. If gap-filling helps, use enhanced match
+        3. Otherwise, try direct external knowledge lookup
+        4. Fall back to graceful acknowledgment if nothing helps
         
         Args:
             user_input: User's query
@@ -2082,14 +2394,23 @@ class ResponseComposer:
             best_score: Relevance score (below threshold)
         
         Returns:
-            External knowledge if found, otherwise graceful fallback response
+            Enhanced response if gaps filled, external knowledge if found, or graceful fallback
         """
-        # Try external knowledge lookup if available
+        # STEP 1: Try to fill gaps and improve the match
+        if self.knowledge_augmenter:
+            filled_response = self._fill_gaps_and_retry(user_input)
+            if filled_response:
+                print(f"  ✨ Low confidence improved by gap-filling!")
+                return filled_response
+        
+        # Try direct external knowledge lookup as fallback
         if self.knowledge_augmenter:
             external_result = self.knowledge_augmenter.lookup(user_input, min_confidence=0.6)
             
             if external_result:
                 response_text, confidence, source = external_result
+                
+                print(f"  💡 Low confidence resolved by {source} (confidence: {confidence:.2f})")
                 
                 # Return external knowledge as response
                 return ComposedResponse(

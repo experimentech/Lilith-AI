@@ -217,6 +217,7 @@ class LilithSession:
             )
         
         # Check for feedback from previous message
+        feedback_applied = False
         if self.feedback_tracker and self.config.learning_enabled:
             if self.feedback_tracker.history:
                 feedback_result = self.feedback_tracker.check_feedback(content)
@@ -227,6 +228,16 @@ class LilithSession:
                             self.upvote(pattern_id, strength=result.strength)
                         elif result.is_negative:
                             self.downvote(pattern_id, strength=result.strength)
+                        feedback_applied = True
+        
+        # Check if this is ONLY feedback (emoji or short feedback phrase)
+        # If so, don't generate a response - just acknowledge the feedback
+        if feedback_applied and self._is_pure_feedback(content):
+            # Return empty response - feedback was applied, no need to respond
+            return SessionResponse(
+                text="",
+                learned_fact=learned_fact
+            )
         
         # Generate response using enriched context (includes topic history for pronoun resolution)
         response = self.composer.compose_response(context=enriched_context, user_input=content)
@@ -354,6 +365,43 @@ class LilithSession:
             print(f"  ⚠️ Context update failed: {e}")
         
         return content
+    
+    def _is_pure_feedback(self, content: str) -> bool:
+        """
+        Check if the message is purely feedback (emoji or short feedback phrase).
+        
+        Args:
+            content: User message
+            
+        Returns:
+            True if this is only feedback with no substantive question
+        """
+        text = content.strip()
+        
+        # Check for emoji-only feedback
+        feedback_emojis = {'👍', '👎', '❤️', '✅', '🎉', '💯', '🙏', '❌', '😕', '🤔', '🙄', '💩', '🚫'}
+        
+        # Remove whitespace and check if it's just emojis
+        text_no_space = text.replace(' ', '')
+        if all(c in feedback_emojis or c in '!?.' for c in text_no_space):
+            return True
+        
+        # Check for short standalone feedback phrases (3 words or less)
+        words = text.lower().split()
+        if len(words) <= 3:
+            feedback_phrases = {
+                'thanks', 'thank you', 'thx', 'ty',
+                'perfect', 'exactly', 'great', 'excellent',
+                'awesome', 'wrong', 'incorrect', 'no',
+                'yes', 'right', 'correct', 'got it',
+                'makes sense', 'i see', 'ok', 'okay',
+                'cool', 'nice', 'good', 'nope'
+            }
+            text_clean = text.lower().rstrip('!?.').strip()
+            if text_clean in feedback_phrases:
+                return True
+        
+        return False
     
     def upvote(self, pattern_id: Optional[str] = None, strength: float = 0.2) -> bool:
         """
