@@ -2545,6 +2545,23 @@ class ResponseComposer:
         # Retry pattern matching with enhanced context
         print(f"  🔄 Retrying with enhanced context: {enhanced_context[:100]}...")
         
+        # ENHANCED: Try pragmatic composition first if available
+        if self.pragmatic_templates and self.concept_store and term_definitions:
+            print(f"  💡 Attempting compositional reasoning with {len(term_definitions)} learned concepts...")
+            
+            # Try to compose response using learned concepts
+            compositional_response = self._compose_with_learned_concepts(
+                user_input, 
+                list(term_definitions.keys()),  # List of concept terms
+                term_definitions  # Full concept data
+            )
+            
+            if compositional_response and compositional_response.confidence >= 0.70:
+                print(f"  ✨ Compositional reasoning succeeded! (confidence: {compositional_response.confidence:.2f})")
+                return compositional_response
+            else:
+                print(f"  ⚠️  Compositional reasoning did not produce high-confidence response, falling back to patterns")
+        
         # Get patterns with enhanced context
         patterns = self.fragments.retrieve_patterns(enhanced_context, topk=5, min_score=0.3)
         
@@ -2585,6 +2602,98 @@ class ResponseComposer:
                 is_fallback=False,  # Successfully filled gaps!
                 is_low_confidence=False
             )
+        
+        return None
+    
+    def _compose_with_learned_concepts(
+        self,
+        query: str,
+        learned_concepts: List[str],
+        concept_data: Dict[str, Dict]
+    ) -> Optional[ComposedResponse]:
+        """
+        Compose response using freshly learned concepts + pragmatic templates.
+        
+        This is the compositional reasoning approach: Instead of just pattern matching,
+        we compose a novel response from learned concepts.
+        
+        Args:
+            query: Original user query
+            learned_concepts: List of concept IDs learned from knowledge sources
+            concept_data: Dict of concept_id -> {definition, properties, ...}
+            
+        Returns:
+            Composed response or None
+        """
+        if not self.pragmatic_templates or not learned_concepts:
+            return None
+        
+        # Detect category from query
+        category = self._detect_conversation_category(query)
+        
+        # Build slots from learned concepts
+        available_slots = {}
+        
+        # Use the first learned concept as primary
+        primary_concept_id = learned_concepts[0]
+        primary_data = concept_data.get(primary_concept_id, {})
+        
+        if category == "definition" and primary_data:
+            # Extract concept term from the query or data
+            concept_term = self._extract_concept_from_query(query)
+            if not concept_term and 'term' in primary_data:
+                concept_term = primary_data['term']
+            
+            if concept_term:
+                available_slots["concept"] = concept_term
+                
+                # Use learned definition
+                if 'definition' in primary_data:
+                    definition_text = primary_data['definition']
+                    # Split into primary property and elaboration
+                    sentences = definition_text.split('.')
+                    if sentences:
+                        available_slots["primary_property"] = sentences[0].strip()
+                        if len(sentences) > 1:
+                            available_slots["elaboration"] = sentences[1].strip()
+                
+                # Add properties if available
+                if 'properties' in primary_data:
+                    properties = primary_data['properties']
+                    if isinstance(properties, list):
+                        available_slots["properties"] = ", ".join(properties[:3])
+                    elif isinstance(properties, str):
+                        available_slots["properties"] = properties
+        
+        elif category == "elaboration" and primary_data:
+            concept_term = self._extract_concept_from_query(query)
+            if concept_term:
+                available_slots["concept"] = concept_term
+                
+                # Use learned information as examples
+                if 'definition' in primary_data:
+                    available_slots["examples"] = primary_data['definition'][:100]
+                
+                if 'properties' in primary_data:
+                    props = primary_data['properties']
+                    if isinstance(props, list):
+                        available_slots["properties"] = ", ".join(props[:3])
+        
+        # If we have slots, try to match and fill template
+        if available_slots:
+            template = self.pragmatic_templates.match_best_template(category, available_slots)
+            if template:
+                response_text = self.pragmatic_templates.fill_template(template, available_slots)
+                
+                return ComposedResponse(
+                    text=response_text,
+                    fragment_ids=[template.template_id] + learned_concepts,
+                    composition_weights=[1.0] + [0.5] * len(learned_concepts),
+                    coherence_score=0.85,
+                    confidence=0.85,
+                    is_fallback=False,
+                    is_low_confidence=False
+                )
         
         return None
     

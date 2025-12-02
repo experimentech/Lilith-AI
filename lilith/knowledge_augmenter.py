@@ -128,8 +128,9 @@ class WikipediaLookup:
                     if resolved:
                         return resolved
                     else:
-                        print(f"  ⚠️  Could not resolve disambiguation - using first option")
-                        # Fall through and return disambiguation page
+                        print(f"  ⚠️  Could not resolve disambiguation - returning None")
+                        # Don't return disambiguation page - it's not useful info
+                        return None
                 
                 clean_extract = self._extract_summary(extract)
                 
