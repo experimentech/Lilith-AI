@@ -411,6 +411,21 @@ class LilithSession:
                         break
                     
                     if referent:
+                        # Validate referent quality before using it
+                        # Skip if referent looks broken (very short, all common words, etc)
+                        referent_words = referent.split()
+                        
+                        # Don't use if it's too short or looks like garbage
+                        if len(referent_words) < 1 or len(referent) < 4:
+                            referent = None
+                        # Don't use if ALL words are in common set (likely broken)
+                        elif referent_words and all(w in pronouns | {'do', 'does', 'did', 'is', 'are', 'was', 'were', 'me', 'you', 'i', 'have', 'has', 'had'} for w in referent_words):
+                            referent = None
+                        # Don't use if it contains too many pronouns (sign of bad extraction)
+                        elif sum(1 for w in referent_words if w in pronouns) > len(referent_words) // 2:
+                            referent = None
+                    
+                    if referent:
                         # Replace pronouns with referent
                         resolved = content
                         for pronoun in pronouns:

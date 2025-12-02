@@ -44,12 +44,13 @@ class WikipediaLookup:
         self.base_url = "https://en.wikipedia.org/api/rest_v1/page/summary/"
         self.user_agent = "Lilith/1.0 (Educational neuro-symbolic AI)"
         
-    def lookup(self, query: str) -> Optional[Dict[str, Any]]:
+    def lookup(self, query: str, conversation_history: str = "") -> Optional[Dict[str, Any]]:
         """
         Look up a query on Wikipedia and return structured information.
         
         Args:
             query: Search query (will be used as article title)
+            conversation_history: Recent conversation context for disambiguation
             
         Returns:
             Dict with keys: 'title', 'extract', 'url', 'confidence'
@@ -61,15 +62,20 @@ class WikipediaLookup:
         
         if not cleaned_query:
             return None
+        
+        # Build full context from query + conversation history
+        full_context = query
+        if conversation_history:
+            full_context = conversation_history + " " + query
             
         # Try exact title match first (with context for disambiguation)
-        result = self._fetch_article(cleaned_query, context=query)
+        result = self._fetch_article(cleaned_query, context=full_context)
         
         if result:
             return result
             
         # If no exact match, try search API
-        return self._search_and_fetch(cleaned_query, context=query)
+        return self._search_and_fetch(cleaned_query, context=full_context)
     
     def _clean_query(self, query: str) -> str:
         """
@@ -214,7 +220,16 @@ class WikipediaLookup:
         for option_title, option_desc in options:
             # Count how many context words appear in the option description
             desc_lower = (option_title + " " + option_desc).lower()
-            score = sum(1 for word in context_words if word in desc_lower)
+            
+            score = 0
+            for word in context_words:
+                # Exact word match
+                if word in desc_lower.split():
+                    score += 2  # Higher weight for exact matches
+                # Partial/substring match (e.g., "birds" matches "bird", "bird" in "birds")
+                elif word in desc_lower or any(word in token or token in word for token in desc_lower.split()):
+                    score += 1  # Lower weight for partial matches
+            
             scored_options.append((score, option_title, option_desc))
         
         # Sort by score (highest first)

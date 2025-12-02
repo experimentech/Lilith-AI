@@ -407,24 +407,43 @@ class ResponseComposer:
                 # If math backend failed, fall through to linguistic
         
         # PRAGMATIC MODE: Use template + concept composition (Layer 4 restructured)
+        # BUT: Don't immediately return - compare with pattern-based approach
+        pragmatic_response = None
         if self.composition_mode == "pragmatic" and self.pragmatic_templates and self.concept_store:
             pragmatic_response = self._compose_with_pragmatic_templates(context, user_input)
-            if pragmatic_response and pragmatic_response.confidence >= 0.70:
-                self.last_response = pragmatic_response
-                self.last_approach = 'pragmatic'
-                self.metrics['pragmatic_count'] = self.metrics.get('pragmatic_count', 0) + 1
-                return pragmatic_response
-            # If pragmatic composition failed/low confidence, fall through
+            # Don't return yet - compare with pattern-based first
         
         # PARALLEL MODE: Try both pattern-based AND concept-based approaches
         if self.composition_mode == "parallel" and self.concept_store is not None:
             return self._compose_parallel(context, user_input, topk)
         
         # Standard pattern-based composition
-        return self._compose_from_patterns_internal(
+        pattern_response = self._compose_from_patterns_internal(
             context, user_input, topk, 
             use_intent_filtering, use_semantic_retrieval, semantic_weight
         )
+        
+        # PRAGMATIC MODE: Compare pragmatic vs pattern-based
+        if pragmatic_response and pragmatic_response.confidence >= 0.70:
+            # Pragmatic template has good confidence
+            if pattern_response.is_fallback or pattern_response.is_low_confidence:
+                # Pattern-based failed or low confidence, use pragmatic
+                self.last_response = pragmatic_response
+                self.last_approach = 'pragmatic'
+                self.metrics['pragmatic_count'] = self.metrics.get('pragmatic_count', 0) + 1
+                return pragmatic_response
+            elif pattern_response.confidence > 0.85:
+                # Pattern has very high confidence (exact/near-exact match) - prefer it
+                return pattern_response
+            elif pragmatic_response.confidence > pattern_response.confidence + 0.15:
+                # Pragmatic is significantly better - use it
+                self.last_response = pragmatic_response
+                self.last_approach = 'pragmatic'
+                self.metrics['pragmatic_count'] = self.metrics.get('pragmatic_count', 0) + 1
+                return pragmatic_response
+            # Otherwise use pattern-based (comparable confidence)
+        
+        return pattern_response
     
     def _compose_from_patterns_internal(
         self,
@@ -2327,7 +2346,9 @@ class ResponseComposer:
         
         # If gap-filling didn't help, try direct external knowledge lookup
         if self.knowledge_augmenter and user_input:
-            external_result = self.knowledge_augmenter.lookup(user_input, min_confidence=0.6)
+            # Get conversation context for disambiguation
+            conv_context = self._get_conversation_context(max_turns=3)
+            external_result = self.knowledge_augmenter.lookup(user_input, conversation_history=conv_context, min_confidence=0.6)
             
             if external_result:
                 response_text, confidence, source = external_result
@@ -2407,7 +2428,9 @@ class ResponseComposer:
         
         for term in unknown_terms:
             # Try to get definition/explanation
-            result = self.knowledge_augmenter.lookup(f"What is {term}?", min_confidence=0.6)
+            # Get conversation context for disambiguation
+            conv_context = self._get_conversation_context(max_turns=3)
+            result = self.knowledge_augmenter.lookup(f"What is {term}?", conversation_history=conv_context, min_confidence=0.6)
             if result:
                 definition, confidence, source = result
                 term_definitions[term] = {
@@ -2758,6 +2781,33 @@ class ResponseComposer:
         # Limit to top 3 most likely unknown terms
         return terms[:3]
     
+    def _get_conversation_context(self, max_turns: int = 3) -> str:
+        """
+        Extract recent conversation context for disambiguation.
+        
+        Args:
+            max_turns: Maximum number of recent turns to include
+            
+        Returns:
+            String summarizing recent conversation topics
+        """
+        if not self.conversation_history:
+            return ""
+        
+        recent_turns = self.conversation_history.get_recent_turns(n=max_turns)
+        if not recent_turns:
+            return ""
+        
+        # Build context string from recent user messages
+        context_parts = []
+        for turn in recent_turns:
+            # ConversationTurn is a dataclass, use attribute access
+            user_msg = turn.user_input.strip() if hasattr(turn, 'user_input') else ""
+            if user_msg:
+                context_parts.append(user_msg)
+        
+        return " ".join(context_parts)
+    
     def _fallback_response_low_confidence(
         self, 
         user_input: str,
@@ -2790,7 +2840,9 @@ class ResponseComposer:
         
         # Try direct external knowledge lookup as fallback
         if self.knowledge_augmenter:
-            external_result = self.knowledge_augmenter.lookup(user_input, min_confidence=0.6)
+            # Get conversation context for disambiguation
+            conv_context = self._get_conversation_context(max_turns=3)
+            external_result = self.knowledge_augmenter.lookup(user_input, conversation_history=conv_context, min_confidence=0.6)
             
             if external_result:
                 response_text, confidence, source = external_result
