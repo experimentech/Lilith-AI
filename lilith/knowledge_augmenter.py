@@ -94,6 +94,7 @@ class WikipediaLookup:
             'do', 'does', 'did', 'can', 'could', 'would', 'should',
             'tell', 'me', 'about', 'know', 'you', 'your',
             'a', 'an', 'the',
+            'like', 'love', 'hate', 'want', 'need',  # Preference/desire verbs
         ]
         
         words = query.lower().strip('?!.').split()
@@ -215,25 +216,55 @@ class WikipediaLookup:
         if not options:
             return None
         
+        # Initialize stemmer for better word matching (bird = birds)
+        try:
+            from nltk.stem import PorterStemmer
+            stemmer = PorterStemmer()
+            use_stemming = True
+        except ImportError:
+            stemmer = None
+            use_stemming = False
+        
         # Score each option based on context overlap
         scored_options = []
         for option_title, option_desc in options:
             # Count how many context words appear in the option description
             desc_lower = (option_title + " " + option_desc).lower()
+            desc_tokens = desc_lower.split()
             
             score = 0
             for word in context_words:
-                # Exact word match
-                if word in desc_lower.split():
-                    score += 2  # Higher weight for exact matches
-                # Partial/substring match (e.g., "birds" matches "bird", "bird" in "birds")
-                elif word in desc_lower or any(word in token or token in word for token in desc_lower.split()):
-                    score += 1  # Lower weight for partial matches
+                # Try stem matching first (bird = birds)
+                if use_stemming:
+                    word_stem = stemmer.stem(word)
+                    for token in desc_tokens:
+                        token_stem = stemmer.stem(token)
+                        if token_stem == word_stem:
+                            score += 3  # Highest weight for stem match
+                            break
+                    else:
+                        # No stem match, try exact/partial
+                        if word in desc_tokens:
+                            score += 2  # Exact word match
+                        elif word in desc_lower or any(word in token or token in word for token in desc_tokens):
+                            score += 1  # Partial match
+                else:
+                    # No stemming available - use original logic
+                    if word in desc_tokens:
+                        score += 2  # Exact word match
+                    elif word in desc_lower or any(word in token or token in word for token in desc_tokens):
+                        score += 1  # Partial match
             
             scored_options.append((score, option_title, option_desc))
         
         # Sort by score (highest first)
         scored_options.sort(reverse=True, key=lambda x: x[0])
+        
+        # Debug: Show top scoring options
+        if scored_options:
+            print(f"  📊 Disambiguation scores:")
+            for score, title, desc in scored_options[:3]:
+                print(f"     {score} pts: {title} - {desc[:50]}...")
         
         # If top score is > 0, try to fetch that article
         if scored_options and scored_options[0][0] > 0:

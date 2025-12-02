@@ -422,7 +422,8 @@ class LilithSession:
                         elif referent_words and all(w in pronouns | {'do', 'does', 'did', 'is', 'are', 'was', 'were', 'me', 'you', 'i', 'have', 'has', 'had'} for w in referent_words):
                             referent = None
                         # Don't use if it contains too many pronouns (sign of bad extraction)
-                        elif sum(1 for w in referent_words if w in pronouns) > len(referent_words) // 2:
+                        # Changed from > to >= to reject 50% (was allowing exactly 50%)
+                        elif sum(1 for w in referent_words if w in pronouns) >= len(referent_words) // 2:
                             referent = None
                     
                     if referent:

@@ -425,23 +425,34 @@ class ResponseComposer:
         
         # PRAGMATIC MODE: Compare pragmatic vs pattern-based
         if pragmatic_response and pragmatic_response.confidence >= 0.70:
+            # Debug logging
+            print(f"  🔍 Template vs Pattern comparison:")
+            print(f"     Template confidence: {pragmatic_response.confidence:.3f}")
+            print(f"     Pattern confidence: {pattern_response.confidence:.3f}")
+            print(f"     Pattern is_fallback: {pattern_response.is_fallback}")
+            print(f"     Pattern is_low_confidence: {pattern_response.is_low_confidence}")
+            
             # Pragmatic template has good confidence
             if pattern_response.is_fallback or pattern_response.is_low_confidence:
                 # Pattern-based failed or low confidence, use pragmatic
+                print(f"  → Using template (pattern failed/low confidence)")
                 self.last_response = pragmatic_response
                 self.last_approach = 'pragmatic'
                 self.metrics['pragmatic_count'] = self.metrics.get('pragmatic_count', 0) + 1
                 return pragmatic_response
             elif pattern_response.confidence > 0.85:
                 # Pattern has very high confidence (exact/near-exact match) - prefer it
+                print(f"  → Using pattern (very high confidence: {pattern_response.confidence:.3f})")
                 return pattern_response
             elif pragmatic_response.confidence > pattern_response.confidence + 0.15:
                 # Pragmatic is significantly better - use it
+                print(f"  → Using template (significantly better)")
                 self.last_response = pragmatic_response
                 self.last_approach = 'pragmatic'
                 self.metrics['pragmatic_count'] = self.metrics.get('pragmatic_count', 0) + 1
                 return pragmatic_response
             # Otherwise use pattern-based (comparable confidence)
+            print(f"  → Using pattern (comparable/better confidence)")
         
         return pattern_response
     
