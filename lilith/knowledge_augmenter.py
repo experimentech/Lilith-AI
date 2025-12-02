@@ -711,7 +711,7 @@ class KnowledgeAugmenter:
             'wikipedia': 0
         }
     
-    def lookup(self, query: str, min_confidence: float = 0.6) -> Optional[Tuple[str, float, str]]:
+    def lookup(self, query: str, conversation_history: str = "", min_confidence: float = 0.6) -> Optional[Tuple[str, float, str]]:
         """
         Look up external knowledge for a query.
         
@@ -722,6 +722,7 @@ class KnowledgeAugmenter:
         
         Args:
             query: User's question or statement
+            conversation_history: Recent conversation context for disambiguation
             min_confidence: Minimum confidence for accepting results
             
         Returns:
@@ -758,8 +759,8 @@ class KnowledgeAugmenter:
             if result:
                 return result
         
-        # 3. General knowledge -> Wikipedia
-        result = self._try_wikipedia(query, min_confidence)
+        # 3. General knowledge -> Wikipedia (with conversation context)
+        result = self._try_wikipedia(query, conversation_history, min_confidence)
         if result:
             return result
         
@@ -842,10 +843,10 @@ class KnowledgeAugmenter:
         
         return None
     
-    def _try_wikipedia(self, query: str, min_confidence: float) -> Optional[Tuple[str, float, str]]:
-        """Try Wikipedia lookup."""
+    def _try_wikipedia(self, query: str, conversation_history: str, min_confidence: float) -> Optional[Tuple[str, float, str]]:
+        """Try Wikipedia lookup with conversation context."""
         try:
-            wiki_result = self.wikipedia.lookup(query)
+            wiki_result = self.wikipedia.lookup(query, conversation_history=conversation_history)
             
             if wiki_result and wiki_result['confidence'] >= min_confidence:
                 self.success_count += 1
