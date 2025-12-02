@@ -8,42 +8,77 @@ echo "Installing Lilith AI Dependencies"
 echo "=========================================="
 echo ""
 
-# Check Python version
-echo "Checking Python version..."
-
-# Get Python version components
-python_version_full=$(python3 --version 2>&1 | awk '{print $2}')
-python_major=$(echo "$python_version_full" | cut -d. -f1)
-python_minor=$(echo "$python_version_full" | cut -d. -f2)
-
+# Required Python version
 required_major=3
 required_minor=10
 
-# Compare versions properly (as integers, not decimals)
-version_ok=false
-if [ "$python_major" -gt "$required_major" ]; then
-    version_ok=true
-elif [ "$python_major" -eq "$required_major" ] && [ "$python_minor" -ge "$required_minor" ]; then
-    version_ok=true
-fi
+# Function to check if a Python version meets requirements
+check_python_version() {
+    local python_cmd="$1"
+    
+    if ! command -v "$python_cmd" &> /dev/null; then
+        return 1
+    fi
+    
+    local version_full=$("$python_cmd" --version 2>&1 | awk '{print $2}')
+    local major=$(echo "$version_full" | cut -d. -f1)
+    local minor=$(echo "$version_full" | cut -d. -f2)
+    
+    if [ "$major" -gt "$required_major" ]; then
+        echo "$python_cmd:$version_full"
+        return 0
+    elif [ "$major" -eq "$required_major" ] && [ "$minor" -ge "$required_minor" ]; then
+        echo "$python_cmd:$version_full"
+        return 0
+    fi
+    
+    return 1
+}
 
-if [ "$version_ok" = false ]; then
-    echo "❌ Error: Python ${required_major}.${required_minor} or higher is required (found $python_version_full)"
-    echo "   On Ubuntu/Debian: sudo apt install python3.10 python3.10-venv"
-    echo "   Or use pyenv to install a newer Python version"
+# Check Python version - try multiple options
+echo "Checking for Python ${required_major}.${required_minor}+..."
+
+PYTHON_CMD=""
+PYTHON_VERSION=""
+
+# Try various Python commands in order of preference
+for cmd in python3.13 python3.12 python3.11 python3.10 python3 python; do
+    result=$(check_python_version "$cmd" 2>/dev/null) || continue
+    if [ -n "$result" ]; then
+        PYTHON_CMD=$(echo "$result" | cut -d: -f1)
+        PYTHON_VERSION=$(echo "$result" | cut -d: -f2)
+        break
+    fi
+done
+
+if [ -z "$PYTHON_CMD" ]; then
+    echo "❌ Error: Python ${required_major}.${required_minor} or higher is required"
+    echo ""
+    echo "   Available Python versions on this system:"
+    for cmd in python3 python3.6 python3.7 python3.8 python3.9 python3.10 python3.11 python3.12 python3.13; do
+        if command -v "$cmd" &> /dev/null; then
+            ver=$("$cmd" --version 2>&1)
+            echo "     - $cmd: $ver"
+        fi
+    done
+    echo ""
+    echo "   To install Python 3.10+:"
+    echo "     Ubuntu/Debian: sudo apt install python3.10 python3.10-venv"
+    echo "     Or use pyenv: pyenv install 3.10"
     exit 1
 fi
-echo "✅ Python $python_version_full detected"
+
+echo "✅ Found $PYTHON_CMD ($PYTHON_VERSION)"
 echo ""
 
 # Create virtual environment if it doesn't exist
 if [ ! -d ".venv" ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv .venv
+    echo "Creating virtual environment with $PYTHON_CMD..."
+    "$PYTHON_CMD" -m venv .venv
     if [ $? -ne 0 ]; then
         echo "❌ Failed to create virtual environment"
-        echo "   Make sure python3-venv is installed:"
-        echo "   sudo apt install python${python_major}.${python_minor}-venv"
+        echo "   Make sure venv module is installed:"
+        echo "   sudo apt install python${required_major}.${required_minor}-venv"
         exit 1
     fi
     echo "✅ Virtual environment created"
