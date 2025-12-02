@@ -90,6 +90,27 @@ class ProductionConceptStore:
         else:
             self.compositional_retrieval = None
             self.neighborhood = None
+        
+        # Pre-load embeddings for all existing concepts (for symbolic reasoning)
+        self._preload_embeddings()
+    
+    def _preload_embeddings(self):
+        """
+        Pre-load embeddings for all concepts in the database.
+        
+        This enables the reasoning stage to work with concept embeddings
+        symbolically without needing to do text-based retrieval.
+        """
+        concepts = self.db.get_all_concepts()
+        for concept_dict in concepts:
+            cid = concept_dict['concept_id']
+            if cid not in self._embedding_cache:
+                # Generate embedding from term
+                tokens = concept_dict['term'].lower().split()
+                emb = self.encoder.encode(tokens)
+                if hasattr(emb, 'cpu'):
+                    emb = emb.cpu().detach().numpy().flatten()
+                self._embedding_cache[cid] = emb
     
     def add_concept(
         self,
@@ -456,6 +477,36 @@ class ProductionConceptStore:
             source=concept_dict['source'],
             usage_count=concept_dict['usage_count']
         )
+    
+    def get_concept_by_id(self, concept_id: str) -> Optional[SemanticConcept]:
+        """
+        Get a concept by its ID.
+        
+        This is the bridge between symbolic reasoning (which works with IDs)
+        and linguistic composition (which needs the actual content).
+        
+        Args:
+            concept_id: The concept ID (e.g., "concept_0002")
+            
+        Returns:
+            SemanticConcept with full properties, or None if not found
+        """
+        concept_dict = self.db.get_concept(concept_id)
+        if concept_dict:
+            return self._dict_to_concept(concept_dict)
+        return None
+    
+    def get_all_embeddings(self) -> Dict[str, np.ndarray]:
+        """
+        Get all cached concept embeddings.
+        
+        Used by the reasoning stage to work symbolically with concepts
+        without doing text retrieval.
+        
+        Returns:
+            Dict mapping concept_id to embedding array
+        """
+        return self._embedding_cache.copy()
     
     def _cosine_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
         """Calculate cosine similarity."""

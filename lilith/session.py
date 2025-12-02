@@ -154,17 +154,23 @@ class LilithSession:
                 pass
         
         # Initialize concept store (Layer 4: semantic knowledge)
+        # Prefer the concept store from the multi-tenant store (which handles user paths correctly)
         concept_store = None
         if self.config.enable_compositional:
-            try:
-                from lilith.production_concept_store import ProductionConceptStore
-                concept_db_path = Path(self.config.data_path) / "concept_store.db"
-                concept_store = ProductionConceptStore(
-                    semantic_encoder=self.encoder,
-                    db_path=str(concept_db_path)
-                )
-            except ImportError:
-                pass
+            # First, try to use concept store from the fragment store (multi-tenant aware)
+            if hasattr(self.store, 'concept_store') and self.store.concept_store is not None:
+                concept_store = self.store.concept_store
+            else:
+                # Fallback: create standalone concept store (for non-multi-tenant use)
+                try:
+                    from lilith.production_concept_store import ProductionConceptStore
+                    concept_db_path = Path(self.config.data_path) / "concept_store.db"
+                    concept_store = ProductionConceptStore(
+                        semantic_encoder=self.encoder,
+                        db_path=str(concept_db_path)
+                    )
+                except ImportError:
+                    pass
         
         # Create composer with conversation history, pragmatic templates, and concept store
         self.composer = ResponseComposer(

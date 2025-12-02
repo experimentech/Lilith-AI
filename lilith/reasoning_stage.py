@@ -202,27 +202,96 @@ class ReasoningStage:
         )
         activated.append(query_concept)
         
-        # If we have a concept store, retrieve related concepts
-        if self.concept_store is not None:
+        # NOTE: The reasoning stage is PURELY SYMBOLIC - it works with embeddings
+        # and concept IDs, not text retrieval. Concept properties should be
+        # retrieved by the composition layer AFTER reasoning determines which
+        # concepts are relevant.
+        #
+        # Strategy: Extract key terms from query and check each against concept embeddings
+        # This handles queries like "What is a Wyvern?" matching concept "wyvern"
+        if self.concept_store is not None and hasattr(self.concept_store, '_embedding_cache'):
             try:
-                # Retrieve related concepts
-                related = self.concept_store.retrieve_concepts(query, topk=5)
-                for concept, score in related:
-                    if score > 0.3:  # Reasonable relevance
-                        # Get embedding for concept
-                        concept_embedding = self.encoder.encode(concept.term.split())
-                        act = self.activate_concept(
-                            term=concept.term,
-                            embedding=concept_embedding,
-                            activation=score,
-                            source="retrieved",
-                            properties=concept.properties if hasattr(concept, 'properties') else []
-                        )
-                        activated.append(act)
+                # Extract potential key terms from query
+                key_terms = self._extract_key_terms(query)
+                
+                # Encode each key term and check against concept embeddings
+                for term in key_terms:
+                    term_embedding = self.encoder.encode(term.split())
+                    term_flat = term_embedding.flatten()
+                    
+                    for concept_id, cached_embedding in self.concept_store._embedding_cache.items():
+                        if isinstance(cached_embedding, torch.Tensor):
+                            cached_emb = cached_embedding
+                        else:
+                            cached_emb = torch.tensor(cached_embedding)
+                        
+                        cached_flat = cached_emb.flatten()
+                        
+                        # Match dimensions
+                        min_dim = min(term_flat.shape[0], cached_flat.shape[0])
+                        t_flat = term_flat[:min_dim]
+                        c_flat = cached_flat[:min_dim]
+                        
+                        # Cosine similarity
+                        similarity = F.cosine_similarity(
+                            t_flat.unsqueeze(0),
+                            c_flat.unsqueeze(0)
+                        ).item()
+                        
+                        if similarity > 0.5:  # Higher threshold for term matching
+                            # Activate concept by ID (symbolic) - no text retrieval here
+                            act = self.activate_concept(
+                                term=concept_id,  # Just the ID, not the content
+                                embedding=cached_emb,
+                                activation=similarity,
+                                source="semantic_similarity"
+                            )
+                            activated.append(act)
+                            logger.debug(f"Activated {concept_id} with similarity {similarity:.3f} to '{term}'")
             except Exception as e:
-                logger.debug(f"Could not retrieve concepts: {e}")
+                logger.debug(f"Could not activate similar concepts: {e}")
                 
         return activated
+    
+    def _extract_key_terms(self, query: str) -> List[str]:
+        """
+        Extract key terms from a query for concept matching.
+        
+        Removes stop words and question patterns to get the meaningful terms.
+        
+        Args:
+            query: Raw user query
+            
+        Returns:
+            List of key terms to check against concept embeddings
+        """
+        query_lower = query.lower()
+        
+        # Remove common question patterns
+        patterns_to_remove = [
+            "what is", "what are", "what's", "define", "definition of",
+            "tell me about", "explain", "describe", "who is", "who are",
+            "is a", "are", "the", "a", "an"
+        ]
+        
+        for pattern in patterns_to_remove:
+            query_lower = query_lower.replace(pattern, " ")
+        
+        # Remove punctuation
+        query_lower = query_lower.replace("?", "").replace(".", "").replace(",", "")
+        
+        # Split and filter short/stop words
+        words = query_lower.split()
+        stop_words = {"is", "a", "an", "the", "of", "to", "in", "for", "on", "with", "it", "be"}
+        key_terms = [w.strip() for w in words if len(w) > 2 and w not in stop_words]
+        
+        # Also try multi-word combinations for compound terms
+        # e.g., "atari 2600" should be kept together
+        if len(key_terms) > 1:
+            combined = " ".join(key_terms)
+            key_terms.append(combined)
+        
+        return key_terms
         
     def deliberate(
         self,

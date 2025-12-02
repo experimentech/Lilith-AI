@@ -2032,14 +2032,15 @@ class ResponseComposer:
         """
         Compose response using deliberation results from reasoning stage.
         
-        This is the proper cognitive flow:
-        1. Reasoning stage deliberated and found activated concepts + inferences
-        2. Use those concepts (from database) to build response content
-        3. Use syntax stage to get grammatical structure
-        4. Use pragmatic templates to frame appropriately
+        SEMANTIC BRIDGE: This method bridges between the symbolic reasoning layer
+        and the linguistic composition layer:
         
-        The BNN guided the retrieval and found connections - now we
-        compose from what was found in the databases.
+        1. Reasoning stage outputs CONCEPT IDs (symbolic, embedding-based)
+        2. This bridge translates IDs → actual content via concept store
+        3. Composition uses pragmatic templates to frame the content
+        
+        The BNN guided activation found which concepts are relevant -
+        now we retrieve their actual content for the response.
         
         Args:
             deliberation_result: Result from reasoning_stage.deliberate()
@@ -2052,51 +2053,68 @@ class ResponseComposer:
         if not deliberation_result or not deliberation_result.activated_concepts:
             return None
         
-        # Get the focus concept and other activated concepts
+        if not self.concept_store:
+            return None
+        
+        # SEMANTIC BRIDGE: Translate activated concept IDs to actual content
+        # The reasoning stage worked symbolically with embeddings
+        # Now we retrieve the linguistic content for composition
         activated = deliberation_result.activated_concepts
         focus_term = deliberation_result.focus_concept
         inferences = deliberation_result.inferences or []
         
-        # Find the main concept with properties (skip the raw query concept)
+        # Find concepts activated by semantic similarity (not the query itself)
         main_concept = None
-        for concept in activated:
-            if concept.source != "query" and concept.properties:
-                main_concept = concept
-                break
+        main_concept_data = None
         
-        # If no concept with properties, try to get from concept store using focus
-        if not main_concept and focus_term and self.concept_store:
+        for concept in activated:
+            if concept.source == "semantic_similarity":
+                # This is a concept ID from symbolic activation
+                # Use the semantic bridge to get actual content
+                concept_id = concept.term  # term holds the concept_id in symbolic mode
+                
+                try:
+                    db_concept = self.concept_store.get_concept_by_id(concept_id)
+                    if db_concept and db_concept.properties:
+                        print(f"  🔗 Bridge: {concept_id} → {db_concept.term}")
+                        main_concept = concept
+                        main_concept_data = db_concept
+                        break
+                except Exception as e:
+                    print(f"  ⚠️ Bridge failed for {concept_id}: {e}")
+        
+        # Fallback: try text-based retrieval if no symbolic match
+        if not main_concept_data and focus_term:
             try:
                 retrieved = self.concept_store.retrieve_by_text(focus_term, top_k=1, min_similarity=0.5)
                 if retrieved:
-                    db_concept, score = retrieved[0]
-                    # Create an ActivatedConcept-like object from database result
-                    main_concept = type('Concept', (), {
-                        'term': db_concept.term,
-                        'properties': db_concept.properties,
-                        'source': 'database',
-                        'activation': score
-                    })()
+                    main_concept_data, score = retrieved[0]
+                    print(f"  🔍 Fallback retrieval: {main_concept_data.term} (score: {score:.2f})")
             except Exception as e:
-                print(f"  ⚠️ Could not retrieve concept for '{focus_term}': {e}")
+                print(f"  ⚠️ Fallback retrieval failed: {e}")
         
-        if not main_concept or not main_concept.properties:
+        if not main_concept_data or not main_concept_data.properties:
             return None
         
-        # Build slots from concept properties
+        # BUILD SLOTS from concept data (linguistic content)
         available_slots = {}
-        available_slots["concept"] = main_concept.term
-        available_slots["topic"] = main_concept.term
+        available_slots["concept"] = main_concept_data.term.capitalize()
+        available_slots["topic"] = main_concept_data.term
         
-        # Use properties for content
-        if main_concept.properties:
-            primary_property = main_concept.properties[0]
-            available_slots["primary_property"] = primary_property
-            available_slots["definition"] = primary_property
+        # Extract property from definition
+        if main_concept_data.properties:
+            definition = main_concept_data.properties[0]
+            # Use the property extraction for cleaner responses
+            primary_property = self._extract_property_from_definition(
+                definition, main_concept_data.term
+            ) or definition
             
-            if len(main_concept.properties) > 1:
-                available_slots["elaboration"] = main_concept.properties[1]
-                available_slots["properties"] = ", ".join(main_concept.properties[1:3])
+            available_slots["primary_property"] = primary_property
+            available_slots["definition"] = definition
+            
+            if len(main_concept_data.properties) > 1:
+                available_slots["elaboration"] = main_concept_data.properties[1]
+                available_slots["properties"] = ", ".join(main_concept_data.properties[1:3])
         
         # Add inference information if available
         connections = [inf for inf in inferences if inf.inference_type == "connection"]
@@ -2114,8 +2132,8 @@ class ResponseComposer:
             if relationship:
                 available_slots["relationship"] = relationship
             # Use first property as elaboration for confirmation
-            if main_concept.properties:
-                available_slots["elaboration"] = main_concept.properties[0][:100]
+            if main_concept_data.properties:
+                available_slots["elaboration"] = main_concept_data.properties[0][:100]
         
         # For teaching statements, acknowledge what was taught
         elif category == "teaching":
@@ -2130,7 +2148,7 @@ class ResponseComposer:
         if self.syntax_stage:
             try:
                 # Process the main property to get syntactic structure
-                tokens = main_concept.properties[0].split() if main_concept.properties else []
+                tokens = main_concept_data.properties[0].split() if main_concept_data.properties else []
                 if tokens:
                     syntax_artifact = self.syntax_stage.process(tokens)
                     syntax_intent = syntax_artifact.metadata.get('intent', 'statement')
@@ -2156,7 +2174,7 @@ class ResponseComposer:
             return None
         
         # Calculate confidence based on concept activation and inference count
-        base_confidence = getattr(main_concept, 'activation', 0.7)
+        base_confidence = getattr(main_concept, 'activation', 0.7) if main_concept else 0.7
         inference_bonus = min(len(inferences) * 0.05, 0.15)  # Up to 0.15 bonus
         confidence = min(base_confidence + inference_bonus, 0.95)
         
@@ -2164,7 +2182,7 @@ class ResponseComposer:
         
         return ComposedResponse(
             text=response_text,
-            fragment_ids=[template.template_id, main_concept.term],
+            fragment_ids=[template.template_id, main_concept_data.concept_id],
             composition_weights=[0.6, 0.4],
             coherence_score=confidence,
             primary_pattern=None,
@@ -2510,16 +2528,16 @@ class ResponseComposer:
                 if re.match(pattern, user_lower):
                     return "teaching"
         
-        # Definitions
-        if any(phrase in user_lower for phrase in ["what is", "what are", "define", "definition of"]):
+        # Definitions - include "tell me about" for initial queries about a topic
+        if any(phrase in user_lower for phrase in ["what is", "what are", "define", "definition of", "tell me about", "describe"]):
             return "definition"
         
         # Acknowledgments (short affirmations)
         if user_lower in ["ok", "okay", "i see", "got it", "thanks", "thank you", "interesting", "cool", "nice"]:
             return "acknowledgment"
         
-        # Elaborations
-        if any(phrase in user_lower for phrase in ["tell me more", "elaborate", "explain", "tell me about"]):
+        # Elaborations - requests for MORE detail on something already discussed
+        if any(phrase in user_lower for phrase in ["tell me more", "elaborate", "explain more", "more about", "more details"]):
             return "elaboration"
         
         # Continuations (building on previous)
@@ -2555,6 +2573,42 @@ class ResponseComposer:
         concept_words = [w for w in words if w not in ["what", "how", "why", "when", "where", "who", "the", "a", "an"]]
         
         return " ".join(concept_words) if concept_words else None
+    
+    def _extract_property_from_definition(self, definition: str, concept: str) -> Optional[str]:
+        """
+        Extract the property part from a definition sentence.
+        
+        Handles definitions like:
+        - "The wyvern, sometimes spelled wivern, is a type of mythical dragon"
+        - "Python is a programming language"
+        
+        Extracts the part after "is/are" to get just the property.
+        
+        Args:
+            definition: Full definition text
+            concept: The concept being defined (to match variants)
+            
+        Returns:
+            Property part (e.g., "a type of mythical dragon") or None
+        """
+        import re
+        
+        # Try to find "is/are" pattern and extract what comes after
+        # Match: "[concept], [optional extra], is/are [property]"
+        patterns = [
+            r'\b(?:is|are)\s+(.+?)(?:\.|$)',  # General "is/are X" pattern
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, definition, re.IGNORECASE)
+            if match:
+                property_part = match.group(1).strip()
+                # Clean up trailing punctuation
+                property_part = property_part.rstrip('.,;:')
+                if property_part:
+                    return property_part
+        
+        return None
     
     def _extract_concept_from_opinion(self, query: str) -> Optional[str]:
         """
@@ -3096,17 +3150,25 @@ class ResponseComposer:
                 concept_term = primary_data['term']
             
             if concept_term:
-                available_slots["concept"] = concept_term
+                available_slots["concept"] = concept_term.capitalize()
                 
                 # Use learned definition
                 if 'definition' in primary_data:
                     definition_text = primary_data['definition']
-                    # Split into primary property and elaboration
+                    # Extract the property part from "X is Y" style definitions
+                    # Handle: "The wyvern, sometimes spelled wivern, is a type of mythical dragon"
+                    # Should extract: "a type of mythical dragon"
+                    primary_property = self._extract_property_from_definition(definition_text, concept_term)
+                    
+                    # Split remaining into elaboration
                     sentences = definition_text.split('.')
-                    if sentences:
+                    if primary_property:
+                        available_slots["primary_property"] = primary_property
+                    elif sentences:
                         available_slots["primary_property"] = sentences[0].strip()
-                        if len(sentences) > 1:
-                            available_slots["elaboration"] = sentences[1].strip()
+                    
+                    if len(sentences) > 1:
+                        available_slots["elaboration"] = sentences[1].strip()
                 
                 # Add properties if available
                 if 'properties' in primary_data:
