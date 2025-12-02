@@ -325,7 +325,71 @@ class PragmaticTemplateStore:
         )
         
         # ============================================================
-        # CLARIFICATION TEMPLATES (5)
+        # OPINION TEMPLATES (6)
+        # ============================================================
+        
+        self.templates["opinion_positive"] = PragmaticTemplate(
+            template_id="opinion_positive",
+            category="opinion",
+            intent="express_interest",
+            template="I find {topic} fascinating! {elaboration}",
+            slots=["topic", "elaboration"],
+            priority=9,
+            examples=["I find birds fascinating! Their ability to fly and adapt to diverse environments is remarkable."]
+        )
+        
+        self.templates["opinion_neutral"] = PragmaticTemplate(
+            template_id="opinion_neutral",
+            category="opinion",
+            intent="express_balanced_view",
+            template="{topic} is an interesting subject. {elaboration}",
+            slots=["topic", "elaboration"],
+            priority=8,
+            examples=["Machine learning is an interesting subject. It has both powerful applications and important ethical considerations."]
+        )
+        
+        self.templates["opinion_analytical"] = PragmaticTemplate(
+            template_id="opinion_analytical",
+            category="opinion",
+            intent="express_analysis",
+            template="What I find particularly interesting about {topic} is {aspect}. {elaboration}",
+            slots=["topic", "aspect", "elaboration"],
+            priority=9,
+            examples=["What I find particularly interesting about quantum computing is its potential to solve currently intractable problems."]
+        )
+        
+        self.templates["opinion_comparative"] = PragmaticTemplate(
+            template_id="opinion_comparative",
+            category="opinion",
+            intent="express_preference",
+            template="I appreciate both {option1} and {option2}, though they serve different purposes. {elaboration}",
+            slots=["option1", "option2", "elaboration"],
+            priority=8,
+            examples=["I appreciate both Python and JavaScript, though they serve different purposes. Python excels in data science while JavaScript dominates web development."]
+        )
+        
+        self.templates["opinion_thoughtful"] = PragmaticTemplate(
+            template_id="opinion_thoughtful",
+            category="opinion",
+            intent="express_consideration",
+            template="That's a thought-provoking question about {topic}. {perspective}",
+            slots=["topic", "perspective"],
+            priority=7,
+            examples=["That's a thought-provoking question about artificial consciousness. It touches on deep philosophical questions about the nature of awareness."]
+        )
+        
+        self.templates["opinion_curious"] = PragmaticTemplate(
+            template_id="opinion_curious",
+            category="opinion",
+            intent="express_curiosity",
+            template="The interesting thing about {topic} is {aspect}. {question}",
+            slots=["topic", "aspect", "question"],
+            priority=8,
+            examples=["The interesting thing about black holes is their extreme gravitational effects. What aspects are you most curious about?"]
+        )
+        
+        # ============================================================
+        # CLARIFICATION TEMPLATES (2)
         # ============================================================
         
         self.templates["clarify_ambiguous"] = PragmaticTemplate(
@@ -346,6 +410,94 @@ class PragmaticTemplateStore:
             slots=["topic"],
             priority=7,
             examples=["I'd like to help, but could you provide more context about what you're trying to learn?"]
+        )
+        
+        # ============================================================
+        # CONFIRMATION TEMPLATES (4) - Yes/No questions
+        # ============================================================
+        
+        self.templates["confirm_yes"] = PragmaticTemplate(
+            template_id="confirm_yes",
+            category="confirmation",
+            intent="affirm_relationship",
+            template="Yes, {subject} is {relationship}. {elaboration}",
+            slots=["subject", "relationship", "elaboration"],
+            priority=9,
+            examples=["Yes, a wyvern is a type of dragon. It has two legs and two wings instead of four legs."]
+        )
+        
+        self.templates["confirm_yes_simple"] = PragmaticTemplate(
+            template_id="confirm_yes_simple",
+            category="confirmation",
+            intent="affirm_simple",
+            template="Yes, that's correct - {subject} is indeed {relationship}.",
+            slots=["subject", "relationship"],
+            priority=8,
+            examples=["Yes, that's correct - a wyvern is indeed a type of dragon."]
+        )
+        
+        self.templates["confirm_partial"] = PragmaticTemplate(
+            template_id="confirm_partial",
+            category="confirmation",
+            intent="partial_affirm",
+            template="In a way, yes. {subject} {relationship}, though {caveat}.",
+            slots=["subject", "relationship", "caveat"],
+            priority=7,
+            examples=["In a way, yes. A wyvern is related to dragons, though it's typically depicted differently."]
+        )
+        
+        self.templates["confirm_uncertain"] = PragmaticTemplate(
+            template_id="confirm_uncertain",
+            category="confirmation",
+            intent="express_uncertainty",
+            template="Based on what I know, {subject} {relationship}. {qualifier}",
+            slots=["subject", "relationship", "qualifier"],
+            priority=6,
+            examples=["Based on what I know, a wyvern is considered a dragon subtype. Different sources may vary on this."]
+        )
+        
+        # ============================================================
+        # TEACHING/ACKNOWLEDGMENT TEMPLATES (4) - User teaching the system
+        # ============================================================
+        
+        self.templates["teaching_acknowledge"] = PragmaticTemplate(
+            template_id="teaching_acknowledge",
+            category="teaching",
+            intent="acknowledge_learning",
+            template="I see, so {subject} is {relationship}. That's useful to know!",
+            slots=["subject", "relationship"],
+            priority=9,
+            examples=["I see, so a wyvern is a type of dragon. That's useful to know!"]
+        )
+        
+        self.templates["teaching_confirm_stored"] = PragmaticTemplate(
+            template_id="teaching_confirm_stored",
+            category="teaching",
+            intent="confirm_storage",
+            template="Got it - I've noted that {subject} is {relationship}. Thanks for teaching me!",
+            slots=["subject", "relationship"],
+            priority=8,
+            examples=["Got it - I've noted that a wyvern is a type of dragon. Thanks for teaching me!"]
+        )
+        
+        self.templates["teaching_expand"] = PragmaticTemplate(
+            template_id="teaching_expand",
+            category="teaching",
+            intent="expand_knowledge",
+            template="Thanks for clarifying that {subject} is {relationship}. Is there anything else that distinguishes it?",
+            slots=["subject", "relationship"],
+            priority=7,
+            examples=["Thanks for clarifying that a wyvern is a type of dragon. Is there anything else that distinguishes it?"]
+        )
+        
+        self.templates["teaching_connect"] = PragmaticTemplate(
+            template_id="teaching_connect",
+            category="teaching",
+            intent="connect_concepts",
+            template="That makes sense - {subject} being {relationship} connects with {related_concept}.",
+            slots=["subject", "relationship", "related_concept"],
+            priority=7,
+            examples=["That makes sense - a wyvern being a type of dragon connects with what I know about mythical creatures."]
         )
         
     def get_template(self, template_id: str) -> Optional[PragmaticTemplate]:

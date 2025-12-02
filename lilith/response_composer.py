@@ -2194,6 +2194,42 @@ class ResponseComposer:
             if concept:
                 available_slots["related_concept"] = f"That relates to {concept.term}."
         
+        elif category == "opinion":
+            # Extract topic from opinion question
+            topic = self._extract_concept_from_opinion(user_input)
+            if topic:
+                available_slots["topic"] = topic
+                
+                # Look up concept to provide informed opinion
+                if self.concept_store:
+                    embedding = self.encoder.encode(topic) if hasattr(self, 'encoder') else None
+                    if embedding is not None:
+                        results = self.concept_store.retrieve_similar(embedding, top_k=1)
+                        if results:
+                            concept_id, similarity = results[0]
+                            if similarity > 0.60:
+                                concept_data = self.concept_store.get_concept(concept_id)
+                                if concept_data and concept_data.properties:
+                                    # Use first property as aspect
+                                    available_slots["aspect"] = concept_data.properties[0]
+                                    # Use second property as elaboration if available
+                                    if len(concept_data.properties) > 1:
+                                        available_slots["elaboration"] = concept_data.properties[1]
+                                    else:
+                                        available_slots["elaboration"] = f"There's so much to explore about {topic}."
+                                else:
+                                    # Generic elaboration
+                                    available_slots["elaboration"] = f"There's a lot of interesting aspects to {topic}."
+                            else:
+                                # Low similarity - generic response
+                                available_slots["elaboration"] = f"It's an interesting topic to explore."
+                        else:
+                            available_slots["elaboration"] = f"It's an interesting subject."
+                    else:
+                        available_slots["elaboration"] = f"That's a great question about {topic}!"
+                else:
+                    available_slots["elaboration"] = f"That's a thoughtful question."
+        
         elif category == "definition" and concept:
             # Fill from concept properties
             available_slots["concept"] = concept.term
@@ -2252,13 +2288,55 @@ class ResponseComposer:
             user_input: User message
             
         Returns:
-            Category: "greeting", "definition", "acknowledgment", etc.
+            Category: "greeting", "definition", "acknowledgment", "opinion", 
+                      "confirmation", "teaching", etc.
         """
         user_lower = user_input.lower().strip()
         
         # Greetings
         if any(word in user_lower for word in ["hello", "hi", "hey", "greetings"]):
             return "greeting"
+        
+        # Opinion/preference questions
+        if any(phrase in user_lower for phrase in [
+            "do you like",
+            "do you prefer",
+            "what do you think",
+            "what's your opinion",
+            "what's your favorite",
+            "what's your favourite",
+            "how do you feel about",
+            "are you interested in"
+        ]):
+            return "opinion"
+        
+        # Yes/No confirmation questions - "Is X a Y?", "Are X Y?", "Can X do Y?"
+        import re
+        confirmation_patterns = [
+            r"^is\s+(a|an|the)?\s*\w+\s+(a|an|the|type|kind|form|part|sort)\b",  # Is [a] X a/type of Y?
+            r"^are\s+(a|an|the)?\s*\w+\s+(a|an|the|type|kind|form|part|sort)\b",  # Are [a] X a/type of Y?
+            r"^is\s+(a|an|the)?\s*\w+\s+\w+.*\?$",  # Is X Y? (simple yes/no with ?)
+            r"^are\s+(a|an|the)?\s*\w+\s+\w+",  # Are X Y?
+            r"^can\s+\w+\s+\w+",  # Can X do Y?
+            r"^does\s+\w+\s+\w+",  # Does X have Y?
+            r"^do\s+\w+\s+\w+",  # Do X Y?
+        ]
+        for pattern in confirmation_patterns:
+            if re.match(pattern, user_lower):
+                return "confirmation"
+        
+        # Teaching/Statements - "X is a Y", "X are Y" (declarative statements)
+        # These are NOT questions - user is teaching the system
+        if not user_input.strip().endswith('?'):
+            teaching_patterns = [
+                r"^(a|an|the)?\s*\w+\s+is\s+(a|an|the)?\s*",  # "A Wyvern is a Dragon"
+                r"^(a|an|the)?\s*\w+\s+are\s+(a|an|the)?\s*",  # "Wyverns are dragons"
+                r"^\w+\s+means?\s+",  # "X means Y"
+                r"^\w+\s+refers?\s+to\s+",  # "X refers to Y"
+            ]
+            for pattern in teaching_patterns:
+                if re.match(pattern, user_lower):
+                    return "teaching"
         
         # Definitions
         if any(phrase in user_lower for phrase in ["what is", "what are", "define", "definition of"]):
@@ -2306,6 +2384,118 @@ class ResponseComposer:
         
         return " ".join(concept_words) if concept_words else None
     
+    def _extract_concept_from_opinion(self, query: str) -> Optional[str]:
+        """
+        Extract topic/concept from opinion question.
+        
+        Args:
+            query: Opinion question like "Do you like birds?"
+            
+        Returns:
+            Topic term like "birds"
+        """
+        query_lower = query.lower()
+        
+        # Remove opinion question patterns
+        patterns = [
+            "do you like",
+            "do you prefer",
+            "what do you think about",
+            "what do you think of",
+            "what's your opinion on",
+            "what's your opinion of",
+            "what's your favorite",
+            "what's your favourite",
+            "how do you feel about",
+            "are you interested in"
+        ]
+        
+        for pattern in patterns:
+            if pattern in query_lower:
+                query_lower = query_lower.replace(pattern, "").strip()
+                break
+        
+        # Remove question mark
+        query_lower = query_lower.replace("?", "").strip()
+        
+        # Remove articles
+        words = query_lower.split()
+        concept_words = [w for w in words if w not in ["the", "a", "an", "or"]]
+        
+        return " ".join(concept_words) if concept_words else None
+    
+    def _extract_confirmation_parts(self, query: str) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Extract subject and relationship from a confirmation question.
+        
+        Args:
+            query: Question like "Is a Wyvern a type of Dragon?"
+            
+        Returns:
+            Tuple of (subject, relationship) like ("a wyvern", "a type of dragon")
+        """
+        import re
+        query_lower = query.lower().strip().rstrip('?')
+        
+        # Pattern: "Is X a/an Y?"
+        match = re.match(r'^is\s+(a|an|the)?\s*(\w+)\s+(a|an|the)?\s*(.+)$', query_lower)
+        if match:
+            article1, subject, article2, relationship = match.groups()
+            subject_str = f"{article1 or ''} {subject}".strip()
+            relationship_str = f"{article2 or ''} {relationship}".strip()
+            return subject_str, relationship_str
+        
+        # Pattern: "Are X Y?"
+        match = re.match(r'^are\s+(\w+)\s+(.+)$', query_lower)
+        if match:
+            subject, relationship = match.groups()
+            return subject, relationship
+        
+        # Pattern: "Can X Y?" / "Does X Y?"
+        match = re.match(r'^(can|does|do)\s+(\w+)\s+(.+)$', query_lower)
+        if match:
+            verb, subject, rest = match.groups()
+            return subject, f"{verb} {rest}"
+        
+        return None, None
+    
+    def _extract_teaching_parts(self, query: str) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Extract subject and relationship from a teaching statement.
+        
+        Args:
+            query: Statement like "A Wyvern is a type of Dragon"
+            
+        Returns:
+            Tuple of (subject, relationship) like ("a wyvern", "a type of dragon")
+        """
+        import re
+        query_lower = query.lower().strip()
+        
+        # Pattern: "X is Y"
+        match = re.match(r'^(a|an|the)?\s*(\w+)\s+is\s+(a|an|the)?\s*(.+)$', query_lower)
+        if match:
+            article1, subject, article2, relationship = match.groups()
+            subject_str = f"{article1 or ''} {subject}".strip()
+            relationship_str = f"{article2 or ''} {relationship}".strip()
+            return subject_str, relationship_str
+        
+        # Pattern: "X are Y"
+        match = re.match(r'^(a|an|the)?\s*(\w+)\s+are\s+(a|an|the)?\s*(.+)$', query_lower)
+        if match:
+            article1, subject, article2, relationship = match.groups()
+            subject_str = f"{article1 or ''} {subject}".strip()
+            relationship_str = f"{article2 or ''} {relationship}".strip()
+            return subject_str, relationship_str
+        
+        # Pattern: "X means Y"
+        match = re.match(r'^(\w+)\s+means?\s+(.+)$', query_lower)
+        if match:
+            subject, relationship = match.groups()
+            return subject, relationship
+        
+        return None, None
+
     def _extract_topic_from_turn(self, turn) -> Optional[str]:
         """Extract main topic from a conversation turn."""
         # Simple: just use first few words of user input
@@ -2523,6 +2713,61 @@ class ResponseComposer:
                     except Exception as e:
                         print(f"     ⚠️  Pattern extraction failed: {e}")
                 
+                # 4. BNN SEMANTIC LEARNING
+                # Train the BNN on semantic relationships from the definition
+                # This allows the neural embeddings to learn concept associations
+                if self.contrastive_learner:
+                    try:
+                        import re
+                        pairs_added = 0
+                        
+                        # Extract key relationships from definition
+                        # Pattern: "X is a type of Y" → (X, Y, positive)
+                        # Pattern: "X is a Y" → (X, Y, positive)
+                        type_match = re.search(
+                            r'^.{0,30}?\bis\s+(?:a\s+)?(?:type|kind|form|sort)\s+of\s+(\w+)',
+                            definition.lower()
+                        )
+                        if type_match:
+                            related_term = type_match.group(1)
+                            self.contrastive_learner.add_pair(
+                                anchor=term.lower(),
+                                other=related_term,
+                                relationship="positive",
+                                weight=confidence,
+                                source=f"wikipedia_{source}"
+                            )
+                            pairs_added += 1
+                        
+                        # Extract other capitalized concepts from definition as related
+                        related_concepts = re.findall(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b', definition)
+                        for related in related_concepts[:3]:  # Top 3 related concepts
+                            related_lower = related.lower()
+                            if related_lower != term.lower() and len(related_lower) > 2:
+                                self.contrastive_learner.add_pair(
+                                    anchor=term.lower(),
+                                    other=related_lower,
+                                    relationship="positive",
+                                    weight=confidence * 0.7,  # Lower weight for inferred relations
+                                    source=f"wikipedia_cooccur_{source}"
+                                )
+                                pairs_added += 1
+                        
+                        if pairs_added > 0:
+                            print(f"     🧠 BNN: Added {pairs_added} semantic pairs for training")
+                            
+                            # Periodic incremental training (every 5 new pairs)
+                            if len(self.contrastive_learner.pairs) % 5 == 0:
+                                self.contrastive_learner.incremental_update(
+                                    num_steps=3,  # Quick training update
+                                    learning_rate=0.001
+                                )
+                                print(f"     🎓 BNN: Incremental training step completed")
+                            
+                            learned_count += 1
+                    except Exception as e:
+                        print(f"     ⚠️  BNN semantic learning failed: {e}")
+                
                 # ═══════════════════════════════════════════════════════
                 # PHASE 2: REASONING STAGE INTEGRATION
                 # ═══════════════════════════════════════════════════════
@@ -2704,14 +2949,46 @@ class ResponseComposer:
             if concept_term:
                 available_slots["concept"] = concept_term
                 
-                # Use learned information as examples
+                # Use learned information as examples - use full definition, not truncated
                 if 'definition' in primary_data:
-                    available_slots["examples"] = primary_data['definition'][:100]
+                    available_slots["examples"] = primary_data['definition']
                 
                 if 'properties' in primary_data:
                     props = primary_data['properties']
                     if isinstance(props, list):
                         available_slots["properties"] = ", ".join(props[:3])
+        
+        elif category == "confirmation" and primary_data:
+            # Yes/No question like "Is a Wyvern a type of Dragon?"
+            # Extract subject and relationship from query
+            subject, relationship = self._extract_confirmation_parts(query)
+            if subject:
+                available_slots["subject"] = subject
+                
+                # Use learned definition to form the relationship/elaboration
+                if 'definition' in primary_data:
+                    definition_text = primary_data['definition']
+                    sentences = definition_text.split('.')
+                    
+                    # Check if the definition supports the relationship
+                    if relationship:
+                        available_slots["relationship"] = relationship
+                    elif sentences:
+                        available_slots["relationship"] = sentences[0].strip()[:80]
+                    
+                    if len(sentences) > 1:
+                        available_slots["elaboration"] = sentences[1].strip()
+        
+        elif category == "teaching":
+            # User is teaching us something like "A Wyvern is a type of Dragon"
+            subject, relationship = self._extract_teaching_parts(query)
+            if subject and relationship:
+                available_slots["subject"] = subject
+                available_slots["relationship"] = relationship
+                
+                # If we have related concepts, add that too
+                if len(learned_concepts) > 1:
+                    available_slots["related_concept"] = learned_concepts[1]
         
         # If we have slots, try to match and fill template
         if available_slots:
@@ -2737,6 +3014,7 @@ class ResponseComposer:
         
         Heuristics:
         - Capitalized words (proper nouns)
+        - Compound terms (Capitalized + number, e.g., "Atari 2600")
         - Technical-sounding words (>8 chars, uncommon patterns)
         - Words in quotes
         - Compound technical terms
@@ -2758,13 +3036,35 @@ class ResponseComposer:
         quoted = re.findall(r"'([^']+)'", query)
         terms.extend(quoted)
         
+        # Extract compound terms: Word with capital letter followed by numbers
+        # Handles: "Atari 2600", "iPhone 15", "PlayStation 5", "Windows 11"
+        compound_patterns = [
+            r'\b([A-Z][a-zA-Z]*\s+\d+)\b',         # Standard: Atari 2600, PlayStation 5
+            r'\b([a-z]+[A-Z][a-zA-Z]*\s+\d+)\b',   # CamelCase: iPhone 15
+        ]
+        for pattern in compound_patterns:
+            matches = re.findall(pattern, query)
+            for compound in matches:
+                compound_clean = compound.strip().rstrip('?.,!')
+                if compound_clean and compound_clean not in terms:
+                    terms.append(compound_clean)
+        
         # Extract capitalized words (but not first word if it's a question)
+        # Skip words that are already part of a compound term
         words = query.split()
+        compound_words = set()
+        for compound in terms:
+            compound_words.update(compound.split())
+        
         for i, word in enumerate(words):
             word_clean = re.sub(r'[^\w]', '', word)
             
-            # Skip first word if it's a question word
-            if i == 0 and word_clean.lower() in ['what', 'who', 'where', 'when', 'why', 'how', 'is', 'are', 'do', 'does', 'can', 'could']:
+            # Skip first word if it's a question word or common sentence starter
+            if i == 0 and word_clean.lower() in ['what', 'who', 'where', 'when', 'why', 'how', 'is', 'are', 'do', 'does', 'can', 'could', 'tell', 'explain', 'describe', 'show', 'give', 'have', 'has', 'would', 'should', 'may', 'might']:
+                continue
+            
+            # Skip if already part of a compound term
+            if word_clean in compound_words:
                 continue
             
             # Check if capitalized (potential proper noun or technical term)
@@ -2772,8 +3072,13 @@ class ResponseComposer:
                 terms.append(word_clean)
         
         # Extract technical-looking words (long, uncommon patterns)
+        compound_words_lower = {w.lower() for w in compound_words}  # Lowercase set for comparison
         for word in words:
             word_clean = re.sub(r'[^\w]', '', word).lower()
+            
+            # Skip if part of compound term
+            if word_clean in compound_words_lower:
+                continue
             
             # Long words with specific patterns (technical terms)
             if len(word_clean) > 8 and any(pattern in word_clean for pattern in ['tion', 'ment', 'ology', 'ism', 'ics', 'ness']):
