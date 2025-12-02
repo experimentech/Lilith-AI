@@ -577,6 +577,28 @@ class ResponseComposer:
             if intent_scores and intent_scores[0][1] > 0.5:  # Reasonable confidence
                 intent_hint = intent_scores[0][0]  # Top intent label
         
+        # 3.5 TRY DELIBERATION-BASED COMPOSITION FIRST
+        # If reasoning found activated concepts with properties, compose from those
+        # This is the proper cognitive flow: deliberate → compose from concepts
+        if deliberation_result and deliberation_result.activated_concepts:
+            # Detect conversation category for template selection
+            category = self._detect_conversation_category(user_input)
+            
+            deliberation_response = self._compose_from_deliberation(
+                deliberation_result,
+                user_input,
+                category
+            )
+            
+            if deliberation_response and deliberation_response.confidence >= 0.70:
+                print(f"  ✨ Composed from reasoning (confidence: {deliberation_response.confidence:.2f})")
+                self.last_response = deliberation_response
+                self.last_approach = 'deliberation'
+                self.metrics['deliberation_count'] = self.metrics.get('deliberation_count', 0) + 1
+                return deliberation_response
+            elif deliberation_response:
+                print(f"  ⚠️ Deliberation composition low confidence ({deliberation_response.confidence:.2f}), trying patterns")
+        
         # 4. RETRIEVE PATTERNS - Choose method based on configuration  
         # MULTI-TURN COHERENCE: Use enriched context (includes history + topics)
         # instead of just raw user_input for better topic continuity
@@ -2001,6 +2023,156 @@ class ResponseComposer:
             is_low_confidence=similarity < 0.75
         )
     
+    def _compose_from_deliberation(
+        self,
+        deliberation_result,
+        user_input: str,
+        category: str
+    ) -> Optional[ComposedResponse]:
+        """
+        Compose response using deliberation results from reasoning stage.
+        
+        This is the proper cognitive flow:
+        1. Reasoning stage deliberated and found activated concepts + inferences
+        2. Use those concepts (from database) to build response content
+        3. Use syntax stage to get grammatical structure
+        4. Use pragmatic templates to frame appropriately
+        
+        The BNN guided the retrieval and found connections - now we
+        compose from what was found in the databases.
+        
+        Args:
+            deliberation_result: Result from reasoning_stage.deliberate()
+            user_input: Original user input
+            category: Detected conversation category (definition, confirmation, etc.)
+            
+        Returns:
+            ComposedResponse if composition succeeded, None otherwise
+        """
+        if not deliberation_result or not deliberation_result.activated_concepts:
+            return None
+        
+        # Get the focus concept and other activated concepts
+        activated = deliberation_result.activated_concepts
+        focus_term = deliberation_result.focus_concept
+        inferences = deliberation_result.inferences or []
+        
+        # Find the main concept with properties (skip the raw query concept)
+        main_concept = None
+        for concept in activated:
+            if concept.source != "query" and concept.properties:
+                main_concept = concept
+                break
+        
+        # If no concept with properties, try to get from concept store using focus
+        if not main_concept and focus_term and self.concept_store:
+            try:
+                retrieved = self.concept_store.retrieve_by_text(focus_term, top_k=1, min_similarity=0.5)
+                if retrieved:
+                    db_concept, score = retrieved[0]
+                    # Create an ActivatedConcept-like object from database result
+                    main_concept = type('Concept', (), {
+                        'term': db_concept.term,
+                        'properties': db_concept.properties,
+                        'source': 'database',
+                        'activation': score
+                    })()
+            except Exception as e:
+                print(f"  ⚠️ Could not retrieve concept for '{focus_term}': {e}")
+        
+        if not main_concept or not main_concept.properties:
+            return None
+        
+        # Build slots from concept properties
+        available_slots = {}
+        available_slots["concept"] = main_concept.term
+        available_slots["topic"] = main_concept.term
+        
+        # Use properties for content
+        if main_concept.properties:
+            primary_property = main_concept.properties[0]
+            available_slots["primary_property"] = primary_property
+            available_slots["definition"] = primary_property
+            
+            if len(main_concept.properties) > 1:
+                available_slots["elaboration"] = main_concept.properties[1]
+                available_slots["properties"] = ", ".join(main_concept.properties[1:3])
+        
+        # Add inference information if available
+        connections = [inf for inf in inferences if inf.inference_type == "connection"]
+        if connections:
+            related_terms = [inf.source_concepts[1] for inf in connections[:2] 
+                           if len(inf.source_concepts) > 1]
+            if related_terms:
+                available_slots["related"] = ", ".join(related_terms)
+        
+        # For confirmation questions, extract subject/relationship
+        if category == "confirmation":
+            subject, relationship = self._extract_confirmation_parts(user_input)
+            if subject:
+                available_slots["subject"] = subject
+            if relationship:
+                available_slots["relationship"] = relationship
+            # Use first property as elaboration for confirmation
+            if main_concept.properties:
+                available_slots["elaboration"] = main_concept.properties[0][:100]
+        
+        # For teaching statements, acknowledge what was taught
+        elif category == "teaching":
+            subject, relationship = self._extract_teaching_parts(user_input)
+            if subject:
+                available_slots["subject"] = subject
+            if relationship:
+                available_slots["relationship"] = relationship
+        
+        # Use syntax stage to determine grammatical structure if available
+        syntax_intent = "statement"
+        if self.syntax_stage:
+            try:
+                # Process the main property to get syntactic structure
+                tokens = main_concept.properties[0].split() if main_concept.properties else []
+                if tokens:
+                    syntax_artifact = self.syntax_stage.process(tokens)
+                    syntax_intent = syntax_artifact.metadata.get('intent', 'statement')
+            except Exception:
+                pass
+        
+        # Get appropriate pragmatic template
+        if not self.pragmatic_templates:
+            return None
+        
+        template = self.pragmatic_templates.match_best_template(category, available_slots)
+        if not template:
+            # Fallback to definition template if category not found
+            template = self.pragmatic_templates.match_best_template("definition", available_slots)
+        
+        if not template:
+            return None
+        
+        # Fill template with slots
+        response_text = self.pragmatic_templates.fill_template(template, available_slots)
+        
+        if not response_text:
+            return None
+        
+        # Calculate confidence based on concept activation and inference count
+        base_confidence = getattr(main_concept, 'activation', 0.7)
+        inference_bonus = min(len(inferences) * 0.05, 0.15)  # Up to 0.15 bonus
+        confidence = min(base_confidence + inference_bonus, 0.95)
+        
+        print(f"  🧠 Composed from deliberation: {len(activated)} concepts, {len(inferences)} inferences")
+        
+        return ComposedResponse(
+            text=response_text,
+            fragment_ids=[template.template_id, main_concept.term],
+            composition_weights=[0.6, 0.4],
+            coherence_score=confidence,
+            primary_pattern=None,
+            confidence=confidence,
+            is_fallback=False,
+            is_low_confidence=confidence < 0.70
+        )
+
     def _compose_math_response(self, query: str) -> Optional[ComposedResponse]:
         """
         Generate response using math backend.
