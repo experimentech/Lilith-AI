@@ -13,40 +13,57 @@ required_major=3
 required_minor=10
 
 # Function to check if a Python version meets requirements
+# Returns "command:version:path" on success, empty on failure
 check_python_version() {
     local python_cmd="$1"
+    local full_path
     
-    if ! command -v "$python_cmd" &> /dev/null; then
+    # Get the actual path (resolves venv python properly)
+    full_path=$(which "$python_cmd" 2>/dev/null) || return 1
+    
+    if [ ! -x "$full_path" ]; then
         return 1
     fi
     
-    local version_full=$("$python_cmd" --version 2>&1 | awk '{print $2}')
+    local version_full=$("$full_path" --version 2>&1 | awk '{print $2}')
     local major=$(echo "$version_full" | cut -d. -f1)
     local minor=$(echo "$version_full" | cut -d. -f2)
     
+    # Validate we got numbers
+    if ! [[ "$major" =~ ^[0-9]+$ ]] || ! [[ "$minor" =~ ^[0-9]+$ ]]; then
+        return 1
+    fi
+    
     if [ "$major" -gt "$required_major" ]; then
-        echo "$python_cmd:$version_full"
+        echo "$python_cmd:$version_full:$full_path"
         return 0
     elif [ "$major" -eq "$required_major" ] && [ "$minor" -ge "$required_minor" ]; then
-        echo "$python_cmd:$version_full"
+        echo "$python_cmd:$version_full:$full_path"
         return 0
     fi
     
     return 1
 }
 
-# Check Python version - try multiple options
+# Check if we're already in a virtual environment
 echo "Checking for Python ${required_major}.${required_minor}+..."
+
+if [ -n "$VIRTUAL_ENV" ]; then
+    echo "   (Currently in venv: $VIRTUAL_ENV)"
+fi
 
 PYTHON_CMD=""
 PYTHON_VERSION=""
+PYTHON_PATH=""
 
 # Try various Python commands in order of preference
-for cmd in python3.13 python3.12 python3.11 python3.10 python3 python; do
+# Check 'python' first as it will be the venv python if in a venv
+for cmd in python python3 python3.13 python3.12 python3.11 python3.10; do
     result=$(check_python_version "$cmd" 2>/dev/null) || continue
     if [ -n "$result" ]; then
         PYTHON_CMD=$(echo "$result" | cut -d: -f1)
         PYTHON_VERSION=$(echo "$result" | cut -d: -f2)
+        PYTHON_PATH=$(echo "$result" | cut -d: -f3)
         break
     fi
 done
@@ -55,10 +72,11 @@ if [ -z "$PYTHON_CMD" ]; then
     echo "❌ Error: Python ${required_major}.${required_minor} or higher is required"
     echo ""
     echo "   Available Python versions on this system:"
-    for cmd in python3 python3.6 python3.7 python3.8 python3.9 python3.10 python3.11 python3.12 python3.13; do
-        if command -v "$cmd" &> /dev/null; then
-            ver=$("$cmd" --version 2>&1)
-            echo "     - $cmd: $ver"
+    for cmd in python python3 python3.6 python3.7 python3.8 python3.9 python3.10 python3.11 python3.12 python3.13; do
+        full_path=$(which "$cmd" 2>/dev/null) || continue
+        if [ -x "$full_path" ]; then
+            ver=$("$full_path" --version 2>&1)
+            echo "     - $cmd ($full_path): $ver"
         fi
     done
     echo ""
@@ -68,11 +86,23 @@ if [ -z "$PYTHON_CMD" ]; then
     exit 1
 fi
 
-echo "✅ Found $PYTHON_CMD ($PYTHON_VERSION)"
+echo "✅ Found $PYTHON_CMD ($PYTHON_VERSION) at $PYTHON_PATH"
 echo ""
 
-# Create virtual environment if it doesn't exist
-if [ ! -d ".venv" ]; then
+# Handle virtual environment
+if [ -n "$VIRTUAL_ENV" ]; then
+    # Already in a venv - use it
+    echo "✅ Using active virtual environment: $VIRTUAL_ENV"
+    echo ""
+elif [ -d ".venv" ]; then
+    # Existing .venv directory - activate it
+    echo "Found existing .venv directory"
+    echo "Activating virtual environment..."
+    source .venv/bin/activate
+    echo "✅ Virtual environment activated"
+    echo ""
+else
+    # Create new venv
     echo "Creating virtual environment with $PYTHON_CMD..."
     "$PYTHON_CMD" -m venv .venv
     if [ $? -ne 0 ]; then
@@ -82,16 +112,13 @@ if [ ! -d ".venv" ]; then
         exit 1
     fi
     echo "✅ Virtual environment created"
-else
-    echo "✅ Virtual environment already exists"
+    echo ""
+    
+    echo "Activating virtual environment..."
+    source .venv/bin/activate
+    echo "✅ Virtual environment activated"
+    echo ""
 fi
-echo ""
-
-# Activate virtual environment
-echo "Activating virtual environment..."
-source .venv/bin/activate
-echo "✅ Virtual environment activated"
-echo ""
 
 # Upgrade pip using python -m pip (more reliable than bare pip)
 echo "Upgrading pip..."
