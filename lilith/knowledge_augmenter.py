@@ -62,14 +62,14 @@ class WikipediaLookup:
         if not cleaned_query:
             return None
             
-        # Try exact title match first
-        result = self._fetch_article(cleaned_query)
+        # Try exact title match first (with context for disambiguation)
+        result = self._fetch_article(cleaned_query, context=query)
         
         if result:
             return result
             
         # If no exact match, try search API
-        return self._search_and_fetch(cleaned_query)
+        return self._search_and_fetch(cleaned_query, context=query)
     
     def _clean_query(self, query: str) -> str:
         """
@@ -100,9 +100,13 @@ class WikipediaLookup:
         result = ' '.join(cleaned)
         return result.title()
     
-    def _fetch_article(self, title: str) -> Optional[Dict[str, Any]]:
+    def _fetch_article(self, title: str, context: str = "") -> Optional[Dict[str, Any]]:
         """
         Fetch Wikipedia article summary by exact title.
+        
+        Args:
+            title: Article title to fetch
+            context: Original query context for disambiguation
         """
         try:
             url = self.base_url + quote(title)
@@ -115,6 +119,18 @@ class WikipediaLookup:
                 
                 # Extract clean summary (first 2-3 sentences)
                 extract = data.get('extract', '')
+                
+                # Check if this is a disambiguation page
+                if self._is_disambiguation_page(extract):
+                    print(f"  🔀 Disambiguation page detected for '{title}'")
+                    # Try to resolve using context
+                    resolved = self._resolve_disambiguation(title, context, extract)
+                    if resolved:
+                        return resolved
+                    else:
+                        print(f"  ⚠️  Could not resolve disambiguation - using first option")
+                        # Fall through and return disambiguation page
+                
                 clean_extract = self._extract_summary(extract)
                 
                 if clean_extract:
@@ -132,9 +148,131 @@ class WikipediaLookup:
             print(f"  ⚠️ Wikipedia lookup failed: {e}")
             return None
     
-    def _search_and_fetch(self, query: str) -> Optional[Dict[str, Any]]:
+    def _is_disambiguation_page(self, text: str) -> bool:
+        """
+        Detect if text is from a Wikipedia disambiguation page.
+        
+        Args:
+            text: Article extract text
+            
+        Returns:
+            True if disambiguation page
+        """
+        if not text:
+            return False
+        
+        # Common disambiguation indicators
+        disambig_patterns = [
+            'may refer to:',
+            'may also refer to:',
+            'can refer to:',
+            'is the name of:',
+            'disambiguation',
+        ]
+        
+        text_lower = text.lower()
+        return any(pattern in text_lower for pattern in disambig_patterns)
+    
+    def _resolve_disambiguation(
+        self, 
+        title: str, 
+        context: str, 
+        disambig_text: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Resolve disambiguation by using context from query.
+        
+        Strategy:
+        1. Extract disambiguation options from text
+        2. Score each option against context words
+        3. Fetch the highest-scoring option
+        
+        Args:
+            title: Original title that was disambiguous
+            context: Original query for context clues
+            disambig_text: Disambiguation page text
+            
+        Returns:
+            Article dict for best match or None
+        """
+        # Extract context words from original query
+        context_words = set(context.lower().split())
+        
+        # Common words to ignore
+        stop_words = {'what', 'is', 'are', 'the', 'a', 'an', 'tell', 'me', 'about', 'you', 'your'}
+        context_words = context_words - stop_words
+        
+        # Parse disambiguation options
+        options = self._parse_disambiguation_options(disambig_text)
+        
+        if not options:
+            return None
+        
+        # Score each option based on context overlap
+        scored_options = []
+        for option_title, option_desc in options:
+            # Count how many context words appear in the option description
+            desc_lower = (option_title + " " + option_desc).lower()
+            score = sum(1 for word in context_words if word in desc_lower)
+            scored_options.append((score, option_title, option_desc))
+        
+        # Sort by score (highest first)
+        scored_options.sort(reverse=True, key=lambda x: x[0])
+        
+        # If top score is > 0, try to fetch that article
+        if scored_options and scored_options[0][0] > 0:
+            best_title = scored_options[0][1]
+            print(f"  ✨ Resolved to: '{best_title}' (score: {scored_options[0][0]})")
+            
+            # Fetch the resolved article (without context to avoid recursion)
+            return self._fetch_article(best_title, context="")
+        
+        return None
+    
+    def _parse_disambiguation_options(self, text: str) -> List[Tuple[str, str]]:
+        """
+        Parse disambiguation page to extract options.
+        
+        Wikipedia disambiguation pages typically have bullet points like:
+        - Python (programming language), a high-level programming language
+        - Python (mythology), a serpent in Greek mythology
+        
+        Args:
+            text: Disambiguation page text
+            
+        Returns:
+            List of (title, description) tuples
+        """
+        options = []
+        
+        # Split into lines and look for list items
+        lines = text.split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            
+            # Look for patterns like "Title, description" or "Title - description"
+            # Common format: "Python (programming), a language"
+            match = re.match(r'^[•\-\*]?\s*(.+?)\s*[,\-]\s*(.+)$', line)
+            if match:
+                title_part = match.group(1).strip()
+                desc_part = match.group(2).strip()
+                
+                # Clean up title (remove extra markers)
+                title_part = re.sub(r'^\[?|\]?$', '', title_part)
+                
+                if title_part and desc_part:
+                    options.append((title_part, desc_part))
+        
+        return options[:10]  # Limit to first 10 options
+    
+    def _search_and_fetch(self, query: str, context: str = "") -> Optional[Dict[str, Any]]:
         """
         Search Wikipedia and fetch the top result.
+        
+        Args:
+            query: Search query
+            context: Original query for disambiguation resolution
         """
         try:
             # Use Wikipedia search API
@@ -155,7 +293,7 @@ class WikipediaLookup:
                 if len(data) >= 2 and data[1]:
                     # First result title
                     title = data[1][0]
-                    return self._fetch_article(title)
+                    return self._fetch_article(title, context=context)
             
             return None
             
