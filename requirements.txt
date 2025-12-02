@@ -5,9 +5,6 @@ numpy>=1.24.0
 torch>=2.0.0
 sympy>=1.12
 
-# Database
-sqlite3  # Built-in with Python
-
 # External Knowledge Sources
 requests>=2.31.0  # For API calls (Wikipedia, Wiktionary, Free Dictionary)
 nltk>=3.8.1       # WordNet for synonyms/antonyms (optional but recommended)
