@@ -50,6 +50,7 @@ runs/
 retrieval_plots/
 *.log
 chatlog
+*_output.txt
 
 # SQLite databases
 *.db
