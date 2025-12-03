@@ -62,9 +62,20 @@ chatlog
 data/users/
 data/test/
 data/demo/
+data/generated/
+data/production/
+
+# Downloaded datasets (large, regeneratable)
+data/datasets/*.txt
+data/datasets/*.json
+!data/datasets/sources.txt
+!data/datasets/Conversation.csv
 
 # Pattern stores (generated at runtime)
+# But allow seed patterns
 *_patterns.json
+!data/seed/*_patterns.json
+!data/base/patterns.json
 response_patterns.json
 test_typo_patterns.json
 

@@ -318,8 +318,8 @@ def main():
     )
     parser.add_argument(
         '--output-dir',
-        default="data/datasets",
-        help="Output directory (for 'all' option)"
+        default="data/generated",
+        help="Output directory (default: data/generated - gitignored)"
     )
     parser.add_argument(
         '--limit', '-l',

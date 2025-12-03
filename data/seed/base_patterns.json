@@ -1,0 +1,1262 @@
+[
+  {
+    "fragment_id": "seed_greeting_0",
+    "trigger_context": "Hello",
+    "response_text": "Hello! How can I help you?",
+    "success_score": 0.5,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_greeting_1",
+    "trigger_context": "Hi",
+    "response_text": "Hi! What would you like to talk about?",
+    "success_score": 0.5,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_greeting_2",
+    "trigger_context": "Hi there",
+    "response_text": "Hi there! How are you doing?",
+    "success_score": 0.5,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_greeting_3",
+    "trigger_context": "Hey",
+    "response_text": "Hey! What's up?",
+    "success_score": 0.5,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_greeting_4",
+    "trigger_context": "Good morning",
+    "response_text": "Good morning! What's on your mind?",
+    "success_score": 0.5,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_greeting_5",
+    "trigger_context": "Good afternoon",
+    "response_text": "Good afternoon! How can I assist you?",
+    "success_score": 0.5,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_greeting_6",
+    "trigger_context": "Good evening",
+    "response_text": "Good evening! What brings you here?",
+    "success_score": 0.5,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_greeting_7",
+    "trigger_context": "Greetings",
+    "response_text": "Greetings! What can I do for you?",
+    "success_score": 0.5,
+    "intent": "greeting",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_capability_8",
+    "trigger_context": "what can you do",
+    "response_text": "I can have conversations using learned patterns. I remember topics and learn from our interactions.",
+    "success_score": 0.5,
+    "intent": "capability",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_capability_9",
+    "trigger_context": "what are you",
+    "response_text": "I'm a neuro-symbolic conversation system. I use neural embeddings and symbolic patterns to chat.",
+    "success_score": 0.5,
+    "intent": "capability",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_capability_10",
+    "trigger_context": "how do you work",
+    "response_text": "I work by matching your input to learned response patterns using semantic similarity. No LLM!",
+    "success_score": 0.5,
+    "intent": "capability",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_capability_11",
+    "trigger_context": "can you help",
+    "response_text": "Yes, I can chat with you and try to understand what you're saying through pattern matching.",
+    "success_score": 0.5,
+    "intent": "capability",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_capability_12",
+    "trigger_context": "tell me about yourself",
+    "response_text": "I'm an experiment in pure neuro-symbolic dialogue. I learn from conversation dynamics.",
+    "success_score": 0.5,
+    "intent": "capability",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_farewell_13",
+    "trigger_context": "Goodbye",
+    "response_text": "Goodbye! It was nice talking with you.",
+    "success_score": 0.5,
+    "intent": "farewell",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_farewell_14",
+    "trigger_context": "Bye",
+    "response_text": "Bye! Take care!",
+    "success_score": 0.5,
+    "intent": "farewell",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_farewell_15",
+    "trigger_context": "See you",
+    "response_text": "See you later! Have a great day.",
+    "success_score": 0.5,
+    "intent": "farewell",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_farewell_16",
+    "trigger_context": "Take care",
+    "response_text": "You too! Goodbye.",
+    "success_score": 0.5,
+    "intent": "farewell",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_farewell_17",
+    "trigger_context": "Thanks",
+    "response_text": "You're welcome! Glad I could help.",
+    "success_score": 0.5,
+    "intent": "farewell",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_confusion_18",
+    "trigger_context": "I don't understand",
+    "response_text": "I'm not sure I understand. Could you rephrase that?",
+    "success_score": 0.5,
+    "intent": "confusion",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_confusion_19",
+    "trigger_context": "unclear",
+    "response_text": "That's unclear to me. Can you explain differently?",
+    "success_score": 0.5,
+    "intent": "confusion",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_confusion_20",
+    "trigger_context": "confusing",
+    "response_text": "I find that confusing. Could you clarify?",
+    "success_score": 0.5,
+    "intent": "confusion",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_confusion_21",
+    "trigger_context": "what do you mean",
+    "response_text": "Let me try to explain that better.",
+    "success_score": 0.5,
+    "intent": "confusion",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_confusion_22",
+    "trigger_context": "huh",
+    "response_text": "Sorry, I didn't catch that. Could you repeat?",
+    "success_score": 0.5,
+    "intent": "confusion",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_acknowledgment_23",
+    "trigger_context": "I see",
+    "response_text": "I understand what you mean.",
+    "success_score": 0.5,
+    "intent": "acknowledgment",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_acknowledgment_24",
+    "trigger_context": "got it",
+    "response_text": "Got it, that makes sense.",
+    "success_score": 0.5,
+    "intent": "acknowledgment",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_acknowledgment_25",
+    "trigger_context": "okay",
+    "response_text": "Okay, I follow you.",
+    "success_score": 0.5,
+    "intent": "acknowledgment",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_acknowledgment_26",
+    "trigger_context": "alright",
+    "response_text": "Alright, I understand.",
+    "success_score": 0.5,
+    "intent": "acknowledgment",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_acknowledgment_27",
+    "trigger_context": "understood",
+    "response_text": "Understood. I've got that now.",
+    "success_score": 0.5,
+    "intent": "acknowledgment",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_acknowledgment_28",
+    "trigger_context": "makes sense",
+    "response_text": "Yes, that makes sense to me.",
+    "success_score": 0.5,
+    "intent": "acknowledgment",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_acknowledgment_29",
+    "trigger_context": "right",
+    "response_text": "Right, I see what you're saying.",
+    "success_score": 0.5,
+    "intent": "acknowledgment",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_interest_30",
+    "trigger_context": "interesting",
+    "response_text": "That's really interesting!",
+    "success_score": 0.5,
+    "intent": "interest",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_interest_31",
+    "trigger_context": "fascinating",
+    "response_text": "How fascinating! Tell me more.",
+    "success_score": 0.5,
+    "intent": "interest",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_interest_32",
+    "trigger_context": "cool",
+    "response_text": "That's cool! I'd like to know more.",
+    "success_score": 0.5,
+    "intent": "interest",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_interest_33",
+    "trigger_context": "wow",
+    "response_text": "Wow, that's impressive!",
+    "success_score": 0.5,
+    "intent": "interest",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_interest_34",
+    "trigger_context": "amazing",
+    "response_text": "That's amazing! Please continue.",
+    "success_score": 0.5,
+    "intent": "interest",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_detail_35",
+    "trigger_context": "tell me more",
+    "response_text": "Can you tell me more about that?",
+    "success_score": 0.5,
+    "intent": "question_detail",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_detail_36",
+    "trigger_context": "elaborate",
+    "response_text": "Could you elaborate on that?",
+    "success_score": 0.5,
+    "intent": "question_detail",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_detail_37",
+    "trigger_context": "explain",
+    "response_text": "What do you mean by that?",
+    "success_score": 0.5,
+    "intent": "question_detail",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_detail_38",
+    "trigger_context": "how so",
+    "response_text": "How so? I'm curious to understand.",
+    "success_score": 0.5,
+    "intent": "question_detail",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_detail_39",
+    "trigger_context": "in what way",
+    "response_text": "In what way? Could you give an example?",
+    "success_score": 0.5,
+    "intent": "question_detail",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_detail_40",
+    "trigger_context": "like what",
+    "response_text": "Like what? Can you be more specific?",
+    "success_score": 0.5,
+    "intent": "question_detail",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_detail_41",
+    "trigger_context": "for instance",
+    "response_text": "Could you give me an example?",
+    "success_score": 0.5,
+    "intent": "question_detail",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_info_42",
+    "trigger_context": "what is",
+    "response_text": "Let me recall what I know about that...",
+    "success_score": 0.5,
+    "intent": "question_info",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_info_43",
+    "trigger_context": "who is",
+    "response_text": "I'm trying to remember who that is...",
+    "success_score": 0.5,
+    "intent": "question_info",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_info_44",
+    "trigger_context": "when",
+    "response_text": "I'll check when that happened...",
+    "success_score": 0.5,
+    "intent": "question_info",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_info_45",
+    "trigger_context": "where",
+    "response_text": "Let me think about where that was...",
+    "success_score": 0.5,
+    "intent": "question_info",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_info_46",
+    "trigger_context": "why",
+    "response_text": "That's a good question. Let me think about why...",
+    "success_score": 0.5,
+    "intent": "question_info",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_info_47",
+    "trigger_context": "how",
+    "response_text": "I'm considering how that works...",
+    "success_score": 0.5,
+    "intent": "question_info",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_question_info_48",
+    "trigger_context": "which",
+    "response_text": "Let me think about which one you mean...",
+    "success_score": 0.5,
+    "intent": "question_info",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_explain_49",
+    "trigger_context": "because",
+    "response_text": "The reason is that...",
+    "success_score": 0.5,
+    "intent": "explain",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_explain_50",
+    "trigger_context": "therefore",
+    "response_text": "Therefore, we can conclude...",
+    "success_score": 0.5,
+    "intent": "explain",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_explain_51",
+    "trigger_context": "this means",
+    "response_text": "This means that...",
+    "success_score": 0.5,
+    "intent": "explain",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_explain_52",
+    "trigger_context": "in other words",
+    "response_text": "In other words...",
+    "success_score": 0.5,
+    "intent": "explain",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_explain_53",
+    "trigger_context": "basically",
+    "response_text": "Basically, what I'm saying is...",
+    "success_score": 0.5,
+    "intent": "explain",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_topic_shift_54",
+    "trigger_context": "anyway",
+    "response_text": "Anyway, what else is on your mind?",
+    "success_score": 0.5,
+    "intent": "topic_shift",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_topic_shift_55",
+    "trigger_context": "by the way",
+    "response_text": "By the way, is there something else you'd like to know?",
+    "success_score": 0.5,
+    "intent": "topic_shift",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_topic_shift_56",
+    "trigger_context": "speaking of",
+    "response_text": "Speaking of that, let's explore it further.",
+    "success_score": 0.5,
+    "intent": "topic_shift",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_topic_shift_57",
+    "trigger_context": "change subject",
+    "response_text": "Sure, let's talk about something else.",
+    "success_score": 0.5,
+    "intent": "topic_shift",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_topic_shift_58",
+    "trigger_context": "new topic",
+    "response_text": "Okay, what would you like to discuss next?",
+    "success_score": 0.5,
+    "intent": "topic_shift",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_topic_shift_59",
+    "trigger_context": "different question",
+    "response_text": "Go ahead, ask me something different.",
+    "success_score": 0.5,
+    "intent": "topic_shift",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_agreement_60",
+    "trigger_context": "yes",
+    "response_text": "Yes, I agree with that.",
+    "success_score": 0.5,
+    "intent": "agreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_agreement_61",
+    "trigger_context": "correct",
+    "response_text": "That's correct.",
+    "success_score": 0.5,
+    "intent": "agreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_agreement_62",
+    "trigger_context": "exactly",
+    "response_text": "Exactly! You've got it.",
+    "success_score": 0.5,
+    "intent": "agreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_agreement_63",
+    "trigger_context": "absolutely",
+    "response_text": "Absolutely, I think so too.",
+    "success_score": 0.5,
+    "intent": "agreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_agreement_64",
+    "trigger_context": "definitely",
+    "response_text": "Definitely, that's right.",
+    "success_score": 0.5,
+    "intent": "agreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_agreement_65",
+    "trigger_context": "true",
+    "response_text": "True, I can see that.",
+    "success_score": 0.5,
+    "intent": "agreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_agreement_66",
+    "trigger_context": "indeed",
+    "response_text": "Indeed, that's a good point.",
+    "success_score": 0.5,
+    "intent": "agreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_disagreement_67",
+    "trigger_context": "no",
+    "response_text": "I don't think so.",
+    "success_score": 0.5,
+    "intent": "disagreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_disagreement_68",
+    "trigger_context": "incorrect",
+    "response_text": "That doesn't seem right to me.",
+    "success_score": 0.5,
+    "intent": "disagreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_disagreement_69",
+    "trigger_context": "not quite",
+    "response_text": "Not quite, let me clarify.",
+    "success_score": 0.5,
+    "intent": "disagreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_disagreement_70",
+    "trigger_context": "actually",
+    "response_text": "Actually, I think it's different.",
+    "success_score": 0.5,
+    "intent": "disagreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_disagreement_71",
+    "trigger_context": "I disagree",
+    "response_text": "I respectfully disagree with that.",
+    "success_score": 0.5,
+    "intent": "disagreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_disagreement_72",
+    "trigger_context": "false",
+    "response_text": "I believe that's not accurate.",
+    "success_score": 0.5,
+    "intent": "disagreement",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_uncertainty_73",
+    "trigger_context": "maybe",
+    "response_text": "Maybe, I'm not entirely sure.",
+    "success_score": 0.5,
+    "intent": "uncertainty",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_uncertainty_74",
+    "trigger_context": "perhaps",
+    "response_text": "Perhaps, but I'd need to think about it.",
+    "success_score": 0.5,
+    "intent": "uncertainty",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_uncertainty_75",
+    "trigger_context": "possibly",
+    "response_text": "Possibly, though I can't say for certain.",
+    "success_score": 0.5,
+    "intent": "uncertainty",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_uncertainty_76",
+    "trigger_context": "not sure",
+    "response_text": "I'm not sure about that.",
+    "success_score": 0.5,
+    "intent": "uncertainty",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_uncertainty_77",
+    "trigger_context": "don't know",
+    "response_text": "I don't know enough about that yet.",
+    "success_score": 0.5,
+    "intent": "uncertainty",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_uncertainty_78",
+    "trigger_context": "uncertain",
+    "response_text": "I'm uncertain on that point.",
+    "success_score": 0.5,
+    "intent": "uncertainty",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_recall_79",
+    "trigger_context": "remember",
+    "response_text": "Let me check my memory about that...",
+    "success_score": 0.5,
+    "intent": "recall",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_recall_80",
+    "trigger_context": "previous",
+    "response_text": "I recall we discussed this before...",
+    "success_score": 0.5,
+    "intent": "recall",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_recall_81",
+    "trigger_context": "earlier",
+    "response_text": "Earlier, you mentioned something about...",
+    "success_score": 0.5,
+    "intent": "recall",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_recall_82",
+    "trigger_context": "before",
+    "response_text": "Before, we were talking about...",
+    "success_score": 0.5,
+    "intent": "recall",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_recall_83",
+    "trigger_context": "you said",
+    "response_text": "You said something about that, right?",
+    "success_score": 0.5,
+    "intent": "recall",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_recall_84",
+    "trigger_context": "mentioned",
+    "response_text": "You mentioned that previously.",
+    "success_score": 0.5,
+    "intent": "recall",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_apology_85",
+    "trigger_context": "sorry",
+    "response_text": "I apologize for any confusion.",
+    "success_score": 0.5,
+    "intent": "apology",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_apology_86",
+    "trigger_context": "excuse me",
+    "response_text": "Excuse me, let me correct that.",
+    "success_score": 0.5,
+    "intent": "apology",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_apology_87",
+    "trigger_context": "my mistake",
+    "response_text": "My mistake, let me try again.",
+    "success_score": 0.5,
+    "intent": "apology",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_apology_88",
+    "trigger_context": "pardon",
+    "response_text": "Pardon me, I misspoke.",
+    "success_score": 0.5,
+    "intent": "apology",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_gratitude_89",
+    "trigger_context": "thank you",
+    "response_text": "You're very welcome!",
+    "success_score": 0.5,
+    "intent": "gratitude",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_gratitude_90",
+    "trigger_context": "thanks",
+    "response_text": "No problem, happy to help!",
+    "success_score": 0.5,
+    "intent": "gratitude",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_gratitude_91",
+    "trigger_context": "appreciate",
+    "response_text": "I appreciate your patience.",
+    "success_score": 0.5,
+    "intent": "gratitude",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_gratitude_92",
+    "trigger_context": "helpful",
+    "response_text": "Glad I could be helpful!",
+    "success_score": 0.5,
+    "intent": "gratitude",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_patience_93",
+    "trigger_context": "wait",
+    "response_text": "Just a moment while I think about that...",
+    "success_score": 0.5,
+    "intent": "patience",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_patience_94",
+    "trigger_context": "hold on",
+    "response_text": "Hold on, let me process that...",
+    "success_score": 0.5,
+    "intent": "patience",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_patience_95",
+    "trigger_context": "give me a moment",
+    "response_text": "Give me a moment to consider...",
+    "success_score": 0.5,
+    "intent": "patience",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_clarify_96",
+    "trigger_context": "you mean",
+    "response_text": "Do you mean...?",
+    "success_score": 0.5,
+    "intent": "clarify",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_clarify_97",
+    "trigger_context": "are you asking",
+    "response_text": "Are you asking about...?",
+    "success_score": 0.5,
+    "intent": "clarify",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_clarify_98",
+    "trigger_context": "do you want",
+    "response_text": "Do you want to know about...?",
+    "success_score": 0.5,
+    "intent": "clarify",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_clarify_99",
+    "trigger_context": "referring to",
+    "response_text": "Are you referring to...?",
+    "success_score": 0.5,
+    "intent": "clarify",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_meta_100",
+    "trigger_context": "this conversation",
+    "response_text": "I'm finding this conversation interesting.",
+    "success_score": 0.5,
+    "intent": "meta",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_meta_101",
+    "trigger_context": "talking about",
+    "response_text": "We're talking about some complex topics.",
+    "success_score": 0.5,
+    "intent": "meta",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_meta_102",
+    "trigger_context": "our discussion",
+    "response_text": "Our discussion has covered a lot.",
+    "success_score": 0.5,
+    "intent": "meta",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_meta_103",
+    "trigger_context": "what we're discussing",
+    "response_text": "What we're discussing is important.",
+    "success_score": 0.5,
+    "intent": "meta",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_learning_104",
+    "trigger_context": "let me teach you",
+    "response_text": "I'm ready to learn! What would you like to teach me?",
+    "success_score": 0.5,
+    "intent": "learning",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_learning_105",
+    "trigger_context": "did you know",
+    "response_text": "That's interesting! I'll remember that.",
+    "success_score": 0.5,
+    "intent": "learning",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_learning_106",
+    "trigger_context": "here's a fact",
+    "response_text": "Thank you for sharing! I've noted that.",
+    "success_score": 0.5,
+    "intent": "learning",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_learning_107",
+    "trigger_context": "I want to teach you",
+    "response_text": "I appreciate you taking time to teach me. Go ahead!",
+    "success_score": 0.5,
+    "intent": "learning",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_learning_108",
+    "trigger_context": "you should know",
+    "response_text": "Good to know! I'll keep that in mind.",
+    "success_score": 0.5,
+    "intent": "learning",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_learning_109",
+    "trigger_context": "remember this",
+    "response_text": "I'll do my best to remember that.",
+    "success_score": 0.5,
+    "intent": "learning",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_learning_110",
+    "trigger_context": "the answer is",
+    "response_text": "Got it, thank you for the information!",
+    "success_score": 0.5,
+    "intent": "learning",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_learning_111",
+    "trigger_context": "it means",
+    "response_text": "I understand now, thank you for explaining.",
+    "success_score": 0.5,
+    "intent": "learning",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_unknown_112",
+    "trigger_context": "I don't know about that",
+    "response_text": "I don't have information about that yet. Could you tell me more?",
+    "success_score": 0.5,
+    "intent": "unknown",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_unknown_113",
+    "trigger_context": "never heard of",
+    "response_text": "I haven't learned about that. Would you like to teach me?",
+    "success_score": 0.5,
+    "intent": "unknown",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_unknown_114",
+    "trigger_context": "what's that",
+    "response_text": "I'm not sure what that is. Can you explain?",
+    "success_score": 0.5,
+    "intent": "unknown",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_unknown_115",
+    "trigger_context": "unfamiliar with",
+    "response_text": "That's unfamiliar to me. I'd love to learn about it.",
+    "success_score": 0.5,
+    "intent": "unknown",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_verify_116",
+    "trigger_context": "is that right",
+    "response_text": "Let me verify my understanding...",
+    "success_score": 0.5,
+    "intent": "verify",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_verify_117",
+    "trigger_context": "am I correct",
+    "response_text": "Based on what I know, that seems accurate.",
+    "success_score": 0.5,
+    "intent": "verify",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_verify_118",
+    "trigger_context": "did I get that right",
+    "response_text": "I believe so, but please correct me if I'm wrong.",
+    "success_score": 0.5,
+    "intent": "verify",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_verify_119",
+    "trigger_context": "is that what you meant",
+    "response_text": "I think I understood you correctly.",
+    "success_score": 0.5,
+    "intent": "verify",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_analogy_120",
+    "trigger_context": "like",
+    "response_text": "I see the similarity you're drawing.",
+    "success_score": 0.5,
+    "intent": "analogy",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_analogy_121",
+    "trigger_context": "similar to",
+    "response_text": "That's a helpful comparison.",
+    "success_score": 0.5,
+    "intent": "analogy",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_analogy_122",
+    "trigger_context": "different from",
+    "response_text": "I understand the distinction.",
+    "success_score": 0.5,
+    "intent": "analogy",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_analogy_123",
+    "trigger_context": "related to",
+    "response_text": "I can see how they're connected.",
+    "success_score": 0.5,
+    "intent": "analogy",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_analogy_124",
+    "trigger_context": "kind of like",
+    "response_text": "That analogy helps me understand.",
+    "success_score": 0.5,
+    "intent": "analogy",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_example_125",
+    "trigger_context": "for example",
+    "response_text": "That example helps clarify things.",
+    "success_score": 0.5,
+    "intent": "example",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_example_126",
+    "trigger_context": "such as",
+    "response_text": "Those examples are helpful.",
+    "success_score": 0.5,
+    "intent": "example",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_example_127",
+    "trigger_context": "give me an example",
+    "response_text": "An example would help me understand better.",
+    "success_score": 0.5,
+    "intent": "example",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_example_128",
+    "trigger_context": "can you show me",
+    "response_text": "A demonstration would be useful.",
+    "success_score": 0.5,
+    "intent": "example",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_thinking_129",
+    "trigger_context": "let me think",
+    "response_text": "Take your time, I'm listening.",
+    "success_score": 0.5,
+    "intent": "thinking",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_thinking_130",
+    "trigger_context": "I'm thinking",
+    "response_text": "I'll wait while you gather your thoughts.",
+    "success_score": 0.5,
+    "intent": "thinking",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_thinking_131",
+    "trigger_context": "hmm",
+    "response_text": "What are you pondering?",
+    "success_score": 0.5,
+    "intent": "thinking",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_correction_132",
+    "trigger_context": "that's wrong",
+    "response_text": "I apologize for the error. What's the correct answer?",
+    "success_score": 0.5,
+    "intent": "correction",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_correction_133",
+    "trigger_context": "not quite right",
+    "response_text": "Please help me understand the correct information.",
+    "success_score": 0.5,
+    "intent": "correction",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_correction_134",
+    "trigger_context": "let me correct you",
+    "response_text": "Please do, I want to learn the right information.",
+    "success_score": 0.5,
+    "intent": "correction",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_correction_135",
+    "trigger_context": "actually it's",
+    "response_text": "Thank you for the correction! I'll update my understanding.",
+    "success_score": 0.5,
+    "intent": "correction",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_continue_136",
+    "trigger_context": "go on",
+    "response_text": "Please continue, I'm following along.",
+    "success_score": 0.5,
+    "intent": "continue",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_continue_137",
+    "trigger_context": "and then",
+    "response_text": "What happened next?",
+    "success_score": 0.5,
+    "intent": "continue",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_continue_138",
+    "trigger_context": "what else",
+    "response_text": "Is there more you'd like to share?",
+    "success_score": 0.5,
+    "intent": "continue",
+    "usage_count": 0,
+    "embedding_cache": null
+  },
+  {
+    "fragment_id": "seed_continue_139",
+    "trigger_context": "keep going",
+    "response_text": "I'm interested, please continue.",
+    "success_score": 0.5,
+    "intent": "continue",
+    "usage_count": 0,
+    "embedding_cache": null
+  }
+]

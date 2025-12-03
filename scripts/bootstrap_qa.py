@@ -8,10 +8,12 @@ when users ask similar questions.
 
 Usage:
     python bootstrap_qa.py [--data-dir DATA_DIR] [--user-id USER_ID]
+    python bootstrap_qa.py --qa-file data/generated/squad_training.txt
 """
 
 import argparse
 from pathlib import Path
+from typing import Optional
 from tqdm import tqdm
 
 from lilith.session import LilithSession, SessionConfig
@@ -54,23 +56,31 @@ def load_qa_pairs(filepath: Path) -> list[tuple[str, str]]:
     return qa_pairs
 
 
-def bootstrap_qa(data_dir: str = "data", user_id: str = "bootstrap"):
+def bootstrap_qa(data_dir: str = "data", user_id: str = "bootstrap", qa_file: Optional[str] = None):
     """
     Bootstrap Lilith's Q&A knowledge base.
     
     Args:
         data_dir: Directory for Lilith's data storage
         user_id: User ID for the bootstrap session
+        qa_file: Path to Q&A file (default: data/seed/qa_bootstrap.txt)
     """
     # Load Q&A dataset
-    qa_file = Path("data/qa_bootstrap.txt")
-    if not qa_file.exists():
-        print(f"❌ Q&A dataset not found at {qa_file}")
-        print("Make sure qa_bootstrap.txt exists in the data/ directory.")
+    if qa_file:
+        qa_path = Path(qa_file)
+    else:
+        # Try seed directory first, fall back to data root
+        qa_path = Path("data/seed/qa_bootstrap.txt")
+        if not qa_path.exists():
+            qa_path = Path("data/qa_bootstrap.txt")
+    
+    if not qa_path.exists():
+        print(f"❌ Q&A dataset not found at {qa_path}")
+        print("Make sure qa_bootstrap.txt exists in data/seed/ or data/ directory.")
         return
     
-    print("📖 Loading Q&A training dataset...")
-    qa_pairs = load_qa_pairs(qa_file)
+    print(f"📖 Loading Q&A training dataset from {qa_path}...")
+    qa_pairs = load_qa_pairs(qa_path)
     print(f"✓ Loaded {len(qa_pairs)} Q&A pairs")
     print()
     
@@ -208,6 +218,12 @@ def main():
         default="bootstrap",
         help="User ID for bootstrap session (default: bootstrap)"
     )
+    parser.add_argument(
+        "--qa-file",
+        type=str,
+        default=None,
+        help="Path to Q&A file (default: data/seed/qa_bootstrap.txt)"
+    )
     
     args = parser.parse_args()
     
@@ -215,7 +231,7 @@ def main():
     print("=" * 70)
     print()
     
-    bootstrap_qa(args.data_dir, args.user_id)
+    bootstrap_qa(args.data_dir, args.user_id, args.qa_file)
 
 
 if __name__ == "__main__":
