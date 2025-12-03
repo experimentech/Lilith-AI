@@ -2011,9 +2011,11 @@ class ResponseComposer:
         if not result:
             return None
         
-        # 4. Return ComposedResponse
+        # 4. Clean up grammar and return ComposedResponse
+        cleaned_text = self._clean_composed_response(result['text'])
+        
         return ComposedResponse(
-            text=result['text'],
+            text=cleaned_text,
             fragment_ids=[best_concept.concept_id],
             composition_weights=[similarity],
             coherence_score=result['confidence'],
@@ -2172,6 +2174,9 @@ class ResponseComposer:
         
         if not response_text:
             return None
+        
+        # Clean up grammar issues (double verbs, plural agreement)
+        response_text = self._clean_composed_response(response_text)
         
         # Calculate confidence based on concept activation and inference count
         base_confidence = getattr(main_concept, 'activation', 0.7) if main_concept else 0.7
@@ -2457,6 +2462,9 @@ class ResponseComposer:
         # Step 6: Fill template
         response_text = self.pragmatic_templates.fill_template(template, available_slots)
         
+        # Clean up grammar issues
+        response_text = self._clean_composed_response(response_text)
+        
         # Step 7: Return composed response
         return ComposedResponse(
             text=response_text,
@@ -2622,6 +2630,7 @@ class ResponseComposer:
         Handles definitions like:
         - "The wyvern, sometimes spelled wivern, is a type of mythical dragon"
         - "Python is a programming language"
+        - "Parrots (Psittaciformes), also known as psittacines, are birds with..."
         
         Extracts the part after "is/are" to get just the property.
         
@@ -2650,6 +2659,65 @@ class ResponseComposer:
                     return property_part
         
         return None
+    
+    def _clean_composed_response(self, response: str) -> str:
+        """
+        Clean up common grammar issues in composed responses.
+        
+        Fixes:
+        - Double "is is" or "are are"
+        - Singular/plural agreement for common patterns
+        
+        Args:
+            response: Raw composed response
+            
+        Returns:
+            Cleaned response
+        """
+        import re
+        
+        # Fix double verb patterns
+        response = re.sub(r'\bis\s+is\b', 'is', response, flags=re.IGNORECASE)
+        response = re.sub(r'\bare\s+are\b', 'are', response, flags=re.IGNORECASE)
+        response = re.sub(r'\bis\s+are\b', 'are', response, flags=re.IGNORECASE)
+        response = re.sub(r'\bare\s+is\b', 'is', response, flags=re.IGNORECASE)
+        
+        # Fix "X is a/an [plural noun]" → "X are [plural noun]"
+        # Common plural endings: -s (birds), -es (watches), -ies (countries)
+        # Only apply if the subject itself appears to be plural
+        
+        # Fix subject-verb agreement for plural subjects ending in 's'
+        # Pattern: "[Plural] is a" → "[Plural] are"
+        # But only if the word before "is" looks plural (ends in s, not a name)
+        def fix_plural_agreement(match):
+            subject = match.group(1)
+            verb = match.group(2)
+            rest = match.group(3)
+            
+            # Check if subject is likely plural (ends in 's' but not common singular words)
+            singular_s_words = {'this', 'has', 'is', 'was', 'does', 'its', 'his', 'hers', 
+                              'business', 'class', 'glass', 'grass', 'pass', 'mass',
+                              'success', 'process', 'address', 'congress', 'progress'}
+            
+            subject_lower = subject.lower()
+            if (subject_lower.endswith('s') and 
+                subject_lower not in singular_s_words and
+                not subject_lower.endswith('ss') and
+                len(subject_lower) > 2):
+                # Likely plural - use "are"
+                return f"{subject} are {rest}"
+            else:
+                return match.group(0)  # Keep original
+        
+        # Apply plural agreement fix
+        response = re.sub(
+            r'\b(\w+)\s+(is)\s+(a\s+)',
+            fix_plural_agreement,
+            response,
+            flags=re.IGNORECASE
+        )
+        
+        return response
     
     def _extract_concept_from_opinion(self, query: str) -> Optional[str]:
         """
@@ -2820,6 +2888,9 @@ class ResponseComposer:
             
             if external_result:
                 response_text, confidence, source = external_result
+                
+                # Clean up grammar issues (plural agreement, etc.)
+                response_text = self._clean_composed_response(response_text)
                 
                 print(f"  💡 Filled knowledge gap from {source} (confidence: {confidence:.2f})")
                 
@@ -3294,6 +3365,9 @@ class ResponseComposer:
             if template:
                 response_text = self.pragmatic_templates.fill_template(template, available_slots)
                 
+                # Clean up grammar issues
+                response_text = self._clean_composed_response(response_text)
+                
                 return ComposedResponse(
                     text=response_text,
                     fragment_ids=[template.template_id] + learned_concepts,
@@ -3482,6 +3556,9 @@ class ResponseComposer:
             
             if external_result:
                 response_text, confidence, source = external_result
+                
+                # Clean up grammar issues (plural agreement, etc.)
+                response_text = self._clean_composed_response(response_text)
                 
                 print(f"  💡 Low confidence resolved by {source} (confidence: {confidence:.2f})")
                 

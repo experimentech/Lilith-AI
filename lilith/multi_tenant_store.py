@@ -466,7 +466,15 @@ class MultiTenantFragmentStore:
                 print(f"  ⚠️  Cannot modify base pattern in user mode: {fragment_id}")
                 return None
         
-        print(f"  ⚠️  Pattern not found: {fragment_id}")
+        # Suppress warnings for known non-pattern IDs (templates, computed responses, etc.)
+        # These are valid fragment_ids but aren't stored patterns
+        non_pattern_prefixes = (
+            'confirm_', 'deny_', 'def_', 'example_', 'external_', 
+            'math_', 'fallback', 'clarification_', 'greeting_', 
+            'acknowledgment_', 'opinion_', 'capability_'
+        )
+        if not fragment_id.startswith(non_pattern_prefixes):
+            print(f"  ⚠️  Pattern not found: {fragment_id}")
         return None
     
     def learn_from_wikipedia(

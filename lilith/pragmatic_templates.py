@@ -500,6 +500,30 @@ class PragmaticTemplateStore:
             examples=["That makes sense - a wyvern being a type of dragon connects with what I know about mythical creatures."]
         )
         
+        # ============================================================
+        # EXTERNAL KNOWLEDGE TEMPLATES - Wikipedia/external source responses
+        # ============================================================
+        
+        self.templates["external_wikipedia"] = PragmaticTemplate(
+            template_id="external_wikipedia",
+            category="definition",
+            intent="external_knowledge",
+            template="{concept} {primary_property}",
+            slots=["concept", "primary_property"],
+            priority=7,
+            examples=["Birds are warm-blooded vertebrates characterized by feathers and beaked jaws."]
+        )
+        
+        self.templates["external_with_context"] = PragmaticTemplate(
+            template_id="external_with_context",
+            category="definition",
+            intent="external_knowledge_detailed",
+            template="{concept} {primary_property}. {elaboration}",
+            slots=["concept", "primary_property", "elaboration"],
+            priority=8,
+            examples=["Parrots are colorful birds known for their intelligence. They belong to the order Psittaciformes."]
+        )
+        
     def get_template(self, template_id: str) -> Optional[PragmaticTemplate]:
         """Get template by ID"""
         return self.templates.get(template_id)
