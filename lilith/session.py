@@ -622,11 +622,40 @@ class LilithSession:
         """
         Detect declarative statements and store them for learning.
         
+        Only learns objective facts, not personal statements or opinions.
+        
         Returns:
             String describing what was learned, or None
         """
         # Normalize content
         text = content.strip().rstrip('.!?')
+        
+        # Skip personal/subjective statements - these are not facts to learn
+        personal_starts = (
+            'i ', 'i\'', 'my ', 'me ', 'we ', 'our ',  # First person
+            'you ', 'your ',  # Second person
+            'he ', 'she ', 'they ', 'his ', 'her ', 'their ',  # Third person pronouns (often about people, not facts)
+            'it\'s ', 'that\'s ',  # Contractions that often indicate opinion
+        )
+        if text.lower().startswith(personal_starts):
+            return None
+        
+        # Skip statements that contain personal indicators anywhere
+        personal_indicators = (
+            ' i ', ' i\'', ' my ', ' me ', ' myself ',
+            ' you ', ' your ', ' yourself ',
+            ' think ', ' feel ', ' believe ', ' guess ', ' suppose ',
+            ' maybe ', ' probably ', ' might ', ' could be ',
+            ' used to ', ' don\'t ', ' doesn\'t ', ' won\'t ', ' can\'t ',
+        )
+        text_lower = f" {text.lower()} "
+        for indicator in personal_indicators:
+            if indicator in text_lower:
+                return None
+        
+        # Skip short statements or those that look conversational
+        if len(text) < 15 or len(text.split()) < 4:
+            return None
         
         # Patterns for declarative statements
         patterns = [
@@ -646,6 +675,14 @@ class LilithSession:
                 if len(subject) < 2 or len(predicate) < 2:
                     continue
                 if subject.lower().startswith(('what', 'who', 'where', 'when', 'why', 'how', 'do', 'does', 'is', 'are')):
+                    continue
+                
+                # Skip if subject looks personal or conversational
+                subject_lower = subject.lower()
+                if subject_lower in ('it', 'this', 'that', 'there', 'here', 'things', 'stuff'):
+                    continue
+                # Skip subjects that are clearly about the speaker or listener
+                if any(word in subject_lower for word in ('i ', 'my ', 'you ', 'your ', 'we ', 'our ')):
                     continue
                 
                 # Create Q&A pattern from declarative statement
