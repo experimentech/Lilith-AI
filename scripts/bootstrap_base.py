@@ -11,15 +11,21 @@ This is ideal for:
 - Foundation knowledge for your Discord bot
 
 Usage:
-    python bootstrap_base.py --qa-file data/generated/squad_training.txt
-    python bootstrap_base.py --qa-file data/seed/qa_bootstrap.txt
+    python scripts/bootstrap_base.py data/generated/squad_training.txt
+    python scripts/bootstrap_base.py data/seed/qa_bootstrap.txt
     
 The script runs in Teacher mode, so all data goes to data/base/
 """
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Optional
+
+# Add project root to path so we can import lilith
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 from tqdm import tqdm
 
 from lilith.session import LilithSession, SessionConfig

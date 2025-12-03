@@ -7,13 +7,19 @@ this creates actual question→answer associations that can be retrieved
 when users ask similar questions.
 
 Usage:
-    python bootstrap_qa.py [--data-dir DATA_DIR] [--user-id USER_ID]
-    python bootstrap_qa.py --qa-file data/generated/squad_training.txt
+    python scripts/bootstrap_qa.py [--data-dir DATA_DIR] [--user-id USER_ID]
+    python scripts/bootstrap_qa.py --qa-file data/generated/squad_training.txt
 """
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Optional
+
+# Add project root to path so we can import lilith
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 from tqdm import tqdm
 
 from lilith.session import LilithSession, SessionConfig
