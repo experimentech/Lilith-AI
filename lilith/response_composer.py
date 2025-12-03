@@ -2512,16 +2512,26 @@ class ResponseComposer:
         ]):
             return "definition"
         
-        # Yes/No confirmation questions - "Is X a Y?", "Are X Y?", "Can X do Y?"
+        # Capability/action requests TO THE AI - "Can you X?", "Could you X?"
+        # These are requests for the AI to do something, not yes/no factual questions
         import re
+        if re.match(r"^(can|could|would|will)\s+you\s+", user_lower):
+            return "capability_request"
+        
+        # Opinion questions TO THE AI - "Do you like X?", "Do you think X?"
+        if re.match(r"^do\s+you\s+(like|love|hate|enjoy|prefer|think|believe|feel)\b", user_lower):
+            return "opinion"
+        
+        # Yes/No confirmation questions - "Is X a Y?", "Are X Y?", "Can X do Y?"
+        # Note: These are about FACTS, not requests to the AI
         confirmation_patterns = [
             r"^is\s+(a|an|the)?\s*\w+\s+(a|an|the|type|kind|form|part|sort)\b",  # Is [a] X a/type of Y?
             r"^are\s+(a|an|the)?\s*\w+\s+(a|an|the|type|kind|form|part|sort)\b",  # Are [a] X a/type of Y?
             r"^is\s+(a|an|the)?\s*\w+\s+\w+.*\?$",  # Is X Y? (simple yes/no with ?)
             r"^are\s+(a|an|the)?\s*\w+\s+\w+",  # Are X Y?
-            r"^can\s+\w+\s+\w+",  # Can X do Y?
-            r"^does\s+\w+\s+\w+",  # Does X have Y?
-            r"^do\s+\w+\s+\w+",  # Do X Y? (but NOT "do you know about")
+            r"^can\s+(?!you\s)\w+\s+\w+",  # Can X do Y? (but NOT "can you")
+            r"^does\s+(?!it\s+refer|this\s+refer)\w+\s+\w+",  # Does X have Y?
+            r"^do\s+(?!you\s)\w+\s+\w+",  # Do X Y? (but NOT "do you")
         ]
         for pattern in confirmation_patterns:
             if re.match(pattern, user_lower):
@@ -3255,6 +3265,29 @@ class ResponseComposer:
                 if len(learned_concepts) > 1:
                     available_slots["related_concept"] = learned_concepts[1]
         
+        elif category == "capability_request" and primary_data:
+            # User is asking AI to do something - "Can you name some video games?"
+            # Response should list/demonstrate the capability
+            concept_term = self._extract_concept_from_query(query)
+            if concept_term:
+                available_slots["concept"] = concept_term
+                
+                if 'definition' in primary_data:
+                    available_slots["examples"] = primary_data['definition']
+                
+            # Fall back to elaboration category for template
+            category = "elaboration"
+        
+        elif category == "opinion" and primary_data:
+            # Opinion question about a topic - "Do you like X?"
+            concept_term = self._extract_concept_from_query(query)
+            if concept_term:
+                available_slots["subject"] = concept_term
+                
+                if 'definition' in primary_data:
+                    # Use definition to inform the opinion
+                    available_slots["elaboration"] = primary_data['definition'].split('.')[0]
+        
         # If we have slots, try to match and fill template
         if available_slots:
             template = self.pragmatic_templates.match_best_template(category, available_slots)
@@ -3363,11 +3396,16 @@ class ResponseComposer:
                 if word_clean not in terms:
                     terms.append(word_clean)
         
-        # Remove common words
+        # Remove common words and PRONOUNS (pronouns should be resolved from context, not Wikipedia)
         common_words = {
             'something', 'anything', 'everything', 'nothing',
             'someone', 'anyone', 'everyone',
-            'question', 'answer', 'information', 'knowledge'
+            'question', 'answer', 'information', 'knowledge',
+            # Pronouns - these refer to context, not standalone concepts
+            'it', 'its', 'they', 'them', 'their', 'theirs',
+            'he', 'him', 'his', 'she', 'her', 'hers',
+            'this', 'that', 'these', 'those',
+            'who', 'whom', 'which', 'what', 'whose'
         }
         
         terms = [t for t in terms if t.lower() not in common_words]
