@@ -685,61 +685,24 @@ class LilithSession:
                 if any(word in subject_lower for word in ('i ', 'my ', 'you ', 'your ', 'we ', 'our ')):
                     continue
                 
-                # Store the fact with multiple question forms for better retrieval
-                questions_to_store = []
-                answer = text  # Use the original statement as the answer
+                # SIMPLIFIED: Store the statement as-is for BNN semantic matching
+                # The BNN embedding already recognizes that:
+                #   "are games edible" ↔ "games are not edible" (0.88 similarity)
+                #   "is a parrot a bird" ↔ "a parrot is a bird" (1.00 similarity)
+                # So we don't need complex question-form generation - just store the fact
+                # and let the neural network handle the semantic matching!
                 
-                # Create Q&A patterns from declarative statement
-                if relation_type == 'is':
-                    # Handle "X is/are (not) Y" patterns
-                    questions_to_store.append(f"What is {subject}?")
-                    questions_to_store.append(f"What are {subject}?")
-                    
-                    # Check if this is a negative statement
-                    is_negative = predicate.lower().startswith('not ')
-                    predicate_core = predicate[4:].strip() if is_negative else predicate
-                    
-                    # Add polar question forms: "Is X Y?" / "Are X Y?"
-                    questions_to_store.append(f"Is {subject} {predicate_core}?")
-                    questions_to_store.append(f"Are {subject} {predicate_core}?")
-                    
-                    # If it's about a property, add property question
-                    if ' a ' in predicate or ' an ' in predicate:
-                        questions_to_store.append(f"Is {subject} a {predicate_core.split(' a ')[-1].split(' an ')[-1]}?")
-                    
-                elif relation_type == 'does':
-                    questions_to_store.append(f"What does {subject} do?")
-                    questions_to_store.append(f"Does {subject} {predicate}?")
-                    
-                elif relation_type == 'has':
-                    questions_to_store.append(f"What does {subject} have?")
-                    questions_to_store.append(f"Does {subject} have {predicate}?")
-                    
-                else:  # verb
-                    questions_to_store.append(f"What about {subject}?")
-                    questions_to_store.append(text)  # Store the statement itself as a pattern
+                answer = text  # The full statement is both trigger and answer
                 
                 try:
-                    # Store with the first (primary) question form
-                    primary_question = questions_to_store[0]
+                    # Store the statement itself as the pattern trigger
+                    # BNN semantic matching will find it when similar questions are asked
                     self.store.add_pattern(
-                        primary_question, 
+                        text,  # Use statement as trigger (best semantic match)
                         answer, 
-                        success_score=0.7,
+                        success_score=0.75,
                         intent='declarative_learning'
                     )
-                    
-                    # Store additional question forms with slightly lower score
-                    for alt_question in questions_to_store[1:]:
-                        try:
-                            self.store.add_pattern(
-                                alt_question,
-                                answer,
-                                success_score=0.65,
-                                intent='declarative_learning'
-                            )
-                        except Exception:
-                            pass  # Ignore failures on alternative forms
                     
                     return f"{subject} -> {predicate}"
                 except Exception as e:
