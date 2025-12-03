@@ -608,6 +608,10 @@ class ResponseComposer:
         # Use cleaned query for retrieval if available
         retrieval_query = context if context != user_input else cleaned_user_input
         
+        # For confirmation questions (is X a Y?), also try statement form (X is a Y)
+        # This helps match learned facts like "games are not edible" when asking "are games edible?"
+        statement_form = self._confirmation_to_statement(user_input) if user_input else None
+        
         if use_semantic_retrieval and hasattr(self.fragments, 'retrieve_patterns_hybrid'):
             # NEW PATH: BNN embedding + keyword hybrid (OPEN BOOK EXAM)
             # BNN learns "how to recognize similar contexts" 
@@ -620,6 +624,22 @@ class ResponseComposer:
                 intent_filter=intent_hint  # Pass extracted intent for filtering
             )
             
+            # CONFIRMATION QUESTION ENHANCEMENT: Also search for statement form
+            # E.g., "is a parrot a bird?" should also match "a parrot is a bird"
+            if statement_form and len(patterns) < topk:
+                statement_patterns = self.fragments.retrieve_patterns_hybrid(
+                    statement_form,
+                    topk=topk,
+                    min_score=0.0,
+                    semantic_weight=semantic_weight
+                )
+                # Merge, avoiding duplicates
+                existing_ids = {p.pattern_id for p, _ in patterns}
+                for pattern, score in statement_patterns:
+                    if pattern.pattern_id not in existing_ids:
+                        patterns.append((pattern, score))
+                        existing_ids.add(pattern.pattern_id)
+            
             # MULTI-TURN COHERENCE: Boost patterns that match active conversation topics
             # NOTE: Disabled for now - the real issue is pattern quality, not topic coherence
             # patterns = self._boost_topic_coherent_patterns(patterns, context)
@@ -629,6 +649,17 @@ class ResponseComposer:
                 retrieval_query,
                 topk=topk * 3
             )
+            
+            # Also try statement form for keyword matching
+            if statement_form and len(patterns) < topk:
+                statement_patterns = self.fragments.retrieve_patterns(
+                    statement_form,
+                    topk=topk
+                )
+                existing_ids = {p.pattern_id for p, _ in patterns}
+                for pattern, score in statement_patterns:
+                    if pattern.pattern_id not in existing_ids:
+                        patterns.append((pattern, score))
         
         if not patterns:
             # Fallback if no patterns found - try external knowledge
@@ -2793,6 +2824,58 @@ class ResponseComposer:
             return subject, f"{verb} {rest}"
         
         return None, None
+    
+    def _confirmation_to_statement(self, query: str) -> Optional[str]:
+        """
+        Convert a confirmation question to a statement for pattern matching.
+        
+        This helps match "is a parrot a bird?" to stored facts like "A parrot is a bird".
+        
+        Args:
+            query: Confirmation question like "is a parrot a bird?"
+            
+        Returns:
+            Statement form like "a parrot is a bird" or None
+        """
+        import re
+        query_lower = query.lower().strip().rstrip('?')
+        
+        # Pattern: "is X a/an Y?" -> "X is a/an Y"
+        match = re.match(r'^is\s+(a|an|the)?\s*(.+?)\s+(a|an)\s+(.+)$', query_lower)
+        if match:
+            article1, subject, article2, relationship = match.groups()
+            subject_str = f"{article1 + ' ' if article1 else ''}{subject}"
+            return f"{subject_str} is {article2} {relationship}"
+        
+        # Pattern: "are X Y?" -> "X are Y"
+        match = re.match(r'^are\s+(a|an|the)?\s*(.+?)\s+(.+)$', query_lower)
+        if match:
+            article, subject, predicate = match.groups()
+            subject_str = f"{article + ' ' if article else ''}{subject}"
+            return f"{subject_str} are {predicate}"
+        
+        # Pattern: "is X adjective?" -> "X is adjective"
+        match = re.match(r'^is\s+(a|an|the)?\s*(.+?)\s+(\w+)$', query_lower)
+        if match:
+            article, subject, adjective = match.groups()
+            subject_str = f"{article + ' ' if article else ''}{subject}"
+            return f"{subject_str} is {adjective}"
+        
+        # Pattern: "does X Y?" -> "X does Y" (for verbs)
+        match = re.match(r'^does\s+(a|an|the)?\s*(.+?)\s+(.+)$', query_lower)
+        if match:
+            article, subject, verb_phrase = match.groups()
+            subject_str = f"{article + ' ' if article else ''}{subject}"
+            return f"{subject_str} does {verb_phrase}"
+        
+        # Pattern: "can X Y?" -> "X can Y"
+        match = re.match(r'^can\s+(a|an|the)?\s*(.+?)\s+(.+)$', query_lower)
+        if match:
+            article, subject, verb_phrase = match.groups()
+            subject_str = f"{article + ' ' if article else ''}{subject}"
+            return f"{subject_str} can {verb_phrase}"
+        
+        return None
     
     def _extract_teaching_parts(self, query: str) -> Tuple[Optional[str], Optional[str]]:
         """

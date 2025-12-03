@@ -653,8 +653,8 @@ class LilithSession:
             if indicator in text_lower:
                 return None
         
-        # Skip short statements or those that look conversational
-        if len(text) < 15 or len(text.split()) < 4:
+        # Skip very short statements (but allow factual statements like "X is Y")
+        if len(text) < 10 or len(text.split()) < 3:
             return None
         
         # Patterns for declarative statements
@@ -685,27 +685,62 @@ class LilithSession:
                 if any(word in subject_lower for word in ('i ', 'my ', 'you ', 'your ', 'we ', 'our ')):
                     continue
                 
-                # Create Q&A pattern from declarative statement
+                # Store the fact with multiple question forms for better retrieval
+                questions_to_store = []
+                answer = text  # Use the original statement as the answer
+                
+                # Create Q&A patterns from declarative statement
                 if relation_type == 'is':
-                    question = f"What is {subject}?"
-                    answer = f"{subject} is {predicate}"
+                    # Handle "X is/are (not) Y" patterns
+                    questions_to_store.append(f"What is {subject}?")
+                    questions_to_store.append(f"What are {subject}?")
+                    
+                    # Check if this is a negative statement
+                    is_negative = predicate.lower().startswith('not ')
+                    predicate_core = predicate[4:].strip() if is_negative else predicate
+                    
+                    # Add polar question forms: "Is X Y?" / "Are X Y?"
+                    questions_to_store.append(f"Is {subject} {predicate_core}?")
+                    questions_to_store.append(f"Are {subject} {predicate_core}?")
+                    
+                    # If it's about a property, add property question
+                    if ' a ' in predicate or ' an ' in predicate:
+                        questions_to_store.append(f"Is {subject} a {predicate_core.split(' a ')[-1].split(' an ')[-1]}?")
+                    
                 elif relation_type == 'does':
-                    question = f"What does {subject} do?"
-                    answer = f"{subject} does {predicate}"
+                    questions_to_store.append(f"What does {subject} do?")
+                    questions_to_store.append(f"Does {subject} {predicate}?")
+                    
                 elif relation_type == 'has':
-                    question = f"What does {subject} have?"
-                    answer = f"{subject} has {predicate}"
+                    questions_to_store.append(f"What does {subject} have?")
+                    questions_to_store.append(f"Does {subject} have {predicate}?")
+                    
                 else:  # verb
-                    question = f"What about {subject}?"
-                    answer = text
+                    questions_to_store.append(f"What about {subject}?")
+                    questions_to_store.append(text)  # Store the statement itself as a pattern
                 
                 try:
+                    # Store with the first (primary) question form
+                    primary_question = questions_to_store[0]
                     self.store.add_pattern(
-                        question, 
+                        primary_question, 
                         answer, 
                         success_score=0.7,
                         intent='declarative_learning'
                     )
+                    
+                    # Store additional question forms with slightly lower score
+                    for alt_question in questions_to_store[1:]:
+                        try:
+                            self.store.add_pattern(
+                                alt_question,
+                                answer,
+                                success_score=0.65,
+                                intent='declarative_learning'
+                            )
+                        except Exception:
+                            pass  # Ignore failures on alternative forms
+                    
                     return f"{subject} -> {predicate}"
                 except Exception as e:
                     print(f"  ⚠️  Failed to store declarative: {e}")

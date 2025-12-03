@@ -86,7 +86,29 @@ class WikipediaLookup:
             "Tell me about Python" -> "Python"
             "Who is Ada Lovelace?" -> "Ada Lovelace"
             "Do you know what an apple is?" -> "apple"
+            "is a parrot a bird?" -> "parrot" (extract subject from polar question)
         """
+        import re
+        
+        query_lower = query.lower().strip('?!.')
+        
+        # Handle polar questions: "is X a Y?" or "are X Y?"
+        # We want to extract X (the subject being asked about)
+        polar_patterns = [
+            r'^(?:is|are|was|were)\s+(?:a|an|the)?\s*(.+?)\s+(?:a|an)\s+.+$',  # is X a Y?
+            r'^(?:is|are|was|were)\s+(.+?)\s+(?:a|an)\s+.+$',  # is X a Y? (no article before X)
+            r'^(?:is|are|was|were)\s+(?:a|an|the)?\s*(.+?)\s+\w+$',  # is X adjective?
+            r'^(?:do|does|did)\s+(?:a|an|the)?\s*(.+?)\s+.+$',  # does X verb?
+        ]
+        
+        for pattern in polar_patterns:
+            match = re.match(pattern, query_lower)
+            if match:
+                subject = match.group(1).strip()
+                # Make sure we got something meaningful (not just articles)
+                if subject and subject not in ('a', 'an', 'the', 'it', 'this', 'that'):
+                    return subject.title()
+        
         # Remove question words and conversational phrases
         question_words = [
             'what', 'who', 'where', 'when', 'why', 'how', 'which', 
@@ -97,7 +119,7 @@ class WikipediaLookup:
             'like', 'love', 'hate', 'want', 'need',  # Preference/desire verbs
         ]
         
-        words = query.lower().strip('?!.').split()
+        words = query_lower.split()
         cleaned = [w for w in words if w not in question_words]
         
         if not cleaned:
