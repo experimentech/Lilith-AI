@@ -13,6 +13,12 @@ nltk>=3.8.1       # WordNet for synonyms/antonyms (optional but recommended)
 discord.py>=2.3.0  # For Discord integration (optional)
 python-dotenv>=1.0.0  # For environment variables (optional)
 
+# Optional: Dataset Downloads
+# datasets>=2.14.0  # HuggingFace datasets (for download_datasets.py)
+# pypdf>=3.0.0      # PDF support (for train_from_document.py)
+# python-docx>=0.8.0  # Word doc support (for train_from_document.py)
+# beautifulsoup4>=4.12.0  # HTML parsing (for train_from_document.py)
+
 # Testing
 pytest>=7.4.0
 
