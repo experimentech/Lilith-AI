@@ -374,8 +374,22 @@ class ReasoningStage:
             
         concepts = list(self.working_memory.values())
         
+        # Normalize all embeddings to the same dimension before concatenation
+        # Find the minimum dimension among all concept embeddings
+        min_dim = min(c.embedding.shape[-1] for c in concepts)
+        
+        # Truncate all embeddings to the minimum dimension
+        normalized_embeddings = []
+        for c in concepts:
+            emb = c.embedding
+            if emb.dim() == 1:
+                emb = emb.unsqueeze(0)
+            # Truncate to min_dim
+            emb = emb[:, :min_dim]
+            normalized_embeddings.append(emb)
+        
         # Stack embeddings for batch processing
-        embeddings = torch.cat([c.embedding for c in concepts], dim=0)
+        embeddings = torch.cat(normalized_embeddings, dim=0)
         
         # Evolve through PMFlow
         try:
@@ -423,10 +437,10 @@ class ReasoningStage:
                     evolved[j:j+1]
                 ).item()
                 
-                # Compute similarity before evolution
+                # Compute similarity before evolution (use normalized embeddings)
                 orig_sim = F.cosine_similarity(
-                    concept_a.embedding,
-                    concept_b.embedding
+                    normalized_embeddings[i],
+                    normalized_embeddings[j]
                 ).item()
                 
                 # Convergence: concepts are semantically related

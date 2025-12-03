@@ -339,10 +339,14 @@ class VocabularyTracker:
                     # Ensure alphabetical order for consistency
                     t1, t2 = sorted([term1, term2])
                     
+                    # Use INSERT OR IGNORE + UPDATE for older SQLite compatibility
                     cursor.execute('''
-                        INSERT INTO cooccurrence (term1, term2, count)
-                        VALUES (?, ?, 1)
-                        ON CONFLICT(term1, term2) DO UPDATE SET count = count + 1
+                        INSERT OR IGNORE INTO cooccurrence (term1, term2, count)
+                        VALUES (?, ?, 0)
+                    ''', (t1, t2))
+                    cursor.execute('''
+                        UPDATE cooccurrence SET count = count + 1
+                        WHERE term1 = ? AND term2 = ?
                     ''', (t1, t2))
             
             conn.commit()

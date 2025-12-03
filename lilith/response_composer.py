@@ -2500,6 +2500,18 @@ class ResponseComposer:
         ]):
             return "opinion"
         
+        # Knowledge queries - "Do you know about X?" (asking about AI's knowledge)
+        # These should be treated as definition queries, NOT confirmations
+        if any(phrase in user_lower for phrase in [
+            "do you know about",
+            "do you know what",
+            "do you know of",
+            "have you heard of",
+            "have you heard about",
+            "are you familiar with"
+        ]):
+            return "definition"
+        
         # Yes/No confirmation questions - "Is X a Y?", "Are X Y?", "Can X do Y?"
         import re
         confirmation_patterns = [
@@ -2509,7 +2521,7 @@ class ResponseComposer:
             r"^are\s+(a|an|the)?\s*\w+\s+\w+",  # Are X Y?
             r"^can\s+\w+\s+\w+",  # Can X do Y?
             r"^does\s+\w+\s+\w+",  # Does X have Y?
-            r"^do\s+\w+\s+\w+",  # Do X Y?
+            r"^do\s+\w+\s+\w+",  # Do X Y? (but NOT "do you know about")
         ]
         for pattern in confirmation_patterns:
             if re.match(pattern, user_lower):
@@ -2561,18 +2573,37 @@ class ResponseComposer:
         """
         query_lower = query.lower()
         
-        # Remove question patterns
-        for pattern in ["what is", "what are", "define", "definition of", "tell me about", "explain"]:
+        # Remove question patterns (including knowledge queries)
+        for pattern in [
+            "do you know about", "do you know what", "do you know of",
+            "have you heard of", "have you heard about", "are you familiar with",
+            "what is", "what are", "define", "definition of", "tell me about", "explain"
+        ]:
             query_lower = query_lower.replace(pattern, "").strip()
         
         # Remove question mark
         query_lower = query_lower.replace("?", "").strip()
         
-        # Remove question words
+        # Remove question words but KEEP the remaining phrase intact
+        # Don't remove articles at the start of multi-word concepts
         words = query_lower.split()
-        concept_words = [w for w in words if w not in ["what", "how", "why", "when", "where", "who", "the", "a", "an"]]
         
-        return " ".join(concept_words) if concept_words else None
+        # Only remove leading question words, not articles that are part of the concept name
+        while words and words[0] in ["what", "how", "why", "when", "where", "who"]:
+            words.pop(0)
+        
+        # Remove trailing articles but keep leading ones for compound proper nouns
+        # e.g., "The Elder Scrolls" should stay intact
+        concept = " ".join(words).strip()
+        
+        # Remove leading article only if not part of a title (heuristic: capitalized words follow)
+        if concept.startswith(("the ", "a ", "an ")):
+            rest = concept.split(" ", 1)[1] if " " in concept else ""
+            # If the rest doesn't start with uppercase, it's probably not a title
+            if rest and not rest[0].isupper():
+                concept = rest
+        
+        return concept if concept else None
     
     def _extract_property_from_definition(self, definition: str, concept: str) -> Optional[str]:
         """
@@ -3248,6 +3279,7 @@ class ResponseComposer:
         
         Heuristics:
         - Capitalized words (proper nouns)
+        - Consecutive capitalized words (titles like "The Elder Scrolls")
         - Compound terms (Capitalized + number, e.g., "Atari 2600")
         - Technical-sounding words (>8 chars, uncommon patterns)
         - Words in quotes
@@ -3270,6 +3302,16 @@ class ResponseComposer:
         quoted = re.findall(r"'([^']+)'", query)
         terms.extend(quoted)
         
+        # Extract CONSECUTIVE capitalized words as a single phrase (proper noun phrases / titles)
+        # This handles: "The Elder Scrolls", "World of Warcraft", "Game of Thrones"
+        title_pattern = r'\b((?:[A-Z][a-zA-Z]*\s+){1,5}[A-Z][a-zA-Z]*)\b'
+        title_matches = re.findall(title_pattern, query)
+        for title in title_matches:
+            title_clean = title.strip().rstrip('?.,!')
+            # Only add if it's more than one word (single words handled below)
+            if title_clean and ' ' in title_clean and title_clean not in terms:
+                terms.append(title_clean)
+        
         # Extract compound terms: Word with capital letter followed by numbers
         # Handles: "Atari 2600", "iPhone 15", "PlayStation 5", "Windows 11"
         compound_patterns = [
@@ -3283,12 +3325,14 @@ class ResponseComposer:
                 if compound_clean and compound_clean not in terms:
                     terms.append(compound_clean)
         
-        # Extract capitalized words (but not first word if it's a question)
-        # Skip words that are already part of a compound term
-        words = query.split()
+        # Build set of words already part of multi-word terms (to avoid duplicates)
         compound_words = set()
         for compound in terms:
             compound_words.update(compound.split())
+        
+        # Extract single capitalized words (but not first word if it's a question)
+        # Skip words that are already part of a compound term
+        words = query.split()
         
         for i, word in enumerate(words):
             word_clean = re.sub(r'[^\w]', '', word)
@@ -3327,6 +3371,10 @@ class ResponseComposer:
         }
         
         terms = [t for t in terms if t.lower() not in common_words]
+        
+        # Prioritize multi-word terms (titles) over single words
+        # Sort by word count (descending), then alphabetically
+        terms.sort(key=lambda t: (-len(t.split()), t.lower()))
         
         # Limit to top 3 most likely unknown terms
         return terms[:3]

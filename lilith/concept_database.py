@@ -109,16 +109,13 @@ class ConceptDatabase:
         cursor = self.conn.cursor()
         
         try:
-            # Insert or update concept
+            # Insert or update concept (using INSERT OR REPLACE for older SQLite compatibility)
             cursor.execute("""
-                INSERT INTO concepts (concept_id, term, confidence, source, usage_count)
-                VALUES (?, ?, ?, ?, 0)
-                ON CONFLICT(concept_id) DO UPDATE SET
-                    term = excluded.term,
-                    confidence = excluded.confidence,
-                    source = excluded.source,
-                    updated_at = CURRENT_TIMESTAMP
-            """, (concept_id, term, confidence, source))
+                INSERT OR REPLACE INTO concepts (concept_id, term, confidence, source, usage_count, updated_at)
+                VALUES (?, ?, ?, ?, 
+                    COALESCE((SELECT usage_count FROM concepts WHERE concept_id = ?), 0),
+                    CURRENT_TIMESTAMP)
+            """, (concept_id, term, confidence, source, concept_id))
             
             # Delete old properties and relations (simpler than diffing)
             cursor.execute("DELETE FROM properties WHERE concept_id = ?", (concept_id,))
