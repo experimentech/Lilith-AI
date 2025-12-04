@@ -98,16 +98,25 @@ class WikipediaLookup:
             r'^(?:is|are|was|were)\s+(?:a|an|the)?\s*(.+?)\s+(?:a|an)\s+.+$',  # is X a Y?
             r'^(?:is|are|was|were)\s+(.+?)\s+(?:a|an)\s+.+$',  # is X a Y? (no article before X)
             r'^(?:is|are|was|were)\s+(?:a|an|the)?\s*(.+?)\s+\w+$',  # is X adjective?
-            r'^(?:do|does|did)\s+(?:a|an|the)?\s*(.+?)\s+.+$',  # does X verb?
+            r'^(?:do|does|did)\s+(?:a|an|the)?\s*(.+?)\s+(?:have|eat|live|fly|swim|run|walk|talk|speak)\b.+$',  # does X verb?
         ]
         
         for pattern in polar_patterns:
             match = re.match(pattern, query_lower)
             if match:
                 subject = match.group(1).strip()
-                # Make sure we got something meaningful (not just articles)
-                if subject and subject not in ('a', 'an', 'the', 'it', 'this', 'that'):
+                # Make sure we got something meaningful (not just articles or pronouns)
+                if subject and subject not in ('a', 'an', 'the', 'it', 'this', 'that', 'you', 'i', 'we', 'they'):
                     return subject.title()
+        
+        # Handle "do you know about X?" pattern specifically
+        know_about_match = re.match(r'^(?:do\s+you\s+know\s+(?:about|of)|tell\s+me\s+about|what\s+(?:is|are))\s+(.+)$', query_lower)
+        if know_about_match:
+            subject = know_about_match.group(1).strip()
+            # Remove trailing question words
+            subject = re.sub(r'\s*\?$', '', subject)
+            if subject and subject not in ('a', 'an', 'the', 'it', 'this', 'that'):
+                return subject.title()
         
         # Remove question words and conversational phrases
         question_words = [
