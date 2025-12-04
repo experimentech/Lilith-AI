@@ -674,7 +674,12 @@ class LilithSession:
                 # Don't learn questions or very short statements
                 if len(subject) < 2 or len(predicate) < 2:
                     continue
-                if subject.lower().startswith(('what', 'who', 'where', 'when', 'why', 'how', 'do', 'does', 'is', 'are')):
+                
+                # Skip if subject IS a question word (not just starts with one)
+                # This prevents learning "what is X" as a fact, but allows "dogs", "dolphins", etc.
+                question_words = {'what', 'who', 'where', 'when', 'why', 'how', 'do', 'does', 'did', 'is', 'are', 'was', 'were', 'can', 'could', 'would', 'should'}
+                subject_first_word = subject.lower().split()[0] if subject.split() else ''
+                if subject_first_word in question_words:
                     continue
                 
                 # Skip if subject looks personal or conversational
