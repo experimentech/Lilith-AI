@@ -38,11 +38,14 @@ class WikipediaLookup:
     
     Uses Wikipedia's REST API to fetch article summaries without authentication.
     Extracts clean, factual information suitable for pattern learning.
+    
+    Supports BNN-based topic extraction via TopicExtractor when available.
     """
     
     def __init__(self):
         self.base_url = "https://en.wikipedia.org/api/rest_v1/page/summary/"
         self.user_agent = "Lilith/1.0 (Educational neuro-symbolic AI)"
+        self.topic_extractor = None  # Set by KnowledgeAugmenter.set_topic_extractor()
         
     def lookup(self, query: str, conversation_history: str = "") -> Optional[Dict[str, Any]]:
         """
@@ -57,7 +60,7 @@ class WikipediaLookup:
             or None if not found
         """
         # Clean query for Wikipedia article title format
-        # Convert "What is machine learning?" -> "Machine learning"
+        # Uses BNN-based TopicExtractor if available, else falls back to regex
         cleaned_query = self._clean_query(query)
         
         if not cleaned_query:
@@ -72,21 +75,48 @@ class WikipediaLookup:
         result = self._fetch_article(cleaned_query, context=full_context)
         
         if result:
+            # Report success to topic extractor for learning
+            if self.topic_extractor:
+                self.topic_extractor.update_success(cleaned_query, True)
             return result
             
         # If no exact match, try search API
-        return self._search_and_fetch(cleaned_query, context=full_context)
+        result = self._search_and_fetch(cleaned_query, context=full_context)
+        
+        # Report success/failure to topic extractor
+        if self.topic_extractor:
+            self.topic_extractor.update_success(cleaned_query, result is not None)
+        
+        return result
     
     def _clean_query(self, query: str) -> str:
         """
         Clean user query to Wikipedia article title format.
         
+        If TopicExtractor is available, uses BNN-based semantic matching.
+        Otherwise falls back to regex patterns.
+        
         Examples:
             "What is machine learning?" -> "machine learning"
             "Tell me about Python" -> "Python"
             "Who is Ada Lovelace?" -> "Ada Lovelace"
-            "Do you know what an apple is?" -> "apple"
-            "is a parrot a bird?" -> "parrot" (extract subject from polar question)
+            "Do you know about dogs?" -> "Dogs" (via BNN or regex)
+        """
+        # Try BNN-based topic extraction first
+        if self.topic_extractor:
+            topic, score = self.topic_extractor.extract_topic(query)
+            if topic:
+                print(f"  🧠 BNN extracted topic: '{topic}' (score: {score:.3f})")
+                return topic
+        
+        # Fallback to regex-based cleaning
+        return self._regex_clean_query(query)
+    
+    def _regex_clean_query(self, query: str) -> str:
+        """
+        Fallback regex-based query cleaning.
+        
+        Used when TopicExtractor is not available or finds no match.
         """
         import re
         
@@ -748,14 +778,20 @@ class KnowledgeAugmenter:
     2. Wiktionary - for word definitions
     3. Free Dictionary - for definitions with examples
     4. Wikipedia - for general knowledge, concepts
+    
+    Topic Extraction:
+    When a TopicExtractor is provided, uses BNN-based semantic matching
+    to extract topics from queries instead of regex patterns.
     """
     
-    def __init__(self, enabled: bool = True):
+    def __init__(self, enabled: bool = True, topic_extractor=None):
         """
         Args:
             enabled: Whether external lookups are enabled (can be toggled)
+            topic_extractor: Optional TopicExtractor for BNN-based topic extraction
         """
         self.enabled = enabled
+        self.topic_extractor = topic_extractor
         
         # Initialize all lookup sources
         self.wordnet = WordNetLookup()
@@ -772,6 +808,18 @@ class KnowledgeAugmenter:
             'free_dictionary': 0,
             'wikipedia': 0
         }
+    
+    def set_topic_extractor(self, topic_extractor) -> None:
+        """
+        Set the topic extractor for BNN-based query cleaning.
+        
+        This allows late binding when the encoder isn't available at init time.
+        """
+        self.topic_extractor = topic_extractor
+        if topic_extractor:
+            # Also give it to Wikipedia lookup
+            self.wikipedia.topic_extractor = topic_extractor
+
     
     def lookup(self, query: str, conversation_history: str = "", min_confidence: float = 0.6) -> Optional[Tuple[str, float, str]]:
         """

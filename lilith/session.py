@@ -210,6 +210,21 @@ class LilithSession:
             except ImportError:
                 pass
         
+        # Initialize topic extractor for BNN-based query cleaning
+        self.topic_extractor = None
+        try:
+            from lilith.topic_extractor import TopicExtractor
+            topics_path = Path(self.config.data_path) / "topics.json"
+            self.topic_extractor = TopicExtractor(
+                encoder=self.encoder,
+                storage_path=topics_path
+            )
+            # Wire up to knowledge augmenter
+            if self.composer.knowledge_augmenter:
+                self.composer.knowledge_augmenter.set_topic_extractor(self.topic_extractor)
+        except ImportError:
+            pass
+        
         # Initialize feedback tracker
         self.feedback_tracker = None
         if self.config.enable_feedback_detection:
@@ -708,6 +723,12 @@ class LilithSession:
                         success_score=0.75,
                         intent='declarative_learning'
                     )
+                    
+                    # Learn the topic for BNN-based query extraction
+                    # This allows future "do you know about {subject}?" queries
+                    # to be resolved via semantic similarity instead of regex
+                    if self.topic_extractor:
+                        self.topic_extractor.learn_topic(subject, text)
                     
                     return f"{subject} -> {predicate}"
                 except Exception as e:
