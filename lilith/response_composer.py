@@ -580,6 +580,8 @@ class ResponseComposer:
         # 3.5 TRY DELIBERATION-BASED COMPOSITION FIRST
         # If reasoning found activated concepts with properties, compose from those
         # This is the proper cognitive flow: deliberate → compose from concepts
+        deliberation_failed_relevance = False  # Track if we rejected concepts
+        
         if deliberation_result and deliberation_result.activated_concepts:
             # Detect conversation category for template selection
             category = self._detect_conversation_category(user_input)
@@ -598,6 +600,40 @@ class ResponseComposer:
                 return deliberation_response
             elif deliberation_response:
                 print(f"  ⚠️ Deliberation composition low confidence ({deliberation_response.confidence:.2f}), trying patterns")
+            else:
+                # Deliberation returned None - concepts were rejected as irrelevant
+                # This means we don't actually know about this topic
+                deliberation_failed_relevance = True
+                print(f"  ⚠️ Deliberation found no relevant concepts - topic may be unknown")
+        
+        # 3.6 PROACTIVE KNOWLEDGE AUGMENTATION for unknown topics
+        # If deliberation couldn't find relevant concepts, try learning about the topic
+        # BEFORE falling back to pattern matching (which might hallucinate)
+        if deliberation_failed_relevance and self.knowledge_augmenter and user_input:
+            print(f"  🔍 Attempting proactive knowledge lookup for unknown topic...")
+            filled_response = self._fill_gaps_and_retry(user_input)
+            if filled_response and filled_response.confidence >= 0.6:
+                print(f"  ✨ Learned about topic on-the-fly!")
+                return filled_response
+            
+            # Also try direct lookup
+            conv_context = self._get_conversation_context(max_turns=3)
+            external_result = self.knowledge_augmenter.lookup(user_input, conversation_history=conv_context, min_confidence=0.6)
+            if external_result:
+                response_text, confidence, source = external_result
+                response_text = self._clean_composed_response(response_text)
+                print(f"  💡 Found external knowledge from {source} (confidence: {confidence:.2f})")
+                
+                return ComposedResponse(
+                    text=response_text,
+                    fragment_ids=[f"external_{source}"],
+                    composition_weights=[confidence],
+                    coherence_score=confidence,
+                    primary_pattern=None,
+                    confidence=confidence,
+                    is_fallback=True,
+                    is_low_confidence=False
+                )
         
         # 4. RETRIEVE PATTERNS - Choose method based on configuration  
         # MULTI-TURN COHERENCE: Use enriched context (includes history + topics)
@@ -2142,10 +2178,32 @@ class ResponseComposer:
         # Fallback: try text-based retrieval if no symbolic match
         if not main_concept_data and focus_term:
             try:
-                retrieved = self.concept_store.retrieve_by_text(focus_term, top_k=1, min_similarity=0.5)
+                retrieved = self.concept_store.retrieve_by_text(focus_term, top_k=1, min_similarity=0.6)
                 if retrieved:
-                    main_concept_data, score = retrieved[0]
-                    print(f"  🔍 Fallback retrieval: {main_concept_data.term} (score: {score:.2f})")
+                    candidate_concept, score = retrieved[0]
+                    
+                    # VALIDATE: Check relevance to actual user query (not just focus_term)
+                    if self.semantic_encoder and user_input:
+                        query_emb = self.semantic_encoder.encode(user_input)
+                        concept_emb = self.semantic_encoder.encode(candidate_concept.term)
+                        
+                        if hasattr(query_emb, 'cpu'):
+                            query_emb = query_emb.cpu().numpy().flatten()
+                        if hasattr(concept_emb, 'cpu'):
+                            concept_emb = concept_emb.cpu().numpy().flatten()
+                        
+                        query_norm = query_emb / (np.linalg.norm(query_emb) + 1e-8)
+                        concept_norm = concept_emb / (np.linalg.norm(concept_emb) + 1e-8)
+                        concept_relevance = float(np.dot(query_norm, concept_norm))
+                        
+                        if concept_relevance < 0.5:
+                            print(f"  ⚠️ Rejecting fallback concept '{candidate_concept.term}' - low relevance ({concept_relevance:.3f})")
+                        else:
+                            main_concept_data = candidate_concept
+                            print(f"  🔍 Fallback retrieval: {main_concept_data.term} (score: {score:.2f}, relevance: {concept_relevance:.3f})")
+                    else:
+                        main_concept_data = candidate_concept
+                        print(f"  🔍 Fallback retrieval: {main_concept_data.term} (score: {score:.2f})")
             except Exception as e:
                 print(f"  ⚠️ Fallback retrieval failed: {e}")
         
