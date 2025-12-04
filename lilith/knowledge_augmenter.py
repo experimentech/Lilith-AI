@@ -498,6 +498,7 @@ class WiktionaryLookup:
         
         Examples:
             "What does ephemeral mean?" -> "ephemeral"
+            "What is love?" -> "love"
             "Define recalcitrant" -> "recalcitrant"
             "ephemeral" -> "ephemeral"
         """
@@ -511,6 +512,8 @@ class WiktionaryLookup:
             r'definition of (.+)',
             r'meaning of (.+)',
             r'what (?:does|do) (.+?) mean',
+            # Add "what is/are X" pattern (extracts X)
+            r'what (?:is|are) (?:a |an |the )?(.+)',
         ]
         
         for pattern in patterns:
@@ -751,6 +754,8 @@ class FreeDictionaryLookup:
             r'what (?:does|is) (.+?) mean',
             r'define (.+)',
             r'meaning of (.+)',
+            # Add "what is/are X" pattern
+            r'what (?:is|are) (?:a |an |the )?(.+)',
         ]
         
         for pattern in patterns:
@@ -844,6 +849,9 @@ class KnowledgeAugmenter:
         self.lookup_count += 1
         query_lower = query.lower()
         
+        # Extract the topic/term being asked about
+        topic = self._extract_topic_for_routing(query)
+        
         # Determine query type and try appropriate sources
         
         # 1. Synonym/antonym queries -> WordNet first
@@ -853,21 +861,29 @@ class KnowledgeAugmenter:
                 return result
         
         # 2. Word definition queries -> Try Wiktionary, then Free Dictionary
-        if any(word in query_lower for word in ['mean', 'define', 'definition', 'meaning']):
-            # Try Wiktionary first (more comprehensive)
-            result = self._try_wiktionary(query, min_confidence)
-            if result:
-                return result
-            
-            # Fallback to Free Dictionary
-            result = self._try_free_dictionary(query, min_confidence)
-            if result:
-                return result
-            
-            # Also try WordNet for basic definition
-            result = self._try_wordnet(query, min_confidence)
-            if result:
-                return result
+        # Expanded to detect "what is X" and "what are X" patterns
+        is_definition_query = (
+            any(word in query_lower for word in ['mean', 'define', 'definition', 'meaning']) or
+            re.match(r'^what\s+(is|are)\s+\w+', query_lower) is not None
+        )
+        
+        if is_definition_query:
+            # For single-word topics, try dictionary sources first
+            if topic and ' ' not in topic:
+                # Try Wiktionary first (more comprehensive)
+                result = self._try_wiktionary(query, min_confidence)
+                if result:
+                    return result
+                
+                # Fallback to Free Dictionary
+                result = self._try_free_dictionary(query, min_confidence)
+                if result:
+                    return result
+                
+                # Also try WordNet for basic definition
+                result = self._try_wordnet(query, min_confidence)
+                if result:
+                    return result
         
         # 3. General knowledge -> Wikipedia (with conversation context)
         result = self._try_wikipedia(query, conversation_history, min_confidence)
@@ -970,6 +986,60 @@ class KnowledgeAugmenter:
                 return (response, wiki_result['confidence'], wiki_result['source'])
         except Exception:
             pass
+        
+        return None
+    
+    def _extract_topic_for_routing(self, query: str) -> Optional[str]:
+        """
+        Extract the topic from a query for routing decisions.
+        
+        Used to determine if dictionary sources should be tried
+        (single-word topics) vs Wikipedia (multi-word topics).
+        
+        Args:
+            query: User query
+            
+        Returns:
+            Extracted topic or None
+        """
+        # Use TopicExtractor if available
+        if self.topic_extractor:
+            topic, score = self.topic_extractor.extract_topic(query)
+            if topic:
+                return topic
+        
+        # Fallback: simple extraction
+        query_lower = query.lower().strip('?!.')
+        
+        # "what is/are X" pattern
+        match = re.match(r'^what\s+(?:is|are)\s+(?:a\s+|an\s+|the\s+)?(.+)$', query_lower)
+        if match:
+            return match.group(1).strip()
+        
+        # "tell me about X" pattern
+        match = re.match(r'^tell\s+me\s+about\s+(?:a\s+|an\s+|the\s+)?(.+)$', query_lower)
+        if match:
+            return match.group(1).strip()
+        
+        # "do you know about X" pattern
+        match = re.match(r'^do\s+you\s+know\s+(?:about|of)\s+(.+)$', query_lower)
+        if match:
+            return match.group(1).strip()
+        
+        # "what does X mean" pattern
+        match = re.match(r'^what\s+does\s+(.+?)\s+mean', query_lower)
+        if match:
+            return match.group(1).strip()
+        
+        # "define X" pattern
+        match = re.match(r'^define\s+(.+)$', query_lower)
+        if match:
+            return match.group(1).strip()
+        
+        # "meaning of X" pattern
+        match = re.match(r'^(?:the\s+)?meaning\s+of\s+(.+)$', query_lower)
+        if match:
+            return match.group(1).strip()
         
         return None
     
