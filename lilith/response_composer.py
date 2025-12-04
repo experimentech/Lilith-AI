@@ -2099,6 +2099,7 @@ class ResponseComposer:
         # Find concepts activated by semantic similarity (not the query itself)
         main_concept = None
         main_concept_data = None
+        concept_relevance = 0.0  # Track how relevant the concept is to the query
         
         for concept in activated:
             if concept.source == "semantic_similarity":
@@ -2109,7 +2110,29 @@ class ResponseComposer:
                 try:
                     db_concept = self.concept_store.get_concept_by_id(concept_id)
                     if db_concept and db_concept.properties:
-                        print(f"  🔗 Bridge: {concept_id} → {db_concept.term}")
+                        # VALIDATE: Check that the concept is actually relevant to the query
+                        # This prevents "colours" from matching to "birds" just because
+                        # birds was the only concept in the store
+                        if self.semantic_encoder and user_input:
+                            query_emb = self.semantic_encoder.encode(user_input)
+                            concept_emb = self.semantic_encoder.encode(db_concept.term)
+                            
+                            # Flatten and normalize
+                            if hasattr(query_emb, 'cpu'):
+                                query_emb = query_emb.cpu().numpy().flatten()
+                            if hasattr(concept_emb, 'cpu'):
+                                concept_emb = concept_emb.cpu().numpy().flatten()
+                            
+                            query_norm = query_emb / (np.linalg.norm(query_emb) + 1e-8)
+                            concept_norm = concept_emb / (np.linalg.norm(concept_emb) + 1e-8)
+                            concept_relevance = float(np.dot(query_norm, concept_norm))
+                            
+                            # Reject if concept isn't actually relevant to the query
+                            if concept_relevance < 0.5:
+                                print(f"  ⚠️ Rejecting concept '{db_concept.term}' - low relevance to query ({concept_relevance:.3f})")
+                                continue
+                        
+                        print(f"  🔗 Bridge: {concept_id} → {db_concept.term} (relevance: {concept_relevance:.3f})")
                         main_concept = concept
                         main_concept_data = db_concept
                         break
@@ -2209,10 +2232,11 @@ class ResponseComposer:
         # Clean up grammar issues (double verbs, plural agreement)
         response_text = self._clean_composed_response(response_text)
         
-        # Calculate confidence based on concept activation and inference count
-        base_confidence = getattr(main_concept, 'activation', 0.7) if main_concept else 0.7
-        inference_bonus = min(len(inferences) * 0.05, 0.15)  # Up to 0.15 bonus
-        confidence = min(base_confidence + inference_bonus, 0.95)
+        # Calculate confidence based on concept RELEVANCE (not just activation)
+        # This ensures we don't confidently return unrelated concepts
+        base_confidence = concept_relevance if concept_relevance > 0 else getattr(main_concept, 'activation', 0.5)
+        inference_bonus = min(len(inferences) * 0.03, 0.10)  # Reduced bonus
+        confidence = min(base_confidence + inference_bonus, 0.90)
         
         print(f"  🧠 Composed from deliberation: {len(activated)} concepts, {len(inferences)} inferences")
         
