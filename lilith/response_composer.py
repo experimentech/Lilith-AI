@@ -152,6 +152,9 @@ class ResponseComposer:
         self.conversation_history = conversation_history
         self.composition_mode = composition_mode
         
+        # Store semantic encoder for later use (relevance validation, etc.)
+        self.semantic_encoder = semantic_encoder
+        
         # Initialize normalizer for query cleaning (INTAKE layer)
         self.normalizer = NoiseNormalizer()
         
