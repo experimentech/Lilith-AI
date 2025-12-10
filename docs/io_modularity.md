@@ -1,198 +1,228 @@
-# I/O Modularity in Lilith
+# I/O Modularity Architecture
 
-## Architecture Overview
+This document describes the modular input/output architecture for Lilith, supporting multiple interface types while maintaining a consistent core.
 
-Lilith's cognitive core is **completely modality-agnostic**. The I/O layer is just a thin wrapper that converts input to text and displays output.
+## Design Principles
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                       I/O LAYER (Thin)                          │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐            │
-│  │   CLI   │  │  Voice  │  │   API   │  │ Discord │  ...       │
-│  │ (text)  │  │ (STT)   │  │ (JSON)  │  │  (bot)  │            │
-│  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘            │
-│       │            │            │            │                  │
-│       └────────────┴─────┬──────┴────────────┘                  │
-│                          │ text                                 │
-│                          ▼                                      │
-├─────────────────────────────────────────────────────────────────┤
-│                    COGNITIVE CORE                               │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │  AutoSemanticLearner.process_text(text)                  │  │
-│  │       │                                                   │  │
-│  │       ▼                                                   │  │
-│  │  ResponseComposer.compose_response(text, context)        │  │
-│  │       │                                                   │  │
-│  │       ├─► QueryPatternMatcher (intent/slots)             │  │
-│  │       ├─► ReasoningStage (deliberation)                  │  │
-│  │       ├─► ContrastiveLearner (semantic similarity)       │  │
-│  │       ├─► FragmentStore (pattern retrieval)              │  │
-│  │       └─► ConceptStore (knowledge base)                  │  │
-│  │                                                           │  │
-│  │       ▼                                                   │  │
-│  │  ComposedResponse (text + metadata)                      │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                          │ text                                 │
-│                          ▼                                      │
-├─────────────────────────────────────────────────────────────────┤
-│                       I/O LAYER                                 │
-│       ┌──────────────────┴──────────────────┐                  │
-│       │           │           │             │                   │
-│       ▼           ▼           ▼             ▼                   │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐              │
-│  │  print  │ │   TTS   │ │  JSON   │ │  embed  │  ...         │
-│  └─────────┘ └─────────┘ └─────────┘ └─────────┘              │
-└─────────────────────────────────────────────────────────────────┘
-```
+### Separation of Concerns
+- **Core**: Session management, pattern storage, learning logic (interface-agnostic)
+- **Interface**: CLI, Discord, API endpoints (swappable I/O handlers)
+- **Storage**: Database backend (pluggable storage layer)
 
-## Adding a New I/O Modality
-
-To add a new input/output modality (voice, Discord, API, etc.), you only need:
-
-### 1. Input Adapter (converts to text)
+### Interface Independence
+The core `LilithSession` class provides interface-agnostic conversation processing:
 
 ```python
-class VoiceAdapter:
-    def __init__(self, cognitive_core):
-        self.core = cognitive_core
-        self.auto_learner = AutoSemanticLearner(cognitive_core.contrastive_learner)
-    
-    def process_audio(self, audio_data) -> str:
-        # Convert speech to text (using any STT)
-        text = speech_to_text(audio_data)
-        
-        # Feed to cognitive core (SAME as CLI)
-        response = self.core.compose_response(text)
-        
-        # Auto-learn from this interaction
-        self.auto_learner.process_conversation(text, response.text)
-        
-        return response.text
+from lilith.session import LilithSession, SessionConfig
+
+config = SessionConfig(user_id="alice", mode="user")
+session = LilithSession(config)
+response = session.process_message("Hello")
 ```
 
-### 2. Output Adapter (converts from text)
+Any interface can wrap this core functionality.
+
+## Current Interfaces
+
+### 1. Command-Line Interface (CLI)
+**File**: `lilith_cli.py`
+
+**Features**:
+- Interactive REPL
+- Command history
+- Teacher/user modes
+- /teach, /stats, /quit commands
+
+**Usage**:
+```bash
+python lilith_cli.py --mode user --user alice
+```
+
+### 2. Discord Bot
+**File**: `discord_bot.py`
+
+**Features**:
+- Multi-server support
+- Per-user isolation
+- Reaction-based feedback
+- Slash commands
+- Server-specific settings
+
+**Usage**:
+```bash
+python discord_bot.py
+```
+
+### 3. Programmatic API (Internal)
+**File**: `lilith/session.py`
+
+**Usage**:
+```python
+session = LilithSession(config)
+response = session.process_message(user_input)
+```
+
+## Storage Modularity
+
+### Backend Abstraction
+Storage is abstracted through the `MultiTenantFragmentStore` interface:
 
 ```python
-    def respond(self, response_text: str):
-        # Convert text to speech (using any TTS)
-        audio = text_to_speech(response_text)
-        play_audio(audio)
+# SQLite (current)
+from lilith.multi_tenant_store import MultiTenantFragmentStore
+
+# Future: PostgreSQL, MongoDB, etc.
+# Just swap the implementation
 ```
 
-### 3. That's it!
+### Isolation Levels
+- **Base**: Shared knowledge accessible to all users
+- **User**: Personal knowledge (isolated per user_id)
+- **Server**: Discord server-specific knowledge (isolated per guild_id)
 
-No changes needed to:
-- ResponseComposer
-- ContrastiveLearner  
-- ReasoningStage
-- FragmentStore
-- ConceptStore
-- Any cognitive component
+## Adding New Interfaces
 
-## What Each Layer Does
-
-### I/O Layer (Modality-Specific)
-| Component | Responsibility |
-|-----------|----------------|
-| `lilith_cli.py` | Terminal text I/O |
-| Voice adapter | STT → text, text → TTS |
-| API adapter | HTTP → text, text → JSON |
-| Discord bot | Discord events → text |
-
-### Cognitive Core (Modality-Agnostic)
-| Component | Responsibility |
-|-----------|----------------|
-| `AutoSemanticLearner` | Extract semantic pairs from ANY text |
-| `ContrastiveLearner` | Learn semantic similarity |
-| `ReasoningStage` | Deliberate on concepts |
-| `ResponseComposer` | Compose responses |
-| `FragmentStore` | Store/retrieve patterns |
-| `ConceptStore` | Store/retrieve concepts |
-
-## Auto-Learning from Any Modality
-
-The key insight: **all learning flows through text**.
+### Step 1: Create Interface Module
 
 ```python
-# In any I/O adapter:
-from lilith.auto_semantic_learner import AutoSemanticLearner
+# interfaces/telegram_bot.py
+from lilith.session import LilithSession, SessionConfig
 
-# 1. Initialize once
-auto_learner = AutoSemanticLearner(
-    contrastive_learner=core.contrastive_learner,
-    auto_train_threshold=10,  # Train after 10 new pairs
-)
-
-# 2. Call on every interaction (regardless of source)
-auto_learner.process_conversation(
-    user_input=transcribed_text,  # From voice, chat, etc.
-    response=response_text
-)
+class TelegramBot:
+    def __init__(self):
+        self.sessions = {}
+    
+    def handle_message(self, user_id: str, message: str):
+        # Get or create session
+        if user_id not in self.sessions:
+            config = SessionConfig(user_id=user_id, mode="user")
+            self.sessions[user_id] = LilithSession(config)
+        
+        # Process message
+        response = self.sessions[user_id].process_message(message)
+        return response
 ```
 
-The `AutoSemanticLearner`:
-1. Extracts semantic relationships from text
-2. Adds pairs to ContrastiveLearner
-3. Triggers incremental training automatically
-4. Works identically for CLI, voice, API, etc.
-
-## Example: Adding Voice Support
+### Step 2: Handle Interface-Specific Features
 
 ```python
-# voice_adapter.py
-import speech_recognition as sr
-from gtts import gTTS
-
-from lilith.response_composer import ResponseComposer
-from lilith.auto_semantic_learner import AutoSemanticLearner
-
-class VoiceLilith:
-    def __init__(self, composer: ResponseComposer):
-        self.composer = composer
-        self.recognizer = sr.Recognizer()
-        
-        # Auto-learning works for voice too!
-        self.auto_learner = AutoSemanticLearner(
-            contrastive_learner=composer.contrastive_learner
-        )
-    
-    def listen(self) -> str:
-        with sr.Microphone() as source:
-            audio = self.recognizer.listen(source)
-        return self.recognizer.recognize_google(audio)
-    
-    def speak(self, text: str):
-        tts = gTTS(text=text, lang='en')
-        # ... play audio ...
-    
-    def conversation_turn(self):
-        # Listen
-        user_text = self.listen()
-        
-        # Think (SAME cognitive core as CLI)
-        response = self.composer.compose_response(
-            user_input=user_text,
-            context=user_text
-        )
-        
-        # Learn (SAME learning as CLI)
-        self.auto_learner.process_conversation(user_text, response.text)
-        
-        # Speak
-        self.speak(response.text)
+# Feedback (upvote/downvote)
+def handle_reaction(self, message_id: str, reaction: str):
+    pattern_id = self.get_pattern_id_for_message(message_id)
+    if reaction == "👍":
+        self.session.upvote(pattern_id)
+    elif reaction == "👎":
+        self.session.downvote(pattern_id)
 ```
 
-## No Re-implementation Needed
+### Step 3: Session Management
 
-| New Modality | What You Write | What's Reused |
-|--------------|----------------|---------------|
-| Voice | STT/TTS wrappers (~50 lines) | Everything else |
-| Discord | Event handlers (~100 lines) | Everything else |
-| REST API | Flask routes (~100 lines) | Everything else |
-| Slack | Event adapter (~80 lines) | Everything else |
+```python
+# Timeout inactive sessions
+def cleanup_sessions(self):
+    for user_id, session in list(self.sessions.items()):
+        if session.inactive_for(minutes=30):
+            session.save_state()
+            del self.sessions[user_id]
+```
 
-The cognitive architecture is:
-- **Modality-agnostic**: Works with any text input
-- **Self-learning**: Extracts patterns from any conversation
-- **Persistent**: Same databases/models across all modalities
-- **Composable**: Mix modalities (voice input → text response, etc.)
+## Future Interfaces
+
+### REST API
+```python
+# interfaces/rest_api.py (planned)
+from fastapi import FastAPI
+from lilith.session import LilithSession
+
+app = FastAPI()
+
+@app.post("/chat")
+async def chat(user_id: str, message: str):
+    session = get_or_create_session(user_id)
+    return {"response": session.process_message(message)}
+```
+
+### Voice Interface
+```python
+# interfaces/voice.py (planned)
+from speech_recognition import Recognizer
+from lilith.session import LilithSession
+
+def voice_chat():
+    recognizer = Recognizer()
+    session = LilithSession(config)
+    
+    while True:
+        audio = recognizer.listen(microphone)
+        text = recognizer.recognize_google(audio)
+        response = session.process_message(text)
+        speak(response)
+```
+
+### Web UI
+- React/Vue frontend
+- WebSocket for real-time chat
+- Same backend session logic
+
+## Benefits
+
+### Reusability
+Core logic is shared across all interfaces:
+- Pattern retrieval
+- Learning mechanisms
+- Knowledge augmentation
+- Multi-turn coherence
+
+### Testability
+Core can be tested independently:
+```python
+def test_learning():
+    session = LilithSession(config)
+    session.process_message("Python is a programming language")
+    response = session.process_message("What is Python?")
+    assert "programming language" in response
+```
+
+### Maintainability
+Changes to core logic automatically benefit all interfaces.
+
+### Scalability
+New interfaces can be added without touching core code.
+
+## Architecture Diagram
+
+```
+┌─────────────────────────────────────────┐
+│         Interface Layer                 │
+├──────────┬──────────┬──────────┬────────┤
+│   CLI    │ Discord  │   API    │  Web   │
+└──────────┴──────────┴──────────┴────────┘
+           │
+           ▼
+┌─────────────────────────────────────────┐
+│      Core Session Logic                 │
+│  - LilithSession                        │
+│  - Pattern retrieval                    │
+│  - Learning mechanisms                  │
+│  - Multi-turn coherence                 │
+└─────────────────────────────────────────┘
+           │
+           ▼
+┌─────────────────────────────────────────┐
+│       Storage Layer                     │
+│  - MultiTenantFragmentStore             │
+│  - User isolation                       │
+│  - Base/user/server knowledge           │
+└─────────────────────────────────────────┘
+           │
+           ▼
+┌─────────────────────────────────────────┐
+│      Database Backend                   │
+│  - SQLite (current)                     │
+│  - PostgreSQL (planned)                 │
+└─────────────────────────────────────────┘
+```
+
+## Conclusion
+
+The modular architecture allows Lilith to support multiple interfaces while maintaining a single source of truth for core functionality. This design enables rapid addition of new interfaces and ensures consistency across all interaction methods.
