@@ -37,7 +37,7 @@ class SemanticConcept:
     term: str                      # "machine learning"
     properties: List[str]          # ["learns from data", "branch of AI"]
     relations: List[Relation]      # Semantic relations to other concepts
-    embedding: Optional[np.ndarray] = None  # BNN embedding (cached, not persisted)
+    embedding: Optional[np.ndarray] = None  # BioNN embedding (cached, not persisted)
     confidence: float = 0.85       # How reliable this knowledge is
     source: str = "taught"         # "taught", "wikipedia", "learned"
     usage_count: int = 0           # Track usage for consolidation

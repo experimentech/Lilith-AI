@@ -15,7 +15,7 @@ Both work. The question is which to use when.
 |--------|---------------------|-------------------|
 | **Setup time** | Immediate | ~1 hour training |
 | **Training data needed** | None | Synonym pairs |
-| **Similarity improvement** | None (uses BNN as-is) | +0.355 average |
+| **Similarity improvement** | None (uses BioNN as-is) | +0.355 average |
 | **Storage efficiency** | 0.5-0.6 ratio (threshold=0.85) | 0.5-0.6 ratio (threshold=0.45) |
 | **Adaptation** | Manual threshold tuning | Learns from data |
 | **Complexity** | Very simple | Moderate |

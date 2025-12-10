@@ -21,7 +21,7 @@ This caused:
 
 ```
 Layer 4: PRAGMATIC/RESPONSE
-├── BNN (Intent Classification + Semantic Encoding) ← ALREADY EXISTS
+├── BioNN (Intent Classification + Semantic Encoding) ← ALREADY EXISTS
 ├── Database #1: pragmatic_templates.db (~50 templates)
 │   └── Linguistic patterns: HOW to say things
 │       Examples: "Hello! {offer_help}", "{concept} is {property}. {elaboration}"
@@ -72,10 +72,10 @@ This separation enables **novel composition**: Same template can express differe
 ## Three-Step Composition Flow
 
 ```python
-# 1. BNN classifies intent from query
+# 1. BioNN classifies intent from query
 intent = classify_intent("What is Python?")  # → "definition_query"
 
-# 2. BNN retrieves concept from concept_store
+# 2. BioNN retrieves concept from concept_store
 concept = concept_store.retrieve_similar("Python")  # → {term: "Python", properties: [...]}
 
 # 3. Match template and fill slots
@@ -84,14 +84,14 @@ response = fill_template(template, {"concept": "Python", "property": "a high-lev
 # → "Python is a high-level language. It's known for its readable syntax."
 ```
 
-## Architecture: 1 BNN + 2 Databases (NOT a new layer!)
+## Architecture: 1 BioNN + 2 Databases (NOT a new layer!)
 
-This is **Layer 4 RESTRUCTURED**, not a new BNN+Database pair.
+This is **Layer 4 RESTRUCTURED**, not a new BioNN+Database pair.
 
 ```
 Layer 4: PRAGMATIC/RESPONSE COMPOSITION
 │
-├── BNN (ALREADY EXISTS in ResponseComposer)
+├── BioNN (ALREADY EXISTS in ResponseComposer)
 │   ├── Intent Classification: Query → Intent (greeting, definition, elaboration)
 │   └── Semantic Encoding: Concept term → Embedding for similarity search
 │
@@ -202,7 +202,7 @@ TEST 3: Template Categories
 - [ ] Verify responses still work (now compositional!)
 
 ### Phase 2D: Optimization
-- [ ] Train BNN intent classifier on conversational categories
+- [ ] Train BioNN intent classifier on conversational categories
 - [ ] Improve concept extraction from queries
 - [ ] Add more templates for edge cases
 - [ ] Tune template selection confidence thresholds
@@ -223,9 +223,9 @@ TEST 3: Template Categories
 ## Architecture Verification
 
 This implementation follows the **"Open Book Exam"** architecture:
-- **BNN learns HOW** to classify intents and encode concepts
+- **BioNN learns HOW** to classify intents and encode concepts
 - **Databases store WHAT**: Templates (linguistic) + Concepts (semantic)
-- **Composition**: BNN retrieves from databases, assembles novel responses
+- **Composition**: BioNN retrieves from databases, assembles novel responses
 
 **No verbatim storage** → **Compositional generation** → **Novel responses**
 

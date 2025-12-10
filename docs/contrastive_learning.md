@@ -1,16 +1,16 @@
 # Contrastive Learning for Semantic Embeddings
 
-This module enables the BNN to learn semantic relationships through contrastive training,
+This module enables the BioNN to learn semantic relationships through contrastive training,
 making the system understand that concepts like "cat" and "dog" are related (both animals)
 while "cat" and "computer" are not.
 
 ## Philosophy
 
-Lilith's architecture separates **knowledge storage** (databases) from **learned behavior** (BNN):
+Lilith's architecture separates **knowledge storage** (databases) from **learned behavior** (BioNN):
 - **Databases** store explicit facts, relationships, patterns
-- **BNN** learns to navigate and connect this knowledge
+- **BioNN** learns to navigate and connect this knowledge
 
-Contrastive learning trains the BNN's PMFlow field to understand semantic similarity,
+Contrastive learning trains the BioNN's PMFlow field to understand semantic similarity,
 enabling better:
 - Pattern retrieval (find relevant responses)
 - Reasoning (detect concept connections)

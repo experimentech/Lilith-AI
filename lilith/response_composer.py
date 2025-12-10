@@ -139,7 +139,7 @@ class ResponseComposer:
                 - "parallel": Try both patterns AND concepts, use best
                 - "pragmatic": Use pragmatic templates + concepts (Layer 4 restructured)
             use_grammar: Enable grammar-guided composition
-            semantic_encoder: BNN encoder for intent clustering (optional)
+            semantic_encoder: BioNN encoder for intent clustering (optional)
             enable_knowledge_augmentation: Enable external knowledge lookup (Wikipedia, etc.)
             concept_store: Optional ConceptStore for compositional responses
             enable_compositional: Enable compositional response generation
@@ -158,17 +158,17 @@ class ResponseComposer:
         # Initialize normalizer for query cleaning (INTAKE layer)
         self.normalizer = NoiseNormalizer()
         
-        # Initialize BNN intent classifier if encoder provided
+        # Initialize BioNN intent classifier if encoder provided
         self.intent_classifier = None
         if semantic_encoder is not None:
             self.intent_classifier = BNNIntentClassifier(semantic_encoder)
-            print("  🎯 BNN intent clustering enabled!")
+            print("  🎯 BioNN intent clustering enabled!")
         
         # Initialize syntax stage if available and requested
         self.syntax_stage = None
         if use_grammar and GRAMMAR_AVAILABLE:
             self.syntax_stage = SyntaxStage()
-            print("  📝 BNN-based syntax stage enabled!")
+            print("  📝 BioNN-based syntax stage enabled!")
         elif use_grammar and not GRAMMAR_AVAILABLE:
             print("  ⚠️  Syntax stage not available, falling back to standard composition")
         
@@ -355,7 +355,7 @@ class ResponseComposer:
                 )
     
     def cluster_patterns(self):
-        """Build intent clusters from learned patterns using BNN embeddings."""
+        """Build intent clusters from learned patterns using BioNN embeddings."""
         if self.intent_classifier is None:
             print("  ⚠️  Intent classifier not available - skipping clustering")
             return
@@ -375,9 +375,9 @@ class ResponseComposer:
         context: str,
         user_input: str = "",
         topk: int = 5,
-        use_intent_filtering: bool = False,  # Disabled: BNN intent classification unreliable on user inputs
-        use_semantic_retrieval: bool = True,  # ENABLED: BNN + success-based learning (OPEN BOOK EXAM)
-        semantic_weight: float = 0.5  # Balanced: 50% BNN semantics, 50% keywords
+        use_intent_filtering: bool = False,  # Disabled: BioNN intent classification unreliable on user inputs
+        use_semantic_retrieval: bool = True,  # ENABLED: BioNN + success-based learning (OPEN BOOK EXAM)
+        semantic_weight: float = 0.5  # Balanced: 50% BioNN semantics, 50% keywords
     ) -> ComposedResponse:
         """
         Generate response through learned composition.
@@ -386,8 +386,8 @@ class ResponseComposer:
             context: Current conversation context (from semantic stage)
             user_input: Raw user input (for direct references)
             topk: Number of patterns to consider
-            use_intent_filtering: Use BNN intent classification to filter patterns
-            use_semantic_retrieval: Use BNN embeddings for similarity (OPEN BOOK EXAM)
+            use_intent_filtering: Use BioNN intent classification to filter patterns
+            use_semantic_retrieval: Use BioNN embeddings for similarity (OPEN BOOK EXAM)
             semantic_weight: Weight for semantic similarity (0.0=keywords only, 1.0=semantic only)
             
         Returns:
@@ -567,14 +567,14 @@ class ResponseComposer:
                 # Extracted structural information from query
                 main_concept = self.query_matcher.extract_main_concept(query_match)
                 
-                # Use query intent to override BNN intent (more reliable)
+                # Use query intent to override BioNN intent (more reliable)
                 if query_match.confidence > 0.85:
                     intent_hint = query_match.intent
-                    use_intent_filtering = False  # Skip BNN, we have better intent
+                    use_intent_filtering = False  # Skip BioNN, we have better intent
         
-        # 3. Classify intent using BNN if available (if not already extracted from query or reasoning)
+        # 3. Classify intent using BioNN if available (if not already extracted from query or reasoning)
         if intent_hint is None and use_intent_filtering and self.intent_classifier is not None and cleaned_user_input:
-            # BNN extracts semantic intent
+            # BioNN extracts semantic intent
             intent_scores = self.intent_classifier.classify_intent(cleaned_user_input, topk=1)
             
             if intent_scores and intent_scores[0][1] > 0.5:  # Reasonable confidence
@@ -652,8 +652,8 @@ class ResponseComposer:
         statement_form = self._confirmation_to_statement(user_input) if user_input else None
         
         if use_semantic_retrieval and hasattr(self.fragments, 'retrieve_patterns_hybrid'):
-            # NEW PATH: BNN embedding + keyword hybrid (OPEN BOOK EXAM)
-            # BNN learns "how to recognize similar contexts" 
+            # NEW PATH: BioNN embedding + keyword hybrid (OPEN BOOK EXAM)
+            # BioNN learns "how to recognize similar contexts" 
             # Database stores "what to respond"
             patterns = self.fragments.retrieve_patterns_hybrid(
                 retrieval_query,
@@ -705,7 +705,7 @@ class ResponseComposer:
             return self._fallback_response(user_input)
         
         # 2b. Score patterns by semantic relevance to user query
-        # SKIP if using hybrid retrieval (already scored by BNN + keywords)
+        # SKIP if using hybrid retrieval (already scored by BioNN + keywords)
         if user_input and not use_semantic_retrieval:
             # Only re-score for keyword-only retrieval
             patterns = self._score_by_query_relevance(patterns, user_input, topk=topk)
@@ -772,7 +772,7 @@ class ResponseComposer:
                 return self._fallback_response_low_confidence(user_input, best_pattern, best_score)
             
         # 3. REASONING STAGE: Deliberate on query before composition
-        # This adds a "thinking" step where the BNN explores concept connections
+        # This adds a "thinking" step where the BioNN explores concept connections
         deliberation_result = None
         if self.reasoning_stage and user_input:
             try:
@@ -798,7 +798,7 @@ class ResponseComposer:
                 logging.debug(f"Reasoning stage error: {e}")
             
         # 4. PATTERN ADAPTATION: Use pattern as template, not verbatim
-        # Brain-like: retrieved pattern provides structure/intent, BNN adapts to context
+        # Brain-like: retrieved pattern provides structure/intent, BioNN adapts to context
         if user_input and best_score > 0.75:
             # EXACT MATCHES (≥0.90): Use verbatim - don't adapt taught Q&A pairs!
             # These are factual responses that should be returned as-is
@@ -976,7 +976,7 @@ class ResponseComposer:
         - Sentiment/tone
         - General structure
         
-        BNN and working memory help fill in context-appropriate content.
+        BioNN and working memory help fill in context-appropriate content.
         
         Args:
             pattern: Retrieved pattern (template)
@@ -1044,7 +1044,7 @@ class ResponseComposer:
     ) -> str:
         """Pattern is relevant - use it with minor concept substitution."""
         # For now, use pattern mostly as-is since it's already relevant
-        # Future: Could use BNN to find similar but context-appropriate phrases
+        # Future: Could use BioNN to find similar but context-appropriate phrases
         return pattern.response_text
     
     def _adapt_greeting(
@@ -1301,7 +1301,7 @@ class ResponseComposer:
                 
                 trigger_relevance = float(np.dot(query_norm, trigger_norm))
                 
-                # IMPORTANT: BNN embeddings are unreliable! Add keyword/topic boost
+                # IMPORTANT: BioNN embeddings are unreliable! Add keyword/topic boost
                 # Extract key content words (not stopwords)
                 stopwords = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
                            'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should',
@@ -1317,8 +1317,8 @@ class ResponseComposer:
                 response_overlap = len(query_words & response_words) / max(len(query_words), 1)
                 trigger_overlap = len(query_words & trigger_words) / max(len(query_words), 1)
                 
-                # Combined score: BNN similarity + keyword overlap boost
-                # Weight keyword overlap VERY heavily since BNN is unreliable
+                # Combined score: BioNN similarity + keyword overlap boost
+                # Weight keyword overlap VERY heavily since BioNN is unreliable
                 # Prioritize patterns with actual keyword matches
                 keyword_boost = max(response_overlap, trigger_overlap) * 0.5  # Up to +0.5 boost
                 combined_relevance = max(
@@ -1625,7 +1625,7 @@ class ResponseComposer:
         """
         Blend two patterns into a novel response.
         
-        Strategy: Check compatibility first, then use BNN syntax stage if available
+        Strategy: Check compatibility first, then use BioNN syntax stage if available
         for grammatically-guided blending. This creates NEW utterances from learned fragments!
         
         Args:
@@ -1639,7 +1639,7 @@ class ResponseComposer:
         if not self._should_blend(primary, secondary):
             return None
         
-        # If BNN syntax stage is available, use it for intelligent composition!
+        # If BioNN syntax stage is available, use it for intelligent composition!
         if self.syntax_stage:
             return self._blend_with_syntax_bnn(primary, secondary)
         
@@ -1914,14 +1914,14 @@ class ResponseComposer:
     
     def _blend_with_syntax_bnn(self, primary: ResponsePattern, secondary: ResponsePattern) -> str:
         """
-        Blend two patterns using BNN-based syntax stage for grammatical composition.
+        Blend two patterns using BioNN-based syntax stage for grammatical composition.
         
         Args:
             primary: Primary pattern to use as base
             secondary: Secondary pattern to blend in
             
         Returns:
-            Grammatically composed text using BNN-learned templates
+            Grammatically composed text using BioNN-learned templates
         """
         if not self.syntax_stage:
             # Fallback if syntax stage not available
@@ -2015,7 +2015,7 @@ class ResponseComposer:
     
     def _simple_blend(self, text_a: str, text_b: str) -> str:
         """
-        Simple fallback blending when no BNN template available.
+        Simple fallback blending when no BioNN template available.
         
         Args:
             text_a: Primary text
@@ -2111,7 +2111,7 @@ class ResponseComposer:
         2. This bridge translates IDs → actual content via concept store
         3. Composition uses pragmatic templates to frame the content
         
-        The BNN guided activation found which concepts are relevant -
+        The BioNN guided activation found which concepts are relevant -
         now we retrieve their actual content for the response.
         
         Args:
@@ -2446,9 +2446,9 @@ class ResponseComposer:
         from semantic knowledge (concepts).
         
         Flow:
-        1. BNN classifies intent (definition, greeting, acknowledgment, etc.)
+        1. BioNN classifies intent (definition, greeting, acknowledgment, etc.)
         2. Select appropriate pragmatic template for that intent
-        3. BNN retrieves relevant concepts from concept store
+        3. BioNN retrieves relevant concepts from concept store
         4. Fill template slots with concept properties
         5. Return composed response
         
@@ -2596,7 +2596,7 @@ class ResponseComposer:
         """
         Detect conversational category from user input.
         
-        Simple heuristic version - in production would use BNN intent classifier.
+        Simple heuristic version - in production would use BioNN intent classifier.
         
         Args:
             user_input: User message
@@ -3219,8 +3219,8 @@ class ResponseComposer:
                     except Exception as e:
                         print(f"     ⚠️  Pattern extraction failed: {e}")
                 
-                # 4. BNN SEMANTIC LEARNING
-                # Train the BNN on semantic relationships from the definition
+                # 4. BioNN SEMANTIC LEARNING
+                # Train the BioNN on semantic relationships from the definition
                 # This allows the neural embeddings to learn concept associations
                 if self.contrastive_learner:
                     try:
@@ -3260,7 +3260,7 @@ class ResponseComposer:
                                 pairs_added += 1
                         
                         if pairs_added > 0:
-                            print(f"     🧠 BNN: Added {pairs_added} semantic pairs for training")
+                            print(f"     🧠 BioNN: Added {pairs_added} semantic pairs for training")
                             
                             # Periodic incremental training (every 5 new pairs)
                             if len(self.contrastive_learner.pairs) % 5 == 0:
@@ -3268,11 +3268,11 @@ class ResponseComposer:
                                     num_steps=3,  # Quick training update
                                     learning_rate=0.001
                                 )
-                                print(f"     🎓 BNN: Incremental training step completed")
+                                print(f"     🎓 BioNN: Incremental training step completed")
                             
                             learned_count += 1
                     except Exception as e:
-                        print(f"     ⚠️  BNN semantic learning failed: {e}")
+                        print(f"     ⚠️  BioNN semantic learning failed: {e}")
                 
                 # ═══════════════════════════════════════════════════════
                 # PHASE 2: REASONING STAGE INTEGRATION

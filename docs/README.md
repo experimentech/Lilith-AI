@@ -74,7 +74,7 @@ pip install torch numpy matplotlib requests
 
 **Required packages:**```bash
 
-- `torch` - PyTorch for neural network components (BNN semantic encoder)python experiments/retrieval_sanity/run_retrieval_sanity.py --verbose
+- `torch` - PyTorch for neural network components (BioNN semantic encoder)python experiments/retrieval_sanity/run_retrieval_sanity.py --verbose
 
 - `numpy` - Numerical operations and embeddings```
 
@@ -388,7 +388,7 @@ User Input[plasticity] recall=0.71 Δμ=1.2e-03 Δc=8.5e-04 refreshed=4
 
     ↓```
 
-[Semantic Stage] → BNN embedding
+[Semantic Stage] → BioNN embedding
 
     ↓Recent pipeline upgrades:
 
@@ -420,7 +420,7 @@ Bot Response- Plasticity hooks now re-encode the affected scenario immediately a
 
 **`pipeline/`** - Core neuro-symbolic processing	"turn": 3,
 
-- `semantic_stage.py` - BNN-based semantic encoding	"speaker": "assistant",
+- `semantic_stage.py` - BioNN-based semantic encoding	"speaker": "assistant",
 
 - `response_fragments.py` - Pattern storage and retrieval	"text": "We moved the venue to the waterfront studio for tomorrow's session.",
 
@@ -612,7 +612,7 @@ experiments/retrieval_sanity/
 
 ├── pipeline/                           # Core neuro-symbolic componentsDrive the scenarios above (and future ones) via a single entry point that logs each run and computes retrieval deltas:
 
-│   ├── semantic_stage.py              # BNN semantic encoding
+│   ├── semantic_stage.py              # BioNN semantic encoding
 
 │   ├── response_fragments.py          # Pattern storage/retrieval```bash
 
@@ -862,7 +862,7 @@ If you use Lilith in your research:
 - Cornell Movie Dialogs Corpus for base conversation patterns
 - Wikipedia for knowledge augmentation
 - PyTorch community
-- PMFlow BNN architecture inspiration
+- PMFlow BioNN architecture inspiration
 
 ---
 

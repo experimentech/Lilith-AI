@@ -36,7 +36,7 @@ lilith/
 ├── experiments/         # Research and experiments
 │   └── retrieval_sanity/      # Original research directory
 │
-├── pmflow_bnn_enhanced/ # Enhanced PMFlow-BNN library
+├── pmflow_bnn_enhanced/ # Enhanced PMFlow-BioNN library
 └── pmflow-package/      # Standalone PMFlow package (separate repo)
 ```
 
@@ -71,7 +71,7 @@ python tests/test_conversation.py
 - ✅ **Multi-Source Knowledge**: Wikipedia, Wiktionary, WordNet, Free Dictionary
 - ✅ **Smart Source Selection**: Automatically chooses best source for each query type
 - ✅ **Offline WordNet**: Fast synonym/antonym lookup without API calls
-- ✅ **BNN Intent Clustering**: Neural clustering for better understanding
+- ✅ **BioNN Intent Clustering**: Neural clustering for better understanding
 - ✅ **Fuzzy Matching**: Typo tolerance in query matching
 - ✅ **Multi-Tenant Architecture**: Isolated user databases with shared base knowledge
 - ✅ **SQLite Backend**: Thread-safe concurrent access with ACID guarantees

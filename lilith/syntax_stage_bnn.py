@@ -1,7 +1,7 @@
 """
-Syntax Stage - BNN-based Grammatical Pattern Processing
+Syntax Stage - BioNN-based Grammatical Pattern Processing
 
-Full cognitive stage implementation using PMFlow BNN for syntactic structures.
+Full cognitive stage implementation using PMFlow BioNN for syntactic structures.
 Learns grammatical patterns through reinforcement, just like semantic stage.
 
 Stage flow:
@@ -107,7 +107,7 @@ class CompositionTemplate:
 
 class SyntaxStage:
     """
-    Cognitive stage for grammatical pattern processing using BNN.
+    Cognitive stage for grammatical pattern processing using BioNN.
     
     This is a FULL stage implementation, parallel to INTAKE/SEMANTIC:
     - Dedicated PMFlow encoder for POS sequences
@@ -190,7 +190,7 @@ class SyntaxStage:
         pos_tags: Optional[List[str]] = None
     ) -> StageArtifact:
         """
-        Process tokens through syntax stage using BNN.
+        Process tokens through syntax stage using BioNN.
         
         Args:
             tokens: Input tokens
@@ -203,7 +203,7 @@ class SyntaxStage:
         if pos_tags is None:
             pos_tags = self._extract_pos_tags(tokens)
         
-        # Encode POS sequence using PMFlow BNN
+        # Encode POS sequence using PMFlow BioNN
         pos_string = " ".join(pos_tags)
         embedding, latent, activations = self.encoder.encode_with_components(pos_string)
         
@@ -263,7 +263,7 @@ class SyntaxStage:
         """
         Extract POS tags from tokens using improved heuristics.
         
-        BNN-native approach: No external NLP dependencies.
+        BioNN-native approach: No external NLP dependencies.
         Uses expanded word lists, suffix rules, and context hints.
         
         POS Tag Key:
@@ -476,7 +476,7 @@ class SyntaxStage:
         topk: int = 5
     ) -> List[Tuple[SyntacticPattern, float]]:
         """
-        Retrieve similar grammatical patterns using BNN similarity.
+        Retrieve similar grammatical patterns using BioNN similarity.
         
         This is the key: grammar patterns are retrieved via learned embeddings!
         """
@@ -589,7 +589,7 @@ class SyntaxStage:
         
         report = None
         
-        # Apply plasticity to BNN if enabled
+        # Apply plasticity to BioNN if enabled
         if self.config.plasticity_enabled:
             report = self._apply_plasticity(pattern, feedback)
             
@@ -610,7 +610,7 @@ class SyntaxStage:
         contrastive_pairs: Optional[List[Tuple[str, str, bool]]] = None
     ) -> Optional[SyntaxPlasticityReport]:
         """
-        Apply BNN plasticity update for this pattern using PMFlow 0.3.0 features.
+        Apply BioNN plasticity update for this pattern using PMFlow 0.3.0 features.
         
         This implements real neuroplastic learning:
         1. Reinforcement: vectorized_pm_plasticity adjusts centers/mus based on feedback
@@ -626,7 +626,7 @@ class SyntaxStage:
             SyntaxPlasticityReport with delta metrics, or None if plasticity unavailable
         """
         if not PMFLOW_PLASTICITY_AVAILABLE or vectorized_pm_plasticity is None:
-            logger.debug("Plasticity not available, skipping BNN update")
+            logger.debug("Plasticity not available, skipping BioNN update")
             return None
         
         # Get the PMFlow field from encoder
@@ -753,7 +753,7 @@ class SyntaxStage:
         """
         Apply contrastive plasticity to improve grammatical structure separation.
         
-        This teaches the BNN that:
+        This teaches the BioNN that:
         - Questions ("WRB VBZ PRON") should be similar to other questions
         - Questions should be dissimilar from statements ("PRON VBZ ADJ")
         
@@ -911,7 +911,7 @@ class SyntaxStage:
         if refined and refined[0].islower():
             refined = refined[0].upper() + refined[1:]
         
-        # Future: Use BNN to learn common corrections
+        # Future: Use BioNN to learn common corrections
         # For now, use rule-based fixes for demonstrable improvement
         
         return refined
@@ -927,7 +927,7 @@ class SyntaxStage:
             incorrect: The incorrect text
             correct: The corrected version
         """
-        # Future: Store correction patterns and learn via BNN
+        # Future: Store correction patterns and learn via BioNN
         # For now, this is a placeholder for the learning mechanism
         pass
     
@@ -942,7 +942,7 @@ class SyntaxStage:
         return " ".join(parts)
     
     def _bootstrap_patterns(self):
-        """Bootstrap with basic syntactic patterns using BNN encoding."""
+        """Bootstrap with basic syntactic patterns using BioNN encoding."""
         basic_patterns = [
             (["PRON", "VBZ"], "it works", "statement"),
             (["PRON", "VBZ", "ADJ"], "that's interesting", "statement"),

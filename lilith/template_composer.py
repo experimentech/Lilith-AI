@@ -82,7 +82,7 @@ class TemplateComposer:
         Match query to appropriate template.
         
         Simple pattern matching. In production with more data, would use
-        BNN intent classifier.
+        BioNN intent classifier.
         
         Args:
             query: User query

@@ -6,7 +6,7 @@ Trains the PMFlow field to learn semantic relationships through:
 2. Negative pairs: Concepts that should be dissimilar (randomly sampled)
 3. Hard negatives: Similar surface form but different meaning
 
-This allows the BNN to understand that "cat" and "dog" are related (both animals)
+This allows the BioNN to understand that "cat" and "dog" are related (both animals)
 while "bank" (river) and "bank" (financial) are different despite same surface form.
 
 Sources of training pairs:
@@ -17,7 +17,7 @@ Sources of training pairs:
 
 Design Philosophy:
 - Lightweight training that can run incrementally
-- Database stores relationships, BNN learns to embed them
+- Database stores relationships, BioNN learns to embed them
 - Direct insertion of relationships is always possible
 - Training improves generalization, not required for function
 """

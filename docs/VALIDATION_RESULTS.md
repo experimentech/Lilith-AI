@@ -2,7 +2,7 @@
 
 ## Overview
 
-Successfully validated the multi-stage distributed PMFlow BNN architecture through comprehensive demonstrations and benchmarks. This document summarizes key findings and identifies areas for improvement before adding the symbolic reasoning layer.
+Successfully validated the multi-stage distributed PMFlow BioNN architecture through comprehensive demonstrations and benchmarks. This document summarizes key findings and identifies areas for improvement before adding the symbolic reasoning layer.
 
 ## Test Date
 23 November 2025

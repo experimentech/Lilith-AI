@@ -672,7 +672,7 @@ class ResponseFragmentStoreSQLite:
         1. Exact text matching (1.0 confidence for perfect matches)
         2. Fuzzy string matching (0.75-1.0 for similar text)
         3. Token overlap (0.0-1.0 for keyword matching)
-        4. Semantic similarity (0.0-1.0 for concept matching via BNN)
+        4. Semantic similarity (0.0-1.0 for concept matching via BioNN)
         
         Final score: max(exact, fuzzy, token_overlap, semantic)
         
@@ -763,7 +763,7 @@ class ResponseFragmentStoreSQLite:
                 pattern.trigger_context
             )
             
-            # 4. Semantic similarity score (BNN embeddings)
+            # 4. Semantic similarity score (BioNN embeddings)
             if semantic_available and query_embedding is not None:
                 # Get or compute pattern embedding
                 if pattern.embedding_cache:
@@ -874,7 +874,7 @@ class ResponseFragmentStoreSQLite:
         Simplified hybrid retrieval for ResponseFragmentStoreSQLite.
         
         Note: This is a compatibility method that wraps retrieve_patterns.
-        Full hybrid retrieval with BNN embeddings + keyword matching is in DatabaseBackedFragmentStore.
+        Full hybrid retrieval with BioNN embeddings + keyword matching is in DatabaseBackedFragmentStore.
         This version uses standard retrieval but adds intent filtering.
         
         Args:

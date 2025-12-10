@@ -39,7 +39,7 @@ class WikipediaLookup:
     Uses Wikipedia's REST API to fetch article summaries without authentication.
     Extracts clean, factual information suitable for pattern learning.
     
-    Supports BNN-based topic extraction via TopicExtractor when available.
+    Supports BioNN-based topic extraction via TopicExtractor when available.
     """
     
     def __init__(self):
@@ -60,7 +60,7 @@ class WikipediaLookup:
             or None if not found
         """
         # Clean query for Wikipedia article title format
-        # Uses BNN-based TopicExtractor if available, else falls back to regex
+        # Uses BioNN-based TopicExtractor if available, else falls back to regex
         cleaned_query = self._clean_query(query)
         
         if not cleaned_query:
@@ -93,20 +93,20 @@ class WikipediaLookup:
         """
         Clean user query to Wikipedia article title format.
         
-        If TopicExtractor is available, uses BNN-based semantic matching.
+        If TopicExtractor is available, uses BioNN-based semantic matching.
         Otherwise falls back to regex patterns.
         
         Examples:
             "What is machine learning?" -> "machine learning"
             "Tell me about Python" -> "Python"
             "Who is Ada Lovelace?" -> "Ada Lovelace"
-            "Do you know about dogs?" -> "Dogs" (via BNN or regex)
+            "Do you know about dogs?" -> "Dogs" (via BioNN or regex)
         """
-        # Try BNN-based topic extraction first
+        # Try BioNN-based topic extraction first
         if self.topic_extractor:
             topic, score = self.topic_extractor.extract_topic(query)
             if topic:
-                print(f"  🧠 BNN extracted topic: '{topic}' (score: {score:.3f})")
+                print(f"  🧠 BioNN extracted topic: '{topic}' (score: {score:.3f})")
                 return topic
         
         # Fallback to regex-based cleaning
@@ -785,7 +785,7 @@ class KnowledgeAugmenter:
     4. Wikipedia - for general knowledge, concepts
     
     Topic Extraction:
-    When a TopicExtractor is provided, uses BNN-based semantic matching
+    When a TopicExtractor is provided, uses BioNN-based semantic matching
     to extract topics from queries instead of regex patterns.
     """
     
@@ -793,7 +793,7 @@ class KnowledgeAugmenter:
         """
         Args:
             enabled: Whether external lookups are enabled (can be toggled)
-            topic_extractor: Optional TopicExtractor for BNN-based topic extraction
+            topic_extractor: Optional TopicExtractor for BioNN-based topic extraction
         """
         self.enabled = enabled
         self.topic_extractor = topic_extractor
@@ -816,7 +816,7 @@ class KnowledgeAugmenter:
     
     def set_topic_extractor(self, topic_extractor) -> None:
         """
-        Set the topic extractor for BNN-based query cleaning.
+        Set the topic extractor for BioNN-based query cleaning.
         
         This allows late binding when the encoder isn't available at init time.
         """

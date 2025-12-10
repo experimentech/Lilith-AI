@@ -210,7 +210,7 @@ class LilithSession:
             except ImportError:
                 pass
         
-        # Initialize topic extractor for BNN-based query cleaning
+        # Initialize topic extractor for BioNN-based query cleaning
         self.topic_extractor = None
         try:
             from lilith.topic_extractor import TopicExtractor
@@ -705,8 +705,8 @@ class LilithSession:
                 if any(word in subject_lower for word in ('i ', 'my ', 'you ', 'your ', 'we ', 'our ')):
                     continue
                 
-                # SIMPLIFIED: Store the statement as-is for BNN semantic matching
-                # The BNN embedding already recognizes that:
+                # SIMPLIFIED: Store the statement as-is for BioNN semantic matching
+                # The BioNN embedding already recognizes that:
                 #   "are games edible" ↔ "games are not edible" (0.88 similarity)
                 #   "is a parrot a bird" ↔ "a parrot is a bird" (1.00 similarity)
                 # So we don't need complex question-form generation - just store the fact
@@ -716,7 +716,7 @@ class LilithSession:
                 
                 try:
                     # Store the statement itself as the pattern trigger
-                    # BNN semantic matching will find it when similar questions are asked
+                    # BioNN semantic matching will find it when similar questions are asked
                     self.store.add_pattern(
                         text,  # Use statement as trigger (best semantic match)
                         answer, 
@@ -724,7 +724,7 @@ class LilithSession:
                         intent='declarative_learning'
                     )
                     
-                    # Learn the topic for BNN-based query extraction
+                    # Learn the topic for BioNN-based query extraction
                     # This allows future "do you know about {subject}?" queries
                     # to be resolved via semantic similarity instead of regex
                     if self.topic_extractor:

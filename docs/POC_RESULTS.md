@@ -4,7 +4,7 @@
 
 **Status:** ⚠️ **MIXED RESULTS** - Architecture viable but needs refinement
 
-**Key Finding:** The compositional approach works mechanically, but semantic retrieval quality is the critical bottleneck. Once proper BNN embeddings are integrated, this architecture should significantly outperform pattern storage.
+**Key Finding:** The compositional approach works mechanically, but semantic retrieval quality is the critical bottleneck. Once proper BioNN embeddings are integrated, this architecture should significantly outperform pattern storage.
 
 ---
 
@@ -29,7 +29,7 @@ Taught "ML" (synonym) → concept_0005 (should have merged)
 Similarity: Below 0.90 threshold (encoder limitation)
 ```
 
-**Recommendation:** When integrated with proper BNN encoder (PMFlowEmbeddingEncoder), similar concepts will cluster better. Consider:
+**Recommendation:** When integrated with proper BioNN encoder (PMFlowEmbeddingEncoder), similar concepts will cluster better. Consider:
 - Lower initial threshold to 0.80 for testing
 - Use hierarchical clustering approach
 - Add manual synonym mapping as fallback
@@ -71,7 +71,7 @@ Pattern-based: [No pattern found]
 3. Need semantic encoding that clusters related concepts
 
 **Recommendation:**
-- Integrate proper BNN encoder (PMFlowEmbeddingEncoder with contrastive training)
+- Integrate proper BioNN encoder (PMFlowEmbeddingEncoder with contrastive training)
 - Add query expansion (e.g., "What is ML?" → also search "machine learning")
 - Consider hybrid: keyword matching + semantic similarity
 
@@ -98,7 +98,7 @@ Pattern-based: [No pattern found]
 - ✓ Design: Relation-based retrieval mechanism exists
 
 **Recommendation:**
-- This test will likely PASS once BNN encoder is integrated
+- This test will likely PASS once BioNN encoder is integrated
 - Consider adding explicit relations: `Relation("supervised learning", "is_type_of", "machine learning")`
 - Use relation graph for complex queries
 
@@ -194,7 +194,7 @@ Pattern-based: [No pattern found]
 
 ### Immediate Next Steps
 
-**Option 1: Integrate Proper BNN Encoder (RECOMMENDED)**
+**Option 1: Integrate Proper BioNN Encoder (RECOMMENDED)**
 ```python
 # Replace SimpleSemanticEncoder with:
 from pipeline.embedding import PMFlowEmbeddingEncoder
@@ -239,7 +239,7 @@ query = "What types of machine learning?"
 ### Validation Strategy
 
 **Re-run PoC with:**
-1. Proper BNN encoder (PMFlowEmbeddingEncoder)
+1. Proper BioNN encoder (PMFlowEmbeddingEncoder)
 2. Contrastive training on synonym pairs
 3. Lower similarity threshold (0.80 → 0.85)
 4. Keyword fallback for failed retrievals
@@ -278,7 +278,7 @@ The compositional approach is **fundamentally sound**. The PoC revealed encoder 
 ```python
 # Combine multiple retrieval strategies:
 # 1. Keyword matching (fast, precise)
-# 2. BNN semantic (generalizes, clusters)
+# 2. BioNN semantic (generalizes, clusters)
 # 3. Relation graph (structured knowledge)
 ```
 
@@ -295,7 +295,7 @@ The compositional approach is **fundamentally sound**. The PoC revealed encoder 
 
 **Low Priority:**
 ```python
-# Tune based on actual BNN similarity distributions:
+# Tune based on actual BioNN similarity distributions:
 # - Consolidation: 0.85-0.90 (merge very similar)
 # - Retrieval: 0.60-0.70 (find related concepts)
 # - Relation: 0.75+ (structured links)
@@ -316,7 +316,7 @@ The compositional approach is **fundamentally sound**. The PoC revealed encoder 
 **Decision:** **PROCEED WITH CAUTION**
 
 **Next Milestone:**
-Re-run PoC with proper BNN encoder. If Test 2 and Test 3 pass (≥80% quality, generalization works), proceed to Phase 1 production implementation.
+Re-run PoC with proper BioNN encoder. If Test 2 and Test 3 pass (≥80% quality, generalization works), proceed to Phase 1 production implementation.
 
 **Success Criteria for Phase 1:**
 - Storage: N teachings → ≤0.5N concepts
@@ -347,7 +347,7 @@ def encode(text):
 # Problem: "machine learning" and "ML" produce completely different vectors
 ```
 
-**BNN Encoder (Production):**
+**BioNN Encoder (Production):**
 ```python
 def encode(text):
     tokens = text.split()
@@ -358,7 +358,7 @@ def encode(text):
 # Solution: Similar concepts cluster in latent space after training
 ```
 
-### Why BNN Will Fix This
+### Why BioNN Will Fix This
 
 **Contrastive Training:**
 ```python
@@ -377,9 +377,9 @@ dissimilar_pairs = [
 # Result: "What is ML?" retrieves "machine learning" concept ✓
 ```
 
-### Consolidation Example (Post-BNN)
+### Consolidation Example (Post-BioNN)
 
-**Before BNN:**
+**Before BioNN:**
 ```
 Teach: "machine learning is AI that learns"
   → Concept A: embedding=[0.1, 0.3, -0.2, ...]
@@ -390,7 +390,7 @@ Teach: "ML uses algorithms"
 Similarity: 0.23 (too low, no merge)
 ```
 
-**After BNN Training:**
+**After BioNN Training:**
 ```
 Teach: "machine learning is AI that learns"
   → Concept A: embedding=[0.7, 0.3, -0.1, ...]

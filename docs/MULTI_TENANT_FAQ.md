@@ -1,6 +1,6 @@
 # Multi-Tenant Architecture FAQ
 
-## Question 1: BNN State Sharing Across Users
+## Question 1: BioNN State Sharing Across Users
 
 **Q: What happens with the state of the BNNs on each layer when there are multiple users? Will it affect them negatively or will they potentially learn more quickly?**
 
@@ -10,7 +10,7 @@
 
 **How It Works**:
 
-1. **BNN Encoder** (`PMFlowEmbeddingEncoder`):
+1. **BioNN Encoder** (`PMFlowEmbeddingEncoder`):
    - **Stateless**: Same weights for all users
    - **Role**: Converts text → embedding vectors
    - **No Learning**: Weights are frozen after training
@@ -25,7 +25,7 @@
 ### Multi-User Learning Dynamics
 
 **Currently**: 
-- ✅ Users **share** the BNN encoder (semantic understanding)
+- ✅ Users **share** the BioNN encoder (semantic understanding)
 - ✅ Users **don't share** learned patterns (isolation)
 - ✅ Teacher can update **base knowledge** (shared facts)
 - ❌ Users **can't benefit** from each other's learning
@@ -56,7 +56,7 @@ class FederatedBNNLearner:
     Aggregate learning across users while maintaining privacy.
     
     - Users contribute gradient updates (not raw data)
-    - BNN encoder improves from collective experience
+    - BioNN encoder improves from collective experience
     - Better semantic understanding over time
     - Privacy preserved through differential privacy
     """
@@ -64,14 +64,14 @@ class FederatedBNNLearner:
 
 **Benefits**:
 - 🚀 Faster learning from collective experience
-- 🧠 BNN gets better at understanding user language patterns
+- 🧠 BioNN gets better at understanding user language patterns
 - 🔒 Privacy maintained (only gradients shared, not personal data)
 - 📈 New users benefit from existing knowledge
 
 **Tradeoffs**:
 - ⚙️ More complex implementation
 - 🔄 Need gradient aggregation infrastructure
-- ⏱️ Periodic BNN weight updates required
+- ⏱️ Periodic BioNN weight updates required
 
 ## Question 2: .gitignore Configuration
 
@@ -542,7 +542,7 @@ if __name__ == "__main__":
 
 ## Summary
 
-1. **BNN State**: Shared encoder (stateless), isolated pattern learning ✓
+1. **BioNN State**: Shared encoder (stateless), isolated pattern learning ✓
 2. **Git Ignore**: Updated to exclude all user data ✓
 3. **User Separation**: Complete isolation, easy maintenance ✓
 4. **Bad Information**: Natural decay + teacher override + pruning tools ✓
@@ -903,7 +903,7 @@ def review_patterns(store, intent="general"):
 
 ## Updated Summary
 
-1. **BNN State**: Shared encoder (stateless), isolated pattern learning ✓
+1. **BioNN State**: Shared encoder (stateless), isolated pattern learning ✓
 2. **Git Ignore**: Updated to exclude all user data ✓
 3. **User Separation**: Complete isolation, easy maintenance ✓
 4. **Bad Information**: Natural decay + teacher override + pruning tools ✓

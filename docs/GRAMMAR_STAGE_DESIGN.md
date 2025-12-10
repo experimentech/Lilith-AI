@@ -1,4 +1,4 @@
-# Grammar Stage Design: Syntactic BNN Layer
+# Grammar Stage Design: Syntactic BioNN Layer
 
 ## Architecture Overview
 
@@ -18,7 +18,7 @@ INPUT → INTAKE → SEMANTIC → SYNTAX → REASONING → RESPONSE
 - Dependency structures (learned from observation)
 - Grammatical transformations (statement ↔ question, active ↔ passive)
 
-## Why This Works with BNN/PMFlow
+## Why This Works with BioNN/PMFlow
 
 ### 1. **Grammatical Patterns as Symbols**
 Just like semantic concepts, grammatical structures can be:
@@ -194,7 +194,7 @@ syntax_memory/
 ### 2. **Independent Plasticity**
 - Grammar learning separate from semantic learning
 - Can update syntax without affecting meaning
-- Specialized BNN for syntactic patterns
+- Specialized BioNN for syntactic patterns
 
 ### 3. **Compositional Power**
 - Template retrieval: "How to combine these concepts?"
@@ -254,7 +254,7 @@ syntax_memory/
 ## Feasibility Assessment
 
 ✅ **Architecture**: Perfectly aligned with stage-based design
-✅ **BNN Application**: Grammar patterns are symbolic → BNN-friendly
+✅ **BioNN Application**: Grammar patterns are symbolic → BioNN-friendly
 ✅ **Database**: Separate namespace prevents interference
 ✅ **Learning Signal**: Observable from conversation flow
 ✅ **Integration**: Fits between SEMANTIC and RESPONSE

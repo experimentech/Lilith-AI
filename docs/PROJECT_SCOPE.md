@@ -35,13 +35,13 @@ Lilith is a **neuro-symbolic AI architecture** designed to provide capable reaso
 ### 4. Adaptive Embeddings via PMFlow
 - **PMFlow (Pushing Medium Flow)**: Physics-inspired neural dynamics with gravitational flow centers
 - Provides adaptive, plastic embeddings that improve through online learning
-- BNN (Bayesian Neural Network) plasticity enables continuous refinement without full retraining
+- BioNN (Biological Neural Network) plasticity enables continuous refinement without full retraining
 - Temporal parallelism and efficient computation keep resource requirements modest
 - Embeddings capture semantic similarity for retrieval and reasoning
 
 ### 5. Online Learning and Adaptation
 - System learns continuously from interactions (online learning)
-- Reward shaping guides BNN plasticity to improve retrieval quality
+- Reward shaping guides BioNN plasticity to improve retrieval quality
 - No need for expensive periodic retraining cycles
 - Automated constraint checking prevents knowledge base corruption
 - Provenance tracking enables debugging and rollback of learned behaviors
@@ -206,9 +206,9 @@ Lilith is a **neuro-symbolic AI architecture** designed to provide capable reaso
 - **Advantage**: Observability, provenance, human-editable KB
 
 ### Compared to Pushing-Medium (Parent Library)
-- **Pushing-Medium**: Physics simulations + PMFlow/BNN ML components (library/toolkit)
+- **Pushing-Medium**: Physics simulations + PMFlow/BioNN ML components (library/toolkit)
 - **Lilith**: Complete AI system architecture using PMFlow as embedding layer (application)
-- **Relationship**: Lilith depends on Pushing-Medium for PMFlow/BNN primitives
+- **Relationship**: Lilith depends on Pushing-Medium for PMFlow/BioNN primitives
 
 ## Repository Structure
 
@@ -221,7 +221,7 @@ lilith/
 │       ├── configs/            # Experiment configurations
 │       └── docs/               # Design documentation
 ├── tests/                      # Test suite
-├── Pushing-Medium/             # Dependency (PMFlow/BNN library)
+├── Pushing-Medium/             # Dependency (PMFlow/BioNN library)
 ├── concept_assessment_summary.md  # Architecture concept doc
 ├── PROJECT_SCOPE.md            # This file
 └── pyproject.toml              # Python package config

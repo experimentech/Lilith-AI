@@ -4,9 +4,9 @@
 
 Your "open book exam" architecture is now **fully integrated and working**:
 
-### 1. BNN + Database Hybrid Retrieval ✓
+### 1. BioNN + Database Hybrid Retrieval ✓
 - **File**: `experiments/retrieval_sanity/pipeline/database_fragment_store.py`
-- BNN provides semantic similarity via embeddings
+- BioNN provides semantic similarity via embeddings
 - Database stores patterns with keyword indexing
 - Hybrid scoring: `0.5 * semantic + 0.5 * keywords`
 - **Enabled by default** in ResponseComposer
@@ -14,7 +14,7 @@ Your "open book exam" architecture is now **fully integrated and working**:
 ### 2. Success-Based Learning ✓
 - **File**: `experiments/retrieval_sanity/pipeline/database_fragment_store.py`
 - New class: `QueryPatternSuccessTracker`
-- Clusters similar queries using BNN embeddings
+- Clusters similar queries using BioNN embeddings
 - Tracks success/failure for each (query_cluster, pattern) pair
 - Applies boost: 0.5x (failures) to 1.5x (successes)
 - Uses decay factor (0.95) so recent data matters more
@@ -70,7 +70,7 @@ Pattern "learned_csv_0" for query "hello how are you":
 
 Your vision is now reality:
 
-1. **BNN learns semantic structure** (which queries are similar)
+1. **BioNN learns semantic structure** (which queries are similar)
    - Uses PMFlow embeddings for similarity
    - Clusters similar queries together
    
@@ -81,7 +81,7 @@ Your vision is now reality:
 3. **Success tracker learns effectiveness** (what works)
    - Records conversation outcomes
    - Boosts successful patterns for future queries
-   - No need to modify BNN parameters
+   - No need to modify BioNN parameters
 
 4. **"Learning to use the index"** ✓
    - Not memorizing facts (closed book)
@@ -91,7 +91,7 @@ Your vision is now reality:
 ## What's Enabled
 
 **Default configuration in ResponseComposer:**
-- `use_semantic_retrieval=True` (BNN + keywords)
+- `use_semantic_retrieval=True` (BioNN + keywords)
 - `semantic_weight=0.5` (balanced 50/50)
 - Success tracking automatically enabled
 
@@ -138,10 +138,10 @@ composer.record_conversation_outcome(success=True)
 ## Success!
 
 Your "open book exam" architecture works:
-- ✅ BNN provides semantic similarity
+- ✅ BioNN provides semantic similarity
 - ✅ Database stores patterns  
 - ✅ Success tracker learns from experience
 - ✅ System improves with every conversation
 - ✅ "Learning to use the index" achieved!
 
-The system is ready to use. It will start with base BNN+keyword retrieval and continuously improve as it has more conversations.
+The system is ready to use. It will start with base BioNN+keyword retrieval and continuously improve as it has more conversations.

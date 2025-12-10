@@ -1,7 +1,7 @@
-"""Multi-stage coordinator for distributed PMFlow BNN pipeline.
+"""Multi-stage coordinator for distributed PMFlow BioNN pipeline.
 
 Each cognitive stage has:
-- Dedicated PMFlow encoder (specialized BNN)
+- Dedicated PMFlow encoder (specialized BioNN)
 - Dedicated database namespace
 - Independent plasticity learning
 - Specific task focus
@@ -71,7 +71,7 @@ class StageArtifact:
 
 
 class CognitiveStage:
-    """Single specialized BNN processing stage."""
+    """Single specialized BioNN processing stage."""
     
     def __init__(
         self,
@@ -102,7 +102,7 @@ class CognitiveStage:
         input_data: Any,
         upstream_artifacts: Optional[List[StageArtifact]] = None,
     ) -> StageArtifact:
-        """Process input through this stage's specialized BNN.
+        """Process input through this stage's specialized BioNN.
         
         Args:
             input_data: Stage-specific input (tokens, frames, etc.)
@@ -118,7 +118,7 @@ class CognitiveStage:
         tokens: List[str],
         context_embeddings: Optional[List[torch.Tensor]] = None,
     ) -> StageArtifact:
-        """Encode tokens using this stage's BNN, optionally conditioned on context.
+        """Encode tokens using this stage's BioNN, optionally conditioned on context.
         
         Context embeddings from upstream stages can guide this stage's processing.
         """
@@ -184,7 +184,7 @@ class CognitiveStage:
         tokens: List[str],
         reward_signal: float,
     ) -> Dict[str, Any]:
-        """Update this stage's BNN based on reward signal.
+        """Update this stage's BioNN based on reward signal.
         
         Args:
             tokens: Input that produced the reward
@@ -343,9 +343,9 @@ class SemanticStage(CognitiveStage):
 
 
 class StageCoordinator:
-    """Coordinates multi-stage PMFlow BNN pipeline.
+    """Coordinates multi-stage PMFlow BioNN pipeline.
     
-    Manages data flow between specialized stages, each with dedicated BNN and database.
+    Manages data flow between specialized stages, each with dedicated BioNN and database.
     """
     
     def __init__(

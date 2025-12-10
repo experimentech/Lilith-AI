@@ -127,7 +127,7 @@ def test_hybrid_similarity():
 
 if __name__ == "__main__":
     print("=" * 70)
-    print("PMFlow BNN Enhanced v0.3.0 - Feature Tests")
+    print("PMFlow BioNN Enhanced v0.3.0 - Feature Tests")
     print("=" * 70)
     
     test_multiscale()

@@ -2,7 +2,7 @@
 Context Encoder - Build Rich Conversation Context
 
 Encodes conversation history into semantic context representations
-using BNN embeddings. This enables:
+using BioNN embeddings. This enables:
 - Multi-turn coherence
 - Topic tracking across turns
 - Reference resolution ("it", "that", etc.)

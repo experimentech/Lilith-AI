@@ -236,13 +236,13 @@ class MultiTenantFragmentStore:
         intent_filter: Optional[str] = None
     ) -> List[Tuple[ResponsePattern, float]]:
         """
-        Hybrid BNN + keyword retrieval across user and base stores.
+        Hybrid BioNN + keyword retrieval across user and base stores.
         
         Args:
             context: User input/conversation context
             topk: Number of patterns to retrieve
             min_score: Minimum success score threshold
-            semantic_weight: Weight for BNN embeddings vs keywords
+            semantic_weight: Weight for BioNN embeddings vs keywords
             use_query_expansion: Use PMFlow query expansion
             use_vocabulary_expansion: Use vocabulary co-occurrence expansion
             intent_filter: Optional intent to filter/boost patterns

@@ -256,11 +256,11 @@ class ModalClassifier:
                 any(intent in query for intent in intent_keywords))
 ```
 
-### BNN-Based Classifier (Phase 2 - Future)
+### BioNN-Based Classifier (Phase 2 - Future)
 
 ```python
 class BNNModalClassifier:
-    """Neural modal classifier using BNN embeddings"""
+    """Neural modal classifier using BioNN embeddings"""
     
     def __init__(self, encoder):
         self.encoder = encoder
@@ -268,7 +268,7 @@ class BNNModalClassifier:
     
     def classify(self, query: str) -> Tuple[Modality, float]:
         """
-        Classify using BNN semantic similarity to modal prototypes.
+        Classify using BioNN semantic similarity to modal prototypes.
         
         Returns: (modality, confidence)
         """
@@ -477,7 +477,7 @@ class MultiModalStore:
 1. Visual + audio backends
 2. Cross-modal concepts
 3. Unified search across modalities
-4. BNN-based modal classification
+4. BioNN-based modal classification
 
 ---
 

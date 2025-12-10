@@ -1,7 +1,7 @@
 """
 Syntax Stage - Grammatical Pattern Processing
 
-Processes syntactic structures as learned symbolic patterns using BNN.
+Processes syntactic structures as learned symbolic patterns using BioNN.
 Enables grammatically-guided composition without hardcoded rules.
 
 This stage learns:

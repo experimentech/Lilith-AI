@@ -200,7 +200,7 @@ Bot: Python is known for its simple syntax and readability.  [DIFFERENT!]
 
 ## Architecture Alignment
 
-This implementation fits perfectly within the existing **BNN + Database** architecture:
+This implementation fits perfectly within the existing **BioNN + Database** architecture:
 
 ### Memory Hierarchy:
 - **Working Memory** = `ConversationState` (PMFlow activations with decay)
@@ -232,7 +232,7 @@ The conversation history is now **wired up and working**, but Lilith still respo
    - Resolve "it", "that", "they" using conversation history
    - Build on previous topics naturally
 
-All of the above can be done within the **BNN + Database** paradigm - no LLM needed!
+All of the above can be done within the **BioNN + Database** paradigm - no LLM needed!
 
 ## Files Changed
 
@@ -276,7 +276,7 @@ Architecture:
 - Short-term Memory = ConversationHistory (NOW ACTIVE!)
 - Working Memory = ConversationState (PMFlow)
 - Long-term Memory = ResponseFragmentStore
-- All within BNN+Database paradigm, no LLM required
+- All within BioNN+Database paradigm, no LLM required
 
 Next: Phase 2 will add compositional response generation using
 ConceptStore + TemplateComposer for natural conversation flow.

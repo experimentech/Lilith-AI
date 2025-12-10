@@ -191,13 +191,13 @@ Query: 'what is rust'
 **Impact:**
 - **Structure-guided retrieval**: Definition queries get definition responses
 - **Focused concept matching**: Uses main concept, not full query text
-- **Reliable intent detection**: Pattern-based intent > BNN clustering
+- **Reliable intent detection**: Pattern-based intent > BioNN clustering
 - **Slot-based understanding**: Extracts structured information from queries
 
 **Integration Points:**
 - `ResponseComposer._compose_from_patterns_internal()`: Extracts query structure before retrieval
 - `ResponseComposer._compose_parallel()`: Uses extracted concept for focused concept lookup
-- Intent overrides BNN classification when confidence > 0.85
+- Intent overrides BioNN classification when confidence > 0.85
 
 **Location:**
 - `lilith/query_pattern_matcher.py` (main implementation)
@@ -241,7 +241,7 @@ Query: 'what is rust'
 **Results:**
 - Query "what is rust" → intent=definition, concept="rust"
 - Structure-guided retrieval focuses on relevant patterns
-- Pattern-based intent more reliable than BNN clustering
+- Pattern-based intent more reliable than BioNN clustering
 - Main concept extraction enables focused concept lookup
 
 ---

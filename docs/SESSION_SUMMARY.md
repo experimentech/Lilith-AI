@@ -213,7 +213,7 @@ Dissimilar pairs (similarity < 0.5):
 **Future Integration** (not yet implemented):
 1. Generate contrastive pairs from corpus
 2. Compute batch loss using current encoder
-3. Backpropagate through PMFlow BNN
+3. Backpropagate through PMFlow BioNN
 4. Update plasticity mechanism with contrastive rewards
 5. Re-evaluate clustering quality
 

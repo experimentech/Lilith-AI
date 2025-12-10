@@ -2,7 +2,7 @@
 
 **Date:** 2025-12-02  
 **Status:** Implementation Phase  
-**Architecture:** BNN + Database (No LLM!)
+**Architecture:** BioNN + Database (No LLM!)
 
 ## Problem: Layer 4 Doing Two Jobs
 
@@ -15,7 +15,7 @@ ResponseComposer (Layer 4):
      Result: 1,235+ patterns, unbounded growth!
   
   2. COMPOSITION (right job, but broken) - Should compose responses
-     BNN generates embeddings → UNUSED for retrieval
+     BioNN generates embeddings → UNUSED for retrieval
      Keyword matching instead of semantic similarity
 ```
 
@@ -33,7 +33,7 @@ ResponseComposer (Layer 4):
 │      NOT store verbatim Q&A pairs!                           │
 │                                                               │
 │ Components:                                                   │
-│  1. BNN: Intent classification + Semantic encoding           │
+│  1. BioNN: Intent classification + Semantic encoding           │
 │  2. DB #1: pragmatic_templates.db (~50 templates)           │
 │     → Conversational patterns (HOW to say things)            │
 │  3. DB #2: concept_store.db (unbounded)                     │
@@ -41,9 +41,9 @@ ResponseComposer (Layer 4):
 └──────────────────────────────────────────────────────────────┘
 ```
 
-## Architecture: BNN + Two Databases
+## Architecture: BioNN + Two Databases
 
-### Component 1: BNN (Already Exists!)
+### Component 1: BioNN (Already Exists!)
 
 **File:** `response_composer.py`
 
@@ -130,10 +130,10 @@ ResponseComposer (Layer 4):
 
 ### Example Query: "What is machine learning?"
 
-#### Step 1: Intent Recognition (BNN)
+#### Step 1: Intent Recognition (BioNN)
 
 ```python
-# BNN classifies intent
+# BioNN classifies intent
 query = "What is machine learning?"
 intent = bnn_classifier.classify(query)  # → "definition_query"
 
@@ -141,10 +141,10 @@ intent = bnn_classifier.classify(query)  # → "definition_query"
 category = intent_to_category[intent]  # → "definition"
 ```
 
-#### Step 2: Concept Retrieval (BNN + Concept DB)
+#### Step 2: Concept Retrieval (BioNN + Concept DB)
 
 ```python
-# BNN encodes concept
+# BioNN encodes concept
 concept_query = extract_concept(query)  # → "machine learning"
 embedding = bnn_encoder.encode(concept_query)
 
@@ -197,8 +197,8 @@ Problem: Can't compose novel responses, just retrieves stored text
 User: "What is Python?"
 
 Layer 4:
-  Step 1 (Intent): BNN → "definition_query"
-  Step 2 (Concept): BNN + DB → concept["Python"] 
+  Step 1 (Intent): BioNN → "definition_query"
+  Step 2 (Concept): BioNN + DB → concept["Python"] 
           properties: ["programming language", "high-level", "interpreted"]
   Step 3 (Compose): Template + Concept → 
           "Python is a programming language. It's known for being high-level."
@@ -256,7 +256,7 @@ Bot:  [Detects repetition via ConversationHistory]
 
 ```
 lilith/
-├── response_composer.py          # Layer 4 BNN (existing)
+├── response_composer.py          # Layer 4 BioNN (existing)
 ├── pragmatic_templates.py         # NEW: Conversational templates DB
 ├── production_concept_store.py    # Existing: Semantic concepts DB
 ├── template_composer.py           # Existing: Template filling logic
@@ -332,34 +332,34 @@ Bot:  [comparison template] + [Python vs Java concepts]
 ```
 Layer 1: INTAKE
   Input:  Raw text
-  BNN:    Typo/normalization recognition
+  BioNN:    Typo/normalization recognition
   DB:     Correction patterns
   Output: Normalized tokens → Layer 2
 
 Layer 2: SEMANTIC
   Input:  Tokens
-  BNN:    Concept embedding
+  BioNN:    Concept embedding
   DB:     Semantic taxonomy
   Output: Concept representations → Layer 3 & 4
 
 Layer 3: SYNTAX  
   Input:  Tokens + concepts
-  BNN:    Grammar recognition
+  BioNN:    Grammar recognition
   DB:     Syntax patterns
   Output: Parse structure → Layer 4
 
 Layer 4: PRAGMATIC
   Input:  Query + concepts + history
-  BNN:    Intent classification + semantic encoding
+  BioNN:    Intent classification + semantic encoding
   DB #1:  Pragmatic templates (~50, linguistic)
   DB #2:  Concept store (N, semantic)
   Output: Composed natural response → User
 ```
 
-### BNN + Database Consistency ✅
+### BioNN + Database Consistency ✅
 
 Each layer has:
-1. **BNN** for recognition/encoding
+1. **BioNN** for recognition/encoding
 2. **Database(s)** for lookup
 3. **Output** to next layer
 
@@ -375,4 +375,4 @@ Layer 4 is unique: Has **2 databases** because it bridges structure (templates) 
 
 ---
 
-**Key Takeaway:** Layer 4 is NOT getting a new BNN! It's restructuring its databases to separate linguistic patterns (templates) from semantic knowledge (concepts). This is the correct architecture for the "Open Book Exam" design.
+**Key Takeaway:** Layer 4 is NOT getting a new BioNN! It's restructuring its databases to separate linguistic patterns (templates) from semantic knowledge (concepts). This is the correct architecture for the "Open Book Exam" design.

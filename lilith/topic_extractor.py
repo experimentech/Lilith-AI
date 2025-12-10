@@ -1,12 +1,12 @@
 """
-Topic Extractor - BNN-based Topic Learning and Extraction
+Topic Extractor - BioNN-based Topic Learning and Extraction
 
 Learns topics from declarations and uses semantic similarity
 to extract topics from queries. No hardcoded patterns needed.
 
 Self-learning flow:
 1. User teaches: "dogs are mammals" → learns topic "dogs"
-2. User asks: "do you know about dogs?" → BNN matches to "dogs"
+2. User asks: "do you know about dogs?" → BioNN matches to "dogs"
 3. Wikipedia lookup uses "dogs" instead of regex-extracted garbage
 
 This replaces the regex-based _clean_query approach with neural learning.
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class LearnedTopic:
     """A topic learned from declarations."""
     name: str                      # "dogs", "Python", "machine learning"
-    embedding: np.ndarray          # BNN embedding of the topic
+    embedding: np.ndarray          # BioNN embedding of the topic
     example_contexts: List[str]    # Contexts where this topic appeared
     usage_count: int = 1           # How often this topic has been used
     success_rate: float = 0.5      # How often lookups succeeded
@@ -34,7 +34,7 @@ class LearnedTopic:
 
 class TopicExtractor:
     """
-    BNN-based topic extraction that learns from declarations.
+    BioNN-based topic extraction that learns from declarations.
     
     Instead of regex patterns like:
         "do you know about X?" → extract X
@@ -53,7 +53,7 @@ class TopicExtractor:
     ):
         """
         Args:
-            encoder: BNN encoder for semantic embeddings
+            encoder: BioNN encoder for semantic embeddings
             storage_path: Where to persist learned topics
             similarity_threshold: Minimum similarity to match a topic
         """
@@ -126,7 +126,7 @@ class TopicExtractor:
     
     def extract_topic(self, query: str) -> Tuple[Optional[str], float]:
         """
-        Extract the topic from a query using BNN similarity.
+        Extract the topic from a query using BioNN similarity.
         
         Instead of regex, we:
         1. Encode the full query
@@ -207,7 +207,7 @@ class TopicExtractor:
         return [t.name for t in self.topics.values()]
     
     def _encode(self, text: str) -> np.ndarray:
-        """Encode text to BNN embedding."""
+        """Encode text to BioNN embedding."""
         emb = self.encoder.encode(text)
         if hasattr(emb, 'cpu'):
             emb = emb.cpu().numpy()
@@ -230,7 +230,7 @@ class TopicExtractor:
         "tell me about machine learning" → "machine learning"
         
         This is NOT regex extraction - just removing common filler words
-        to get a cleaner signal for the BNN.
+        to get a cleaner signal for the BioNN.
         """
         words = query.lower().strip('?!.,').split()
         content_words = [w for w in words if w not in self._scaffolding_words]

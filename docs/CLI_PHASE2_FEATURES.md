@@ -248,7 +248,7 @@ When CLI starts, it creates:
 5. Math backend with symbolic computation
 
 ### Composition Pipeline
-1. User query → BNN intent classification
+1. User query → BioNN intent classification
 2. Concept retrieval from concept store
 3. Template matching by intent + available slots
 4. Template filling with concept properties

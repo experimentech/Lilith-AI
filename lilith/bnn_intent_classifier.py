@@ -1,7 +1,7 @@
 """
-BNN Intent Clustering - Semantic Intent Detection
+BioNN Intent Clustering - Semantic Intent Detection
 
-Uses BNN embeddings to cluster response patterns by semantic intent,
+Uses BioNN embeddings to cluster response patterns by semantic intent,
 enabling more accurate intent detection without keyword matching.
 
 Key improvements over keyword-based classification:
@@ -29,7 +29,7 @@ class IntentCluster:
 
 class BNNIntentClassifier:
     """
-    Semantic intent classification using BNN embeddings.
+    Semantic intent classification using BioNN embeddings.
     
     Instead of keyword matching, we:
     1. Cluster learned patterns by embedding similarity
@@ -39,10 +39,10 @@ class BNNIntentClassifier:
     
     def __init__(self, semantic_encoder, min_cluster_size: int = 3):
         """
-        Initialize BNN intent classifier.
+        Initialize BioNN intent classifier.
         
         Args:
-            semantic_encoder: Encoder for generating BNN embeddings
+            semantic_encoder: Encoder for generating BioNN embeddings
             min_cluster_size: Minimum patterns to form a stable cluster
         """
         self.encoder = semantic_encoder
@@ -137,7 +137,7 @@ class BNNIntentClassifier:
     
     def classify_intent(self, text: str, topk: int = 3) -> List[Tuple[str, float]]:
         """
-        Classify intent of text using BNN embeddings.
+        Classify intent of text using BioNN embeddings.
         
         Args:
             text: Input text to classify

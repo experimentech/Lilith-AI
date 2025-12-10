@@ -130,7 +130,7 @@ if hasattr(self.composer, 'record_conversation_outcome'):
 
 ### To Hit 9+/10
 1. **Pattern coverage** - Add domain-specific patterns (Wikipedia, technical Q&A)
-2. **Better adaptation** - Use BNN embeddings for word selection in adaptation
+2. **Better adaptation** - Use BioNN embeddings for word selection in adaptation
 3. **Compositional generation** - Blend multiple patterns for novel responses
 4. **Cross-layer learning** - Share success signals across intake/semantic/syntax layers
 

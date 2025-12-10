@@ -28,9 +28,9 @@ class QueryPatternSuccessTracker:
     """
     Tracks which patterns work for which queries - the 'learning to use the index' component.
     
-    Uses BNN embeddings to cluster similar queries, then tracks success rates
+    Uses BioNN embeddings to cluster similar queries, then tracks success rates
     for each (query_cluster, pattern) pair. This allows the system to learn
-    from experience which patterns work without modifying the BNN embeddings.
+    from experience which patterns work without modifying the BioNN embeddings.
     """
     
     def __init__(self, encoder, decay_factor: float = 0.95):
@@ -38,7 +38,7 @@ class QueryPatternSuccessTracker:
         Initialize success tracker.
         
         Args:
-            encoder: BNN encoder for computing query embeddings
+            encoder: BioNN encoder for computing query embeddings
             decay_factor: How quickly old experiences fade (0.95 = 5% decay per interaction)
         """
         self.encoder = encoder
@@ -51,7 +51,7 @@ class QueryPatternSuccessTracker:
         self.query_clusters = []
         
     def compute_query_embedding(self, query: str) -> np.ndarray:
-        """Compute BNN embedding for a query."""
+        """Compute BioNN embedding for a query."""
         tokens = query.lower().split()
         try:
             emb = self.encoder.encode(tokens).cpu().detach().numpy().flatten()
@@ -209,16 +209,16 @@ class DatabaseBackedFragmentStore:
         intent_hint: Optional[str] = None
     ) -> List[Tuple[ResponsePattern, float]]:
         """
-        Retrieve response patterns using BNN intent + database queries.
+        Retrieve response patterns using BioNN intent + database queries.
         
-        Strategy: Use BNN to understand semantic intent, then query database
+        Strategy: Use BioNN to understand semantic intent, then query database
         for patterns matching that intent + keywords.
         
         Args:
             context: Current conversation context
             topk: Number of patterns to retrieve
             min_score: Minimum success score threshold
-            intent_hint: Optional intent classification from BNN
+            intent_hint: Optional intent classification from BioNN
             
         Returns:
             List of (ResponsePattern, relevance_score) tuples
@@ -406,20 +406,20 @@ class DatabaseBackedFragmentStore:
         intent_filter: Optional[str] = None
     ) -> List[Tuple[ResponsePattern, float]]:
         """
-        Hybrid BNN embedding + keyword retrieval (OPEN BOOK EXAM architecture).
+        Hybrid BioNN embedding + keyword retrieval (OPEN BOOK EXAM architecture).
         
         Enhanced with PMFlow QueryExpansion and vocabulary-based query expansion
         for better synonym matching and semantic coverage.
         
-        This is the key innovation: BNN learns "how to index" patterns,
+        This is the key innovation: BioNN learns "how to index" patterns,
         database stores "what to retrieve". Like an open book exam where
-        the BNN recognizes similarity, but database holds the facts.
+        the BioNN recognizes similarity, but database holds the facts.
         
         Args:
             context: User input/conversation context
             topk: Number of patterns to retrieve
             min_score: Minimum success score threshold
-            semantic_weight: How much to weight BNN embeddings vs keywords (0.0-1.0)
+            semantic_weight: How much to weight BioNN embeddings vs keywords (0.0-1.0)
                 0.0 = pure keywords (current system)
                 1.1 = pure semantic similarity
                 0.3 = hybrid (recommended)
@@ -429,7 +429,7 @@ class DatabaseBackedFragmentStore:
         Returns:
             List of (ResponsePattern, combined_score) tuples
         """
-        # Step 1: BNN EMBEDDING - Learn "how to recognize" similar contexts
+        # Step 1: BioNN EMBEDDING - Learn "how to recognize" similar contexts
         # This is the "indexing skill" (open book exam)
         tokens = context.lower().split()
         
@@ -449,7 +449,7 @@ class DatabaseBackedFragmentStore:
         else:
             tokens_for_embedding = tokens
         
-        query_embedding = self.encoder.encode(tokens_for_embedding)  # BNN generates semantic representation
+        query_embedding = self.encoder.encode(tokens_for_embedding)  # BioNN generates semantic representation
         
         # NEW: Query expansion for synonym matching (ML → machine learning)
         if use_query_expansion and hasattr(self.encoder, 'pm_field'):
@@ -520,8 +520,8 @@ class DatabaseBackedFragmentStore:
         if not keyword_patterns:
             return self._get_top_patterns(topk, min_score)
         
-        # Step 3: SEMANTIC SIMILARITY - BNN computes similarity to each candidate
-        # This is where BNN "looks up" which patterns are relevant
+        # Step 3: SEMANTIC SIMILARITY - BioNN computes similarity to each candidate
+        # This is where BioNN "looks up" which patterns are relevant
         scored_patterns = []
         
         for row in keyword_patterns:
@@ -534,7 +534,7 @@ class DatabaseBackedFragmentStore:
                 usage_count=row['usage_count']
             )
             
-            # Compute BNN semantic similarity
+            # Compute BioNN semantic similarity
             trigger_tokens = pattern.trigger_context.lower().split()
             pattern_embedding = self.encoder.encode(trigger_tokens)
             pattern_vec = pattern_embedding.cpu().detach().numpy().flatten()
@@ -571,10 +571,10 @@ class DatabaseBackedFragmentStore:
             else:
                 keyword_score = 0.0
             
-            # Step 4: HYBRID SCORE - Combine BNN similarity + keyword match + success boost
+            # Step 4: HYBRID SCORE - Combine BioNN similarity + keyword match + success boost
             # This balances learned semantic understanding with explicit matching
             hybrid_score = (
-                semantic_weight * semantic_sim +  # BNN: "This feels similar"
+                semantic_weight * semantic_sim +  # BioNN: "This feels similar"
                 (1.0 - semantic_weight) * keyword_score  # Keywords: "These words match"
             )
             

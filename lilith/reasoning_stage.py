@@ -1,9 +1,9 @@
 """
-Reasoning Stage - BNN-based Deliberation and Inference
+Reasoning Stage - BioNN-based Deliberation and Inference
 
 A cognitive layer that uses the PMFlow latent space for "thinking":
 - Activates relevant concepts in working memory
-- Lets the BNN evolve these concepts to find connections
+- Lets the BioNN evolve these concepts to find connections
 - Generates inferences from concept convergence/divergence
 - Resolves ambiguity through multi-step deliberation
 
@@ -41,7 +41,7 @@ class ActivatedConcept:
     """A concept activated in working memory during reasoning."""
     concept_id: str
     term: str
-    embedding: torch.Tensor          # BNN embedding in latent space
+    embedding: torch.Tensor          # BioNN embedding in latent space
     activation: float                # How strongly activated (0-1)
     source: str                      # "query", "retrieved", "inferred"
     properties: List[str] = field(default_factory=list)
@@ -71,7 +71,7 @@ class DeliberationResult:
 
 class ReasoningStage:
     """
-    BNN-based reasoning through latent space evolution.
+    BioNN-based reasoning through latent space evolution.
     
     Key mechanisms:
     1. Working Memory: Active concepts with attention weights
@@ -141,7 +141,7 @@ class ReasoningStage:
         
         Args:
             term: Concept term
-            embedding: BNN embedding
+            embedding: BioNN embedding
             activation: Initial activation strength
             source: Where this concept came from
             properties: Optional properties list

@@ -28,7 +28,7 @@ The Q&A bootstrap system (116 question-answer pairs) was successfully implemente
    - Composition/blending: Works for combining response fragments
 
 3. **Semantic Encoding**
-   - PMFlow BNN encoder creates embeddings for concepts
+   - PMFlow BioNN encoder creates embeddings for concepts
    - Works well for **semantic similarity** (related concepts)
    - Pattern learning and plasticity mechanisms functional
 
@@ -357,13 +357,13 @@ for query in test_queries:
 
 ### What Each Layer Does
 
-**Semantic Layer (PMFlow BNN)**
+**Semantic Layer (PMFlow BioNN)**
 - Purpose: Encode **concepts** and **meanings**
 - Input: Word sequences
 - Output: Concept embeddings
 - Use case: Understanding what the user is talking about
 
-**Syntax Layer (PMFlow BNN)**
+**Syntax Layer (PMFlow BioNN)**
 - Purpose: Process **grammatical structures**
 - Input: POS tag sequences
 - Output: Syntax patterns and composition templates

@@ -2,7 +2,7 @@
 Automatic Semantic Learning from Conversations
 
 Extracts semantic relationships from natural conversation without explicit teaching.
-This enables the BNN to notice patterns like:
+This enables the BioNN to notice patterns like:
 - "cats and dogs are both pets" → (cat, dog, positive), (cat, pet, positive)
 - "happy is the opposite of sad" → (happy, sad, hard_negative)
 - "Python is a programming language" → (Python, programming language, positive)

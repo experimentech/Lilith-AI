@@ -1,14 +1,14 @@
-# Architecture Verification: BNN + Database Per Layer
+# Architecture Verification: BioNN + Database Per Layer
 
 ## Overview
 
-This document describes a segmented architecture in which each cognitive layer pairs a Bayesian/neural encoder (BNN) with a supporting database. The BNN component performs pattern recognition and produces representations; the database stores facts, patterns, and rules that are retrieved using the representations produced by the BNN. Each layer emits a working representation that serves as input for the subsequent layer.
+This document describes a segmented architecture in which each cognitive layer pairs a Biological neural encoder (BioNN) with a supporting database. The BioNN component performs pattern recognition and produces representations; the database stores facts, patterns, and rules that are retrieved using the representations produced by the BioNN. Each layer emits a working representation that serves as input for the subsequent layer.
 
 ## Layer 1: Intake (Character/Token Level)
 
 Working representation: raw text -> normalized tokens
 
-BNN component:
+BioNN component:
 - Encoder that learns character-level and tokenization patterns
 - Plasticity to adapt normalization rules
 
@@ -17,10 +17,10 @@ Database component:
 - Stores typo corrections and normalization rules (for example: "teh" -> "the")
 
 Status:
-- BNN present; intake database exists but is not currently utilized for lookup in the pipeline.
+- BioNN present; intake database exists but is not currently utilized for lookup in the pipeline.
 
 Operation:
-1. BNN indicates pattern similarity for candidate corrections.
+1. BioNN indicates pattern similarity for candidate corrections.
 2. Database performs a similarity-based lookup to retrieve corrections.
 3. Correction results are applied to produce normalized tokens for the semantic layer.
 
@@ -28,7 +28,7 @@ Operation:
 
 Working representation: tokens -> concept embeddings and topic activations
 
-BNN component:
+BioNN component:
 - Encoder that maps tokens to concept embeddings (e.g., PMFlow or equivalent)
 - Plasticity to refine concept representations
 
@@ -37,10 +37,10 @@ Database component:
 - Stores concept definitions and inter-concept relationships (IS-A, PART-OF, attributes)
 
 Status:
-- BNN embedding generation is operating; semantic taxonomy is currently static and rarely queried during runtime.
+- BioNN embedding generation is operating; semantic taxonomy is currently static and rarely queried during runtime.
 
 Operation:
-1. Words are embedded into a concept space by the BNN.
+1. Words are embedded into a concept space by the BioNN.
 2. Embeddings are used to query the semantic taxonomy for related concepts and relationships.
 3. The combined semantic representation is emitted to downstream layers.
 
@@ -48,7 +48,7 @@ Operation:
 
 Working representation: tokens -> POS sequences -> grammatical structures
 
-BNN component:
+BioNN component:
 - POS tagger and pattern encoder
 - Plasticity to learn new grammatical structures
 
@@ -57,10 +57,10 @@ Database component:
 - Stores grammatical templates and phrase structure patterns (for example: "DT JJ NN" -> NounPhrase)
 
 Status:
-- BNN produces POS and pattern encodings; syntax patterns table exists but is underutilized.
+- BioNN produces POS and pattern encodings; syntax patterns table exists but is underutilized.
 
 Operation:
-1. BNN produces POS and pattern embeddings from tokens.
+1. BioNN produces POS and pattern embeddings from tokens.
 2. Pattern embeddings are used to query syntax_patterns for valid phrase or parse templates.
 3. The parse structure is produced and passed to the pragmatic/response layer.
 
@@ -68,7 +68,7 @@ Operation:
 
 Working representation: context -> intent embeddings -> response selection
 
-BNN component:
+BioNN component:
 - Semantic/context encoder for intent recognition
 - Learner that updates response-selection parameters based on feedback
 
@@ -76,20 +76,20 @@ Database component:
 - Table: conversation_patterns (patterns, trigger contexts, success metrics)
 
 Status:
-- Both BNN and patterns database are in use; current pattern retrieval primarily relies on keyword matching rather than embedding-based similarity.
+- Both BioNN and patterns database are in use; current pattern retrieval primarily relies on keyword matching rather than embedding-based similarity.
 
 Operation:
-1. Context is encoded into an intent embedding by the BNN.
+1. Context is encoded into an intent embedding by the BioNN.
 2. The patterns database is queried using a hybrid strategy combining keywords and embedding similarity to select candidate responses.
 3. The selected response is returned and its success metrics are updated based on feedback.
 
 ## Observed Integration Issues
 
-The architecture is conceptually aligned: each layer should pair a BNN with a database and use BNN-generated representations to drive database queries. In practice, several layers generate embeddings without using those representations to perform similarity-based database lookups. This results in unused representational capacity and a keyword-dominant retrieval strategy in the pragmatic layer.
+The architecture is conceptually aligned: each layer should pair a BioNN with a database and use BioNN-generated representations to drive database queries. In practice, several layers generate embeddings without using those representations to perform similarity-based database lookups. This results in unused representational capacity and a keyword-dominant retrieval strategy in the pragmatic layer.
 
 ## Recommended Implementation Changes
 
-1. Ensure BNN embeddings are used as primary or hybrid keys for database queries across all layers. Implement similarity search (for example, approximate nearest neighbors) on stored database vectors.
+1. Ensure BioNN embeddings are used as primary or hybrid keys for database queries across all layers. Implement similarity search (for example, approximate nearest neighbors) on stored database vectors.
 
 2. Convert static resources into queryable tables that can be incrementally updated. For example, allow the semantic_taxonomy and intake_patterns tables to be extended by learning procedures when new facts or corrections are validated.
 
@@ -101,7 +101,7 @@ The architecture is conceptually aligned: each layer should pair a BNN with a da
 
 ## Example Implementation Sketches
 
-The following sketches illustrate the intended connection pattern between BNN outputs and database queries (pseudocode):
+The following sketches illustrate the intended connection pattern between BioNN outputs and database queries (pseudocode):
 
 Intake layer:
 
@@ -154,4 +154,4 @@ class PragmaticLearner(GeneralPurposeLearner):
 
 ## Conclusion
 
-The layered BNN + database architecture is sound; the principal work required is the integration of BNN-produced representations into database retrieval operations and the conversion of static resources into updatable, queryable knowledge stores. Implementing the recommended changes will improve utilization of learned representations, enhance interpretability, and allow knowledge to be updated without retraining the BNN components.
+The layered BioNN + database architecture is sound; the principal work required is the integration of BioNN-produced representations into database retrieval operations and the conversion of static resources into updatable, queryable knowledge stores. Implementing the recommended changes will improve utilization of learned representations, enhance interpretability, and allow knowledge to be updated without retraining the BioNN components.

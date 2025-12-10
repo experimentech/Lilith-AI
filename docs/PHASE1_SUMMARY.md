@@ -23,7 +23,7 @@ Successfully implemented production-ready compositional architecture for Lilith,
 │  │ Store            │  │ Store              │  │
 │  │                  │  │                    │  │
 │  │ - Patterns DB    │  │ - Concepts DB      │  │
-│  │ - BNN retrieval  │  │ - PMFlow enhanced  │  │
+│  │ - BioNN retrieval  │  │ - PMFlow enhanced  │  │
 │  │ - Success track  │  │ - Consolidation    │  │
 │  └──────────────────┘  └────────────────────┘  │
 │           │                      │              │

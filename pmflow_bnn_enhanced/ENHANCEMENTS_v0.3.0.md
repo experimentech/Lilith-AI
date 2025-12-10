@@ -1,6 +1,6 @@
-# PMFlow BNN Enhanced v0.3.0 - Lilith Edition
+# PMFlow BioNN Enhanced v0.3.0 - Lilith Edition
 
-Enhanced version of PMFlow BNN specifically for Lilith neuro-symbolic AI, maintaining full backward compatibility with v0.2.1 while adding critical features for production-grade semantic understanding.
+Enhanced version of PMFlow BioNN specifically for Lilith neuro-symbolic AI, maintaining full backward compatibility with v0.2.1 while adding critical features for production-grade semantic understanding.
 
 ## What's New in v0.3.0
 
@@ -363,14 +363,14 @@ All v0.2.1 tests still pass + new tests for enhanced features.
 
 ## License
 
-Same as PMFlow BNN (inherited from Pushing-Medium project)
+Same as PMFlow BioNN (inherited from Pushing-Medium project)
 
 ---
 
 ## Credits
 
 Enhanced by Lilith AI project for production neuro-symbolic systems.  
-Based on PMFlow BNN v0.2.1 by experimentech.
+Based on PMFlow BioNN v0.2.1 by experimentech.
 
 ---
 

@@ -57,7 +57,7 @@ __all__ = [
     'AttentionWeightedRetrieval',
     'CompositionalRetrievalPMField',
     'create_enhanced_retrieval_encoder',
-    # BNN models
+    # BioNN models
     'TemporalPipelineBNN',
     'MultiGPUPMBNN',
     'PMBNNAlwaysPlasticV2',
