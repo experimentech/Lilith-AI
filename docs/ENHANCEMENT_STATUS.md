@@ -295,10 +295,87 @@ Result: Focused retrieval on definition-style responses
 
 ---
 
+## December 2024 Updates
+
+### ✅ 5. BNN-Based Topic Extraction (TopicExtractor)
+
+**Status:** IMPLEMENTED
+
+**Implementation:**
+- `TopicExtractor` class in `lilith/topic_extractor.py`
+- Uses BNN semantic similarity to extract topics from queries
+- Topics learned automatically from declarative statements
+- Integrated with `WikipediaLookup` for smart query cleaning
+
+**How it works:**
+```python
+# Session learns topics from declarations
+session.process_message("Dogs are loyal animals")
+# TopicExtractor now knows "dogs"
+
+# Later queries use BNN similarity
+extractor.extract_topic("Tell me about dogs")
+# → ("dogs", 0.98)  # BNN-matched
+
+extractor.extract_topic("What are giraffes?")
+# → ("giraffes", 0.50)  # Fallback extraction
+```
+
+**Location:** `lilith/topic_extractor.py`
+
+---
+
+### ✅ 6. Proactive Knowledge Augmentation
+
+**Status:** IMPLEMENTED
+
+**Implementation:**
+- When deliberation finds no semantically relevant concepts, proactively tries knowledge sources
+- Semantic relevance validation (threshold: 0.5) rejects unrelated concept matches
+- Knowledge sources feed into Vocabulary, Concepts, Syntax, and BNN training
+
+**How it works:**
+```
+User: "What are colours?"
+→ Deliberation finds "birds" concept (from earlier teaching)
+→ Semantic relevance check: birds vs colours = 0.12 (< 0.5)
+→ Rejects birds, triggers proactive augmentation
+→ Wikipedia returns "Color is the visual perception..."
+→ Learns: vocabulary, concept, syntax patterns, BNN pairs
+```
+
+**Location:** `lilith/response_composer.py` `_compose_from_deliberation()`
+
+---
+
+### ✅ 7. Multi-Source Knowledge Routing
+
+**Status:** IMPLEMENTED
+
+**Implementation:**
+- Smart routing to 4 knowledge sources based on query type
+- All sources now properly utilized (not just Wikipedia)
+
+**Routing logic:**
+| Query Type | Source |
+|------------|--------|
+| Synonyms/antonyms | 📖 WordNet |
+| "What is X?" (single word) | 📘 Wiktionary |
+| "What does X mean?" | 📘 Wiktionary |
+| "Define X" | 📘 Wiktionary |
+| General knowledge | 🌐 Wikipedia |
+
+**Location:** `lilith/knowledge_augmenter.py` `lookup()` method
+
+---
+
 ## Next Steps
 
-1. **Document this status** ✅
-2. **Implement vocabulary-enhanced retrieval** (Phase 1)
-3. **Implement pattern-based query understanding** (Phase 2)
-4. **Test and validate improvements**
-5. **Measure before/after metrics** (recall, precision, response quality)
+1. ~~Document this status~~ ✅
+2. ~~Implement vocabulary-enhanced retrieval~~ ✅ (Phase 1)
+3. ~~Implement pattern-based query understanding~~ ✅ (Phase 2)
+4. ~~Multi-source knowledge routing~~ ✅
+5. ~~BNN-based topic extraction~~ ✅
+6. ~~Proactive knowledge augmentation~~ ✅
+7. **Test and validate improvements** ← Current
+8. **Measure before/after metrics** (recall, precision, response quality)

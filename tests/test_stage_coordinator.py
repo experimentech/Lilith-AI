@@ -25,7 +25,7 @@ def test_stage_config_defaults() -> None:
 
 def test_intake_stage_processes_utterance() -> None:
     """Intake stage should normalize and encode utterance."""
-    pytest.importorskip("pmflow_bnn.pmflow", reason="pmflow runtime is required")
+    pytest.importorskip("pmflow.pmflow", reason="pmflow runtime is required")
     
     config = StageConfig(stage_type=StageType.INTAKE)
     stage = IntakeStage(config)
@@ -43,7 +43,7 @@ def test_intake_stage_processes_utterance() -> None:
 
 def test_semantic_stage_uses_upstream_context() -> None:
     """Semantic stage should leverage intake stage embeddings."""
-    pytest.importorskip("pmflow_bnn.pmflow", reason="pmflow runtime is required")
+    pytest.importorskip("pmflow.pmflow", reason="pmflow runtime is required")
     
     intake_config = StageConfig(stage_type=StageType.INTAKE)
     intake_stage = IntakeStage(intake_config)
@@ -70,7 +70,7 @@ def test_semantic_stage_uses_upstream_context() -> None:
 
 def test_coordinator_processes_through_stages() -> None:
     """Coordinator should route utterance through all configured stages."""
-    pytest.importorskip("pmflow_bnn.pmflow", reason="pmflow runtime is required")
+    pytest.importorskip("pmflow.pmflow", reason="pmflow runtime is required")
     
     coordinator = StageCoordinator()  # Uses default 2-stage config
     utterance = Utterance(text="Alice visited the hospital", language="en")
@@ -94,7 +94,7 @@ def test_coordinator_processes_through_stages() -> None:
 
 def test_coordinator_handles_stage_failure_gracefully() -> None:
     """Coordinator should continue processing if one stage fails."""
-    pytest.importorskip("pmflow_bnn.pmflow", reason="pmflow runtime is required")
+    pytest.importorskip("pmflow.pmflow", reason="pmflow runtime is required")
     
     class FailingStage(CognitiveStage):
         def process(self, input_data, upstream_artifacts=None):
@@ -118,7 +118,7 @@ def test_coordinator_handles_stage_failure_gracefully() -> None:
 
 def test_plasticity_updates_stage_independently() -> None:
     """Each stage should have plasticity mechanism available."""
-    pytest.importorskip("pmflow_bnn.pmflow", reason="pmflow runtime is required")
+    pytest.importorskip("pmflow.pmflow", reason="pmflow runtime is required")
     
     config = StageConfig(
         stage_type=StageType.SEMANTIC,
@@ -145,7 +145,7 @@ def test_plasticity_updates_stage_independently() -> None:
 
 def test_stage_confidence_computation() -> None:
     """Stage confidence should reflect activation energy."""
-    pytest.importorskip("pmflow_bnn.pmflow", reason="pmflow runtime is required")
+    pytest.importorskip("pmflow.pmflow", reason="pmflow runtime is required")
     
     config = StageConfig(stage_type=StageType.SEMANTIC)
     stage = SemanticStage(config)

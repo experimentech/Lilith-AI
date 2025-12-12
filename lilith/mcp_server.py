@@ -94,6 +94,21 @@ def _build_mcp_payload(resp):
                 "source": resp.source,
             }
         )
+        if getattr(resp, "mood", None) is not None:
+            payload["mood"] = {
+                "label": resp.mood.label,
+                "emoji": resp.mood.emoji,
+            }
+        if getattr(resp, "personality", None) is not None:
+            payload["personality"] = {
+                "tone": resp.personality.tone,
+                "brevity": resp.personality.brevity,
+                "warmth": resp.personality.warmth,
+                "humor": resp.personality.humor,
+                "interests": resp.personality.interests,
+                "aversions": resp.personality.aversions,
+                "proactivity": resp.personality.proactivity,
+            }
     return payload
 
 
@@ -177,7 +192,7 @@ async def _handle_mcp_jsonrpc(payload: dict, client_id: str, context_id: Optiona
 @app.post("/chat")
 async def chat(req: ChatRequest):
     resp = await anyio.to_thread.run_sync(adapter.handle_chat, req.client_id, req.message, req.context_id)
-    return {
+    result = {
         "text": resp.text,
         "pattern_id": resp.pattern_id,
         "confidence": resp.confidence,
@@ -186,6 +201,19 @@ async def chat(req: ChatRequest):
         "source": resp.source,
         "learned_fact": resp.learned_fact,
     }
+    if getattr(resp, "mood", None) is not None:
+        result["mood"] = {"label": resp.mood.label, "emoji": resp.mood.emoji}
+    if getattr(resp, "personality", None) is not None:
+        result["personality"] = {
+            "tone": resp.personality.tone,
+            "brevity": resp.personality.brevity,
+            "warmth": resp.personality.warmth,
+            "humor": resp.personality.humor,
+            "interests": resp.personality.interests,
+            "aversions": resp.personality.aversions,
+            "proactivity": resp.personality.proactivity,
+        }
+    return result
 
 
 @app.post("/teach")

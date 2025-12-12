@@ -426,7 +426,7 @@ class DatabaseBackedFragmentStore:
         # NEW: Query expansion for synonym matching (ML → machine learning)
         if use_query_expansion and hasattr(self.encoder, 'pm_field'):
             try:
-                from pmflow_bnn_enhanced import QueryExpansionPMField
+                from pmflow.core.retrieval import QueryExpansionPMField
                 
                 # Create query expansion module (cached if needed)
                 if not hasattr(self, '_query_expander'):

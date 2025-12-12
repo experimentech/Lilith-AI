@@ -1,1 +1,0 @@
-__version__ = "0.3.0"  # Enhanced for Lilith neuro-symbolic AI

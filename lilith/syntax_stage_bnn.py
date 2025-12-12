@@ -29,28 +29,15 @@ import numpy as np
 from .embedding import PMFlowEmbeddingEncoder
 from .stage_coordinator import StageType, StageConfig, StageArtifact
 
-# Import PMFlow plasticity functions (0.3.0 features)
+# Import PMFlow plasticity functions (0.3.1 features)
 try:
-    from pmflow_bnn_enhanced.pmflow import (
-        vectorized_pm_plasticity,
-        contrastive_plasticity,
-        batch_plasticity_update,
-    )
+    from pmflow import vectorized_pm_plasticity, contrastive_plasticity, batch_plasticity_update
     PMFLOW_PLASTICITY_AVAILABLE = True
 except ImportError:
-    try:
-        # Fallback: try pmflow.core.pmflow (package install)
-        from pmflow.core.pmflow import (
-            vectorized_pm_plasticity,
-            contrastive_plasticity,
-            batch_plasticity_update,
-        )
-        PMFLOW_PLASTICITY_AVAILABLE = True
-    except ImportError:
-        vectorized_pm_plasticity = None
-        contrastive_plasticity = None
-        batch_plasticity_update = None
-        PMFLOW_PLASTICITY_AVAILABLE = False
+    vectorized_pm_plasticity = None
+    contrastive_plasticity = None
+    batch_plasticity_update = None
+    PMFLOW_PLASTICITY_AVAILABLE = False
 
 
 logger = logging.getLogger(__name__)

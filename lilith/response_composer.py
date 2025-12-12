@@ -122,7 +122,8 @@ class ResponseComposer:
         enable_compositional: bool = True,
         enable_modal_routing: bool = True,
         pragmatic_templates: Optional['PragmaticTemplateStore'] = None,
-        enable_pragmatic_templates: bool = True
+        enable_pragmatic_templates: bool = True,
+        knowledge_timeout_seconds: float = 3.0
     ):
         """
         Initialize response composer.
@@ -172,11 +173,13 @@ class ResponseComposer:
         elif use_grammar and not GRAMMAR_AVAILABLE:
             print("  ⚠️  Syntax stage not available, falling back to standard composition")
         
-        # Initialize knowledge augmentation if available and requested
+        # Initialize knowledge augmentation lazily to avoid heavy startup
+        self.enable_knowledge_augmentation = enable_knowledge_augmentation
         self.knowledge_augmenter = None
+        self._knowledge_augmenter_factory = None
         if enable_knowledge_augmentation and KNOWLEDGE_AUGMENTATION_AVAILABLE:
-            self.knowledge_augmenter = KnowledgeAugmenter(enabled=True)
-            print("  🌐 External knowledge augmentation enabled (Wikipedia)!")
+            self._knowledge_augmenter_factory = lambda: KnowledgeAugmenter(enabled=True, timeout_seconds=knowledge_timeout_seconds)
+            print("  🌐 External knowledge augmentation enabled (lazy load)")
         elif enable_knowledge_augmentation and not KNOWLEDGE_AUGMENTATION_AVAILABLE:
             print("  ⚠️  Knowledge augmentation not available")
         
@@ -248,6 +251,18 @@ class ResponseComposer:
         self.last_query = None
         self.last_response = None
         self.last_approach = None  # 'pattern', 'concept', 'parallel', or 'math'
+
+    def _ensure_knowledge_augmenter(self):
+        """Lazily instantiate knowledge augmenter to avoid startup cost."""
+        if not self.enable_knowledge_augmentation or not KNOWLEDGE_AUGMENTATION_AVAILABLE:
+            return None
+        if self.knowledge_augmenter is None and self._knowledge_augmenter_factory:
+            try:
+                self.knowledge_augmenter = self._knowledge_augmenter_factory()
+            except Exception as exc:  # pragma: no cover - defensive
+                print(f"  ⚠️  Knowledge augmentation unavailable: {exc}")
+                self.enable_knowledge_augmentation = False
+        return self.knowledge_augmenter
     
     def load_contrastive_weights(self, path: str) -> bool:
         """
@@ -372,7 +387,7 @@ class ResponseComposer:
         
     def compose_response(
         self, 
-        context: str,
+        context: str = "",
         user_input: str = "",
         topk: int = 5,
         use_intent_filtering: bool = False,  # Disabled: BioNN intent classification unreliable on user inputs
@@ -612,7 +627,8 @@ class ResponseComposer:
         # 3.6 PROACTIVE KNOWLEDGE AUGMENTATION for unknown topics
         # If deliberation couldn't find relevant concepts, try learning about the topic
         # BEFORE falling back to pattern matching (which might hallucinate)
-        if deliberation_failed_relevance and self.knowledge_augmenter and user_input:
+        aug_for_unknowns = self._ensure_knowledge_augmenter()
+        if deliberation_failed_relevance and aug_for_unknowns and user_input:
             print(f"  🔍 Attempting proactive knowledge lookup for unknown topic...")
             filled_response = self._fill_gaps_and_retry(user_input)
             if filled_response and filled_response.confidence >= 0.6:
@@ -621,7 +637,7 @@ class ResponseComposer:
             
             # Also try direct lookup
             conv_context = self._get_conversation_context(max_turns=3)
-            external_result = self.knowledge_augmenter.lookup(user_input, conversation_history=conv_context, min_confidence=0.6)
+            external_result = aug_for_unknowns.lookup(user_input, conversation_history=conv_context, min_confidence=0.6)
             if external_result:
                 response_text, confidence, source = external_result
                 response_text = self._clean_composed_response(response_text)
@@ -3043,16 +3059,17 @@ class ResponseComposer:
             user_input: User's query (for knowledge lookup and gap analysis)
         """
         # STEP 1: Try to fill knowledge gaps and re-attempt matching
-        if self.knowledge_augmenter and user_input:
+        aug_for_fallbacks = self._ensure_knowledge_augmenter()
+        if aug_for_fallbacks and user_input:
             filled_response = self._fill_gaps_and_retry(user_input)
             if filled_response:
                 return filled_response
         
         # If gap-filling didn't help, try direct external knowledge lookup
-        if self.knowledge_augmenter and user_input:
+        if aug_for_fallbacks and user_input:
             # Get conversation context for disambiguation
             conv_context = self._get_conversation_context(max_turns=3)
-            external_result = self.knowledge_augmenter.lookup(user_input, conversation_history=conv_context, min_confidence=0.6)
+            external_result = aug_for_fallbacks.lookup(user_input, conversation_history=conv_context, min_confidence=0.6)
             
             if external_result:
                 response_text, confidence, source = external_result
@@ -3075,7 +3092,38 @@ class ResponseComposer:
                     is_low_confidence=False  # But knowledge was found
                 )
         
-        # Standard fallback if no external knowledge found
+        # Try a lightweight reasoning pass before giving up
+        if self.reasoning_stage and user_input:
+            try:
+                conv_context = self._get_conversation_context(max_turns=3)
+                reasoning_result = self.reasoning_stage.deliberate(
+                    query=user_input,
+                    context=conv_context
+                )
+
+                if reasoning_result and reasoning_result.inferences:
+                    best_inference = max(
+                        reasoning_result.inferences,
+                        key=lambda inf: inf.confidence
+                    )
+                    inferred_text = self._clean_composed_response(
+                        f"From reasoning, {best_inference.conclusion}. If that's off, teach me the right answer and upvote with '/+'."
+                    )
+
+                    return ComposedResponse(
+                        text=inferred_text,
+                        fragment_ids=["reasoning_inference"],
+                        composition_weights=[best_inference.confidence],
+                        coherence_score=best_inference.confidence,
+                        primary_pattern=None,
+                        confidence=best_inference.confidence,
+                        is_fallback=True,
+                        is_low_confidence=False
+                    )
+            except Exception as exc:
+                print(f"  ⚠️  Reasoning stage failed in fallback: {exc}")
+
+        # Standard fallback if no external knowledge or reasoning help found
         return ComposedResponse(
             text="I don't have information about that yet. If you know the answer, you can teach me by typing it as your next message, then upvoting with '/+'!",
             fragment_ids=["fallback"],
@@ -3128,6 +3176,10 @@ class ResponseComposer:
         
         if not unknown_terms:
             return None
+
+        aug_for_terms = self._ensure_knowledge_augmenter()
+        if not aug_for_terms:
+            return None
         
         # Look up each unknown term AND learn from definitions
         term_definitions = {}
@@ -3137,7 +3189,7 @@ class ResponseComposer:
             # Try to get definition/explanation
             # Get conversation context for disambiguation
             conv_context = self._get_conversation_context(max_turns=3)
-            result = self.knowledge_augmenter.lookup(f"What is {term}?", conversation_history=conv_context, min_confidence=0.6)
+            result = aug_for_terms.lookup(f"What is {term}?", conversation_history=conv_context, min_confidence=0.6)
             if result:
                 definition, confidence, source = result
                 term_definitions[term] = {
@@ -3153,7 +3205,7 @@ class ResponseComposer:
                 
                 # 1. VOCABULARY LEARNING
                 # Track the term and its definition for future queries
-                if self.fragments.vocabulary:
+                if hasattr(self.fragments, 'vocabulary') and self.fragments.vocabulary:
                     try:
                         # Track the full definition text (includes the term and related words)
                         # VocabularyTracker.track_text() extracts terms automatically
@@ -3169,7 +3221,7 @@ class ResponseComposer:
                 
                 # 2. CONCEPT LEARNING
                 # Extract semantic concepts from the definition
-                if self.fragments.concept_store:
+                if hasattr(self.fragments, 'concept_store') and self.fragments.concept_store:
                     try:
                         # Extract key noun phrases from definition as concepts
                         # Simple extraction: take capitalized terms and significant nouns
@@ -3203,7 +3255,7 @@ class ResponseComposer:
                 
                 # 3. SYNTAX PATTERN LEARNING
                 # Extract linguistic patterns from the definition
-                if self.fragments.pattern_extractor:
+                if hasattr(self.fragments, 'pattern_extractor') and self.fragments.pattern_extractor:
                     try:
                         # Extract patterns from well-formed definition text
                         # This helps with generating similar explanations in the future
@@ -3282,7 +3334,7 @@ class ResponseComposer:
                 # to build CONNECTIONS between the newly learned concepts.
                 # This operates at the SYMBOLIC LEVEL, not language level.
                 
-                if self.reasoning_stage and self.fragments.concept_store:
+                if self.reasoning_stage and hasattr(self.fragments, 'concept_store') and self.fragments.concept_store:
                     try:
                         # Activate the newly learned concept in reasoning stage
                         # This allows it to interact with existing concepts
@@ -3710,17 +3762,18 @@ class ResponseComposer:
             Enhanced response if gaps filled, external knowledge if found, or graceful fallback
         """
         # STEP 1: Try to fill gaps and improve the match
-        if self.knowledge_augmenter:
+        aug_for_low_conf = self._ensure_knowledge_augmenter()
+        if aug_for_low_conf:
             filled_response = self._fill_gaps_and_retry(user_input)
             if filled_response:
                 print(f"  ✨ Low confidence improved by gap-filling!")
                 return filled_response
         
         # Try direct external knowledge lookup as fallback
-        if self.knowledge_augmenter:
+        if aug_for_low_conf:
             # Get conversation context for disambiguation
             conv_context = self._get_conversation_context(max_turns=3)
-            external_result = self.knowledge_augmenter.lookup(user_input, conversation_history=conv_context, min_confidence=0.6)
+            external_result = aug_for_low_conf.lookup(user_input, conversation_history=conv_context, min_confidence=0.6)
             
             if external_result:
                 response_text, confidence, source = external_result
@@ -3742,7 +3795,38 @@ class ResponseComposer:
                     is_low_confidence=False  # But knowledge was found
                 )
         
-        # Standard graceful fallback if no external knowledge found
+        # Try reasoning stage before graceful fallback
+        if self.reasoning_stage and user_input:
+            try:
+                conv_context = self._get_conversation_context(max_turns=3)
+                reasoning_result = self.reasoning_stage.deliberate(
+                    query=user_input,
+                    context=conv_context
+                )
+
+                if reasoning_result and reasoning_result.inferences:
+                    best_inference = max(
+                        reasoning_result.inferences,
+                        key=lambda inf: inf.confidence
+                    )
+                    inferred_text = self._clean_composed_response(
+                        f"Reasoning suggests {best_inference.conclusion}. If that's not right, you can teach me and upvote with '/+'."
+                    )
+
+                    return ComposedResponse(
+                        text=inferred_text,
+                        fragment_ids=["reasoning_low_conf"],
+                        composition_weights=[best_inference.confidence],
+                        coherence_score=best_inference.confidence,
+                        primary_pattern=None,
+                        confidence=best_inference.confidence,
+                        is_fallback=True,
+                        is_low_confidence=True
+                    )
+            except Exception as exc:
+                print(f"  ⚠️  Reasoning stage failed in low-confidence fallback: {exc}")
+
+        # Standard graceful fallback if no external knowledge or reasoning help found
         # Analyze query to provide contextual fallback
         user_lower = user_input.lower()
         
@@ -3774,4 +3858,5 @@ class ResponseComposer:
             is_fallback=True,
             is_low_confidence=True
         )
+
 

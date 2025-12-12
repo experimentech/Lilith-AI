@@ -12,12 +12,9 @@ from .base import PipelineArtifact
 from .embedding import PMFlowEmbeddingEncoder
 
 try:  # pragma: no cover - validated indirectly via integration tests
-    from pmflow_bnn.pmflow import pm_local_plasticity  # type: ignore[attr-defined]
+    from pmflow.pmflow import vectorized_pm_plasticity as pm_local_plasticity  # type: ignore[attr-defined]
 except Exception:  # pragma: no cover - fallback when pmflow isn't available
-    try:
-        from pmflow_bnn.pmflow import vectorized_pm_plasticity as pm_local_plasticity  # type: ignore[attr-defined]
-    except Exception:
-        pm_local_plasticity = None  # type: ignore
+    pm_local_plasticity = None  # type: ignore
 
 
 @dataclass
@@ -57,7 +54,7 @@ class PlasticityController:
         self.center_lr = center_lr
         self._log = logging.getLogger(__name__)
         if pm_local_plasticity is None:
-            raise RuntimeError("pmflow_bnn is required for PlasticityController")
+            raise RuntimeError("pmflow is required for PlasticityController; install pmflow>=0.3.1")
 
     def maybe_update(
         self,
@@ -74,18 +71,19 @@ class PlasticityController:
         _, latent_cpu, refined_cpu = self.encoder.encode_with_components(tokens)
 
         pm_field = self.encoder.pm_field
-        device = pm_field.centers.device
+        target_field = pm_field.fine_field if hasattr(pm_field, "fine_field") else pm_field
+        device = target_field.centers.device
 
         latent = latent_cpu.to(device)
         refined = refined_cpu.to(device)
 
-        before_centers = pm_field.centers.detach().clone()
-        before_mus = pm_field.mus.detach().clone()
+        before_centers = target_field.centers.detach().clone()
+        before_mus = target_field.mus.detach().clone()
 
-        pm_local_plasticity(pm_field, latent, refined, mu_lr=self.mu_lr, c_lr=self.center_lr)  # type: ignore
+        pm_local_plasticity(target_field, latent, refined, mu_lr=self.mu_lr, c_lr=self.center_lr)  # type: ignore
 
-        delta_centers = torch.norm(pm_field.centers - before_centers, p=2).item()
-        delta_mus = torch.norm(pm_field.mus - before_mus, p=2).item()
+        delta_centers = torch.norm(target_field.centers - before_centers, p=2).item()
+        delta_mus = torch.norm(target_field.mus - before_mus, p=2).item()
 
         report = PlasticityReport(
             recall_score=recall_score,

@@ -274,7 +274,8 @@ class PatternDatabase:
             "total_keywords": total_keywords,
             "total_topics": total_topics,
             "total_intents": total_intents,
-            "avg_success": avg_success
+            "avg_success": avg_success,
+            "learned_patterns": max(total_patterns, 0),
         }
     
     def calculate_idf_scores(self) -> Dict[str, float]:

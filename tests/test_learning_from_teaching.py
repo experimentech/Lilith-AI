@@ -20,7 +20,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from conversation_loop import ConversationLoop
 
-def test_teaching_scenario(loop, topic_question, teaching_input, retry_question=None):
+def test_teaching_scenario(
+    loop,
+    topic_question: str = "What is backpropagation?",
+    teaching_input: str = "Backpropagation trains neural networks by computing gradients via the chain rule and updating weights to reduce loss.",
+    retry_question: str | None = None,
+):
     """
     Test a teaching scenario:
     1. Ask unknown question (expect fallback)

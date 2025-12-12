@@ -21,14 +21,14 @@ import sys
 from pathlib import Path
 import numpy as np
 
-# Add project root for pmflow_bnn_enhanced
+# Add project root for pmflow
 project_root = Path(__file__).parent.parent.parent.parent
 pipeline_dir = Path(__file__).parent.parent / "pipeline"
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(pipeline_dir))
 
 from embedding import PMFlowEmbeddingEncoder
-from pmflow_bnn_enhanced.pmflow import contrastive_plasticity
+from pmflow.pmflow import contrastive_plasticity
 
 
 # ML Domain Synonym Pairs

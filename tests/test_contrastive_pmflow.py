@@ -14,11 +14,7 @@ sys.path.insert(0, str(project_root))
 
 import torch
 import torch.nn.functional as F
-from pmflow_bnn_enhanced.contrastive_pmflow import (
-    ContrastivePMField,
-    train_contrastive_pmfield,
-    create_contrastive_encoder
-)
+from pmflow import ContrastivePMField, create_contrastive_encoder, train_contrastive_pmfield
 from experiments.retrieval_sanity.pipeline.embedding import PMFlowEmbeddingEncoder
 
 

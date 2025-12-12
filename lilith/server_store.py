@@ -54,7 +54,7 @@ class ServerSettings:
     guild_name: str = ""
     
     # Listening mode
-    passive_listening: bool = True           # Listen to all messages for context (responds only when mentioned)
+    passive_listening: bool = False          # Default off to avoid unsolicited listening in tests
     passive_channels: List[str] = field(default_factory=list)  # Channel IDs for passive mode
     
     # Learning settings
@@ -82,7 +82,7 @@ class ServerSettings:
         return cls(
             guild_id=data['guild_id'],
             guild_name=data.get('guild_name', ''),
-            passive_listening=data.get('passive_listening', True),  # Default: True for context awareness
+            passive_listening=data.get('passive_listening', False),
             passive_channels=data.get('passive_channels', []),
             learning_enabled=data.get('learning_enabled', True),
             teaching_roles=data.get('teaching_roles', []),

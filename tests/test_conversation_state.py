@@ -21,7 +21,7 @@ def test_conversation_state_inactive_without_pmflow() -> None:
 
 
 def test_conversation_state_tracks_topics() -> None:
-    pytest.importorskip("pmflow_bnn.pmflow", reason="pmflow runtime is required")
+    pytest.importorskip("pmflow.pmflow", reason="pmflow runtime is required")
 
     pipeline = SymbolicPipeline()
     assert isinstance(pipeline.encoder, PMFlowEmbeddingEncoder)

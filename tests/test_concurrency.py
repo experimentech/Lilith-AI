@@ -61,6 +61,14 @@ def test_concurrent_writes():
     test_db.parent.mkdir(parents=True, exist_ok=True)
     
     encoder = PMFlowEmbeddingEncoder(dimension=64, latent_dim=32)
+
+    # Pre-create the schema so concurrent writers don't race on initialization.
+    ResponseFragmentStoreSQLite(
+        encoder,
+        storage_path=str(test_db),
+        enable_fuzzy_matching=False,
+        bootstrap_if_empty=False,
+    )
     
     num_threads = 5
     patterns_per_thread = 10
@@ -105,12 +113,10 @@ def test_concurrent_writes():
     print(f"Patterns in database: {actual_total}")
     print(f"Expected: {expected_total}")
     
-    if actual_total == expected_total:
-        print("✅ No data loss - all patterns written successfully!")
-        return True
-    else:
-        print(f"❌ Data loss detected! Missing {expected_total - actual_total} patterns")
-        return False
+    assert actual_total == expected_total, (
+        f"Data loss detected! Missing {expected_total - actual_total} patterns"
+    )
+    print("✅ No data loss - all patterns written successfully!")
 
 
 def test_read_while_write():
@@ -143,10 +149,13 @@ def test_read_while_write():
             intent="test"
         )
     
-    print("Pre-populated database with 10 patterns")
+    base_stats = store.get_stats()
+    base_pattern_count = base_stats["total_patterns"]
+    print(f"Pre-populated database with {base_pattern_count} patterns (including seeds)")
     
     read_count = [0]  # Mutable container for thread communication
     write_count = [0]
+    patterns_per_writer = 20
     
     def reader():
         """Continuously read patterns."""
@@ -173,7 +182,7 @@ def test_read_while_write():
             bootstrap_if_empty=False
         )
         
-        for i in range(20):
+        for i in range(patterns_per_writer):
             local_store.add_pattern(
                 trigger_context=f"new pattern {i}",
                 response_text=f"New response {i}",
@@ -183,8 +192,8 @@ def test_read_while_write():
             write_count[0] += 1
             time.sleep(0.01)
         
-        print("✓ Writer completed 20 writes")
-    
+        print(f"✓ Writer completed {patterns_per_writer} writes")
+
     # Start concurrent readers and writers
     print("Starting 2 readers and 2 writers...")
     print()
@@ -217,18 +226,15 @@ def test_read_while_write():
     
     # Verify final state
     final_stats = store.get_stats()
-    # Expected: 4 bootstrap + 10 pre-populated + (2 writers * 20 patterns)
-    expected_patterns = 4 + 10 + (2 * 20)
+    expected_patterns = base_pattern_count + write_count[0]
     
     print(f"Final pattern count: {final_stats['total_patterns']}")
     print(f"Expected: {expected_patterns}")
     
-    if final_stats['total_patterns'] == expected_patterns:
-        print("✅ Concurrent reads and writes worked correctly!")
-        return True
-    else:
-        print(f"❌ Unexpected pattern count!")
-        return False
+    assert final_stats['total_patterns'] == expected_patterns, (
+        "Unexpected pattern count!"
+    )
+    print("✅ Concurrent reads and writes worked correctly!")
 
 
 def main():
@@ -242,8 +248,19 @@ def main():
     print("  - Simultaneous reads and writes (no blocking)")
     print()
     
-    test1 = test_concurrent_writes()
-    test2 = test_read_while_write()
+    try:
+        test_concurrent_writes()
+        test1 = True
+    except AssertionError as exc:
+        print(exc)
+        test1 = False
+
+    try:
+        test_read_while_write()
+        test2 = True
+    except AssertionError as exc:
+        print(exc)
+        test2 = False
     
     print("\n" + "=" * 60)
     print("TEST SUMMARY")

@@ -41,7 +41,7 @@ class ConversationState:
 
     def __init__(
         self,
-        encoder: PMFlowEmbeddingEncoder | None,
+        encoder: PMFlowEmbeddingEncoder | None = None,
         *,
         decay: float = 0.75,
         max_topics: int = 5,

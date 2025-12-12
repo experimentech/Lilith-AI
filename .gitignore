@@ -91,6 +91,10 @@ test_typo_patterns.json
 *.bak
 *.orig
 .cache/
+tmp/
+
+# External reference repos (keep untracked)
+xiaozhi-esp32/
 
 # Documentation builds
 docs/_build/

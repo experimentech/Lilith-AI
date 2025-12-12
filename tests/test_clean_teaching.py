@@ -12,7 +12,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from conversation_loop import ConversationLoop
 
-def test_teaching_scenario(loop, topic_question, teaching_input, retry_question=None):
+def test_teaching_scenario(
+    loop,
+    topic_question: str = "What is gradient descent?",
+    teaching_input: str = "Gradient descent is an optimization algorithm that updates parameters in the direction of negative gradients to minimize a loss function.",
+    retry_question: str | None = None,
+):
     """
     Test a teaching scenario:
     1. Ask unknown question (expect fallback)

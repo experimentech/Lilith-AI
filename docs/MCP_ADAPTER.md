@@ -52,3 +52,22 @@ print(report.summary)
 - Keep base knowledge writes restricted to teacher/approved contexts.
 - Log caller identity and tool name for auditing.
 - Add rate limits for external API-backed tools to avoid abuse.
+
+## Personality & Mood (planned, optional, core-wide)
+- Profile schema (per session/client, default neutral/no-op):
+	- `personality`: `tone`, `brevity`, `warmth`, `humor`, `interests: [tags]`, `aversions: [tags]`, `proactivity` (0–1).
+	- `mood`: `label` (e.g., `neutral|curious|confident|cautious`), `emoji`, `decay` (drift back to neutral). When absent, omit from responses.
+- Emission: optionally include `mood` in HTTP `/chat`, Xiaozhi `/xiaozhi/ws`, Discord bot, and CLI responses; gated by a feature flag; neutral omits the field. Implementation should live in core so adapters can share it.
+- Retrieval/composer bias (gentle): small positive weight for matching `interests`, small negative for `aversions`; zeroed when neutral/flag off; safety filters remain first-class.
+- Style pass (light touch): optional post-pass to adjust tone/verbosity; skipped when neutral/flag off.
+- Proactivity (opt-in): if `proactivity > 0`, allow a single short, context-relevant follow-up only on high-confidence turns.
+- Mood stub: start static defaults; later, allow simple heuristic updates (e.g., success streak → `confident/😌`, fallback streak → `cautious/🤔`) with decay back to neutral; never affects safety.
+
+## Plasticity coupling (planned, bounded)
+- Excitement/mood can gently modulate learning/plasticity per session:
+	- Layer promotion: higher excitement may allow promotion to a mid/short-term layer; low excitement keeps items transient; teacher/approval gates still apply.
+	- Reinforcement scale: apply a bounded factor (e.g., 0.8–1.2) to usage/success increments; global caps remain.
+	- Decay: mildly slow decay for “interested” topics or speed it for cautious mood (e.g., factors 0.9–1.1).
+	- Gating: cautious mood can require an extra positive signal before committing; confident mood allows normal thresholds but never bypasses safety.
+- Isolation: mood/personality influences are per `(client_id, context_id)`; shared/base layers stay stable unless explicitly enabled.
+- Safety: personality/mood never override content filters, score floors/ceilings, or access controls.

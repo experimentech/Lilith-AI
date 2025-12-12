@@ -194,12 +194,9 @@ class ContrastiveLearner:
             Training metrics
         """
         try:
-            from pmflow_bnn_enhanced.pmflow import (
-                contrastive_plasticity,
-                batch_plasticity_update,
-            )
+            from pmflow import contrastive_plasticity, batch_plasticity_update
         except ImportError:
-            # Fallback to standard plasticity if enhanced version not available
+            # Fallback to standard plasticity if PMFlow not installed
             return {"n_similar": 0, "n_dissimilar": 0}
         
         # Separate similar and dissimilar pairs

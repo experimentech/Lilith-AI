@@ -15,7 +15,7 @@ from experiments.retrieval_sanity.pipeline.responder import ConversationResponde
 from experiments.retrieval_sanity.pipeline.conversation_state import ConversationState
 
 
-pytest.importorskip("pmflow_bnn.pmflow", reason="pmflow runtime is required")
+pytest.importorskip("pmflow.pmflow", reason="pmflow runtime is required")
 
 
 def test_plasticity_controller_updates_pmfield() -> None:
@@ -32,19 +32,20 @@ def test_plasticity_controller_updates_pmfield() -> None:
     )
 
     pm_field = pipeline.encoder.pm_field
-    before_centers = pm_field.centers.detach().clone()
-    before_mus = pm_field.mus.detach().clone()
+    target_field = pm_field.fine_field if hasattr(pm_field, "fine_field") else pm_field
+    before_centers = target_field.centers.detach().clone()
+    before_mus = target_field.mus.detach().clone()
 
     report = controller.maybe_update(artefact, recall_score=0.1)
 
     assert report is not None
     assert report.delta_centers > 0.0 or report.delta_mus > 0.0
-    assert not torch.allclose(pm_field.centers, before_centers)
-    assert not torch.allclose(pm_field.mus, before_mus)
+    assert not torch.allclose(target_field.centers, before_centers)
+    assert not torch.allclose(target_field.mus, before_mus)
 
 
 def test_plasticity_controller_respects_threshold() -> None:
-    pytest.importorskip("pmflow_bnn.pmflow", reason="pmflow runtime is required")
+    pytest.importorskip("pmflow.pmflow", reason="pmflow runtime is required")
     pipeline = SymbolicPipeline()
     assert isinstance(pipeline.encoder, PMFlowEmbeddingEncoder)
 
@@ -60,7 +61,7 @@ def test_plasticity_controller_respects_threshold() -> None:
 
 
 def test_plasticity_refreshes_store_vectors(tmp_path) -> None:
-    pytest.importorskip("pmflow_bnn.pmflow", reason="pmflow runtime is required")
+    pytest.importorskip("pmflow.pmflow", reason="pmflow runtime is required")
 
     sqlite_path = tmp_path / "vectors.db"
     scenario = f"unit-{tmp_path.name}"
@@ -104,7 +105,7 @@ def test_plasticity_refreshes_store_vectors(tmp_path) -> None:
 
 
 def test_pmflow_state_persists_across_sessions(tmp_path) -> None:
-    pytest.importorskip("pmflow_bnn.pmflow", reason="pmflow runtime is required")
+    pytest.importorskip("pmflow.pmflow", reason="pmflow runtime is required")
 
     state_path = tmp_path / "pmflow_state.pt"
     sqlite_path = tmp_path / "vectors.db"
@@ -113,7 +114,8 @@ def test_pmflow_state_persists_across_sessions(tmp_path) -> None:
 
     pipeline = SymbolicPipeline(pmflow_state_path=state_path)
     assert isinstance(pipeline.encoder, PMFlowEmbeddingEncoder)
-    before_centers = pipeline.encoder.pm_field.centers.detach().clone()
+    target_field = pipeline.encoder.pm_field.fine_field if hasattr(pipeline.encoder.pm_field, "fine_field") else pipeline.encoder.pm_field
+    before_centers = target_field.centers.detach().clone()
 
     store = SymbolicStore(sqlite_path, scenario=scenario)
     store._frames_path = frames_path
@@ -137,11 +139,13 @@ def test_pmflow_state_persists_across_sessions(tmp_path) -> None:
     assert response.plasticity is not None
     assert state_path.exists()
 
-    mutated_centers = pipeline.encoder.pm_field.centers.detach().clone()
+    mutated_centers = target_field.centers.detach().clone()
     assert not torch.allclose(before_centers, mutated_centers)
 
     pipeline_reloaded = SymbolicPipeline(pmflow_state_path=state_path)
     assert isinstance(pipeline_reloaded.encoder, PMFlowEmbeddingEncoder)
-    reloaded_centers = pipeline_reloaded.encoder.pm_field.centers.detach()
+    reloaded_field = pipeline_reloaded.encoder.pm_field
+    reloaded_target = reloaded_field.fine_field if hasattr(reloaded_field, "fine_field") else reloaded_field
+    reloaded_centers = reloaded_target.centers.detach()
 
     assert torch.allclose(mutated_centers, reloaded_centers)

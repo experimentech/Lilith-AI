@@ -102,9 +102,9 @@ def hybrid_similarity(
     if a_flat.shape != b_flat.shape:
         return None  # Incompatible dimensions
     
-    # Try to use PMFlow Enhanced hybrid_similarity
+    # Try to use PMFlow hybrid_similarity
     try:
-        from pmflow_bnn_enhanced.pmflow import hybrid_similarity as pmf_hybrid
+        from pmflow.pmflow import hybrid_similarity as pmf_hybrid
         
         # Need batch dimension for PMFlow functions
         a_batch = a_flat.unsqueeze(0) if a_flat.dim() == 1 else a_flat

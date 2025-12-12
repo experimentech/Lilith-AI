@@ -6,6 +6,7 @@ MCP-style tool calls to LilithSession operations without altering core logic.
 Add your transport/server of choice (e.g., FastAPI, aiohttp, MCP runtime) to
 wire these handlers to real endpoints.
 """
+import os
 import time
 import threading
 from collections import OrderedDict
@@ -174,7 +175,7 @@ class MCPAdapter:
         weather_timeout_seconds: float = 5.0,
         news_timeout_seconds: float = 5.0,
     ) -> None:
-        self.session_config = session_config or SessionConfig()
+        self.session_config = session_config or self._build_session_config_from_env()
         self.session_factory = session_factory or self._default_session_factory
         self._sessions: "OrderedDict[Tuple[str, str], Tuple[float, LilithSession]]" = OrderedDict()
         self._lock = threading.Lock()
@@ -187,6 +188,19 @@ class MCPAdapter:
         self.cache_misses = 0
         self.cache_evictions_expired = 0
         self.cache_evictions_lru = 0
+
+    def _build_session_config_from_env(self) -> SessionConfig:
+        """Create SessionConfig, honoring env toggles for personality/mood."""
+
+        def _truthy(name: str) -> bool:
+            return os.getenv(name, "").lower() in {"1", "true", "yes", "on"}
+
+        cfg = SessionConfig()
+        if _truthy("LILITH_PERSONALITY_ENABLE"):
+            cfg.enable_personality = True
+        if _truthy("LILITH_MOOD_ENABLE"):
+            cfg.enable_mood = True
+        return cfg
 
     def _default_session_factory(self, client_id: str, context_id: Optional[str], config: SessionConfig) -> LilithSession:
         return LilithSession(user_id=client_id, context_id=context_id, config=config)

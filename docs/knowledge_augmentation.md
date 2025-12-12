@@ -1,42 +1,72 @@
 # Knowledge Augmentation System
 
-**Status**: ✅ Implemented and Tested
+**Status**: ✅ Implemented and Tested (Updated December 2024)
 
 ## Overview
 
-The knowledge augmentation system enables Lilith to automatically acquire knowledge from external sources (currently Wikipedia) when it encounters queries it cannot answer confidently. This creates a self-improving knowledge base that grows based on actual user needs.
+The knowledge augmentation system enables Lilith to automatically acquire knowledge from external sources when it encounters queries it cannot answer confidently. This creates a self-improving knowledge base that grows based on actual user needs.
+
+### Knowledge Sources
+
+| Source | Type | Confidence | Best For |
+|--------|------|------------|----------|
+| 📖 WordNet | Offline | 0.80 | Synonyms, antonyms, word relationships |
+| 📘 Wiktionary | Online | 0.85 | Word definitions, etymology |
+| 📕 Free Dictionary | Online | 0.82 | Definitions with examples |
+| 🌐 Wikipedia | Online | 0.75 | Concepts, people, general knowledge |
 
 ## How It Works
 
-### 1. Automatic Triggering
+### 1. Automatic Triggering (Two Paths)
+
+**Path A: Low Confidence Retrieval**
 ```
 User Query → Pattern Retrieval → Low Confidence? → External Lookup → Learn & Respond
 ```
 
+**Path B: Proactive Augmentation (NEW)**
+```
+User Query → Deliberation → No Relevant Concepts? → External Lookup → Learn & Respond
+```
+
 When pattern retrieval returns:
 - **No patterns found**, OR
-- **Best pattern confidence < 0.6**
+- **Best pattern confidence < 0.6**, OR
+- **Deliberation finds no semantically relevant concepts**
 
 The system automatically triggers external knowledge lookup.
 
-### 2. Knowledge Extraction
+### 2. Smart Source Routing
 
-**Wikipedia API Integration**:
-- Queries Wikipedia REST API (no authentication needed)
-- Extracts article summary (first 2 sentences)
-- Limits to ~50 words (optimal for pattern learning)
-- Returns with confidence score (0.75 for Wikipedia)
+The system routes queries to the most appropriate source:
 
-**Query Cleaning**:
-```python
-"What is machine learning?" → "Machine Learning"
-"Who is Ada Lovelace?" → "Ada Lovelace"
-"Tell me about Python" → "Python"
+```
+"What is a synonym for happy?" → 📖 WordNet
+"What does ephemeral mean?"    → 📘 Wiktionary  
+"Define serendipity"           → 📘 Wiktionary
+"Tell me about elephants"      → 🌐 Wikipedia
+"What is machine learning?"    → 🌐 Wikipedia (multi-word topic)
 ```
 
-### 3. Automatic Learning
+### 3. BNN-Based Topic Extraction
 
-The response from Wikipedia is returned to the user AND automatically learned:
+Uses **TopicExtractor** with BNN semantic similarity:
+- If topic was previously learned → BNN similarity finds it
+- If unknown topic → Falls back to regex extraction
+
+```python
+# TopicExtractor learns from declarations
+session.process_message("Dogs are loyal animals")
+# Now "dogs" is a learned topic
+
+# Later queries use BNN similarity
+"Tell me about dogs" → topic="dogs" (BNN match, score=0.98)
+"What are cats?"     → topic="cats" (fallback extraction)
+```
+
+### 4. Automatic Learning
+
+Responses from external sources are automatically learned:
 - **Trigger**: Extracted topic (e.g., "quantum entanglement")
 - **Response**: Wikipedia summary
 - **Intent**: `taught` (from external source)

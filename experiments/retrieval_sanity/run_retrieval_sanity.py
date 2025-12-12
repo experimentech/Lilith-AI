@@ -13,6 +13,7 @@ without wiring a full relational or planner stack.
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import math
 import random
@@ -28,20 +29,31 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 # ---------------------------------------------------------------------------
-# Link the Pushing-Medium library without requiring installation.
+# Link PMFlow from installed package first; fall back to local checkout if present.
 # ---------------------------------------------------------------------------
 THIS_DIR = Path(__file__).resolve().parent
 WORKSPACE_ROOT = THIS_DIR.parents[1]
-PMFLOW_ROOT = WORKSPACE_ROOT / "Pushing-Medium" / "programs" / "demos" / "machine_learning" / "nn_lib_v2"
+PMFLOW_ROOT = WORKSPACE_ROOT / "PMFlow_upstream"
 if str(WORKSPACE_ROOT) not in sys.path:
     sys.path.insert(0, str(WORKSPACE_ROOT))
-if str(PMFLOW_ROOT) not in sys.path:
+if PMFLOW_ROOT.exists() and str(PMFLOW_ROOT) not in sys.path:
     sys.path.insert(0, str(PMFLOW_ROOT))
 
-try:
-    from pmflow_bnn.pmflow import ParallelPMField  # noqa: E402
-except ImportError:
-    from pmflow_bnn.pmflow import PMField as ParallelPMField  # noqa: E402
+ParallelPMField = None
+for candidate in [
+    "pmflow.pmflow",  # installed PMFlow package
+    "PMFlow.pmflow",  # alternative package name casing
+]:
+    try:
+        module = importlib.import_module(candidate)  # type: ignore
+        ParallelPMField = getattr(module, "ParallelPMField", getattr(module, "PMField", None))
+        if ParallelPMField:
+            break
+    except ModuleNotFoundError:
+        continue
+
+if ParallelPMField is None:
+    raise ImportError("pmflow is required; install pmflow>=0.3.1 (e.g., pip install -e PMFlow_upstream)")
 
 from experiments.retrieval_sanity.config_utils import load_labeled_overrides
 from experiments.retrieval_sanity.provenance import collect_provenance

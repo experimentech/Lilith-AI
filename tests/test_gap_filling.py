@@ -53,26 +53,26 @@ def test_gap_filling():
             composition_mode="best_match"
         )
     
-    # Add some basic patterns
-    store.add_pattern(
-        trigger_context="What is Python?",
-        response_text="Python is a high-level programming language.",
-        intent="learned_knowledge"
-    )
-    
-    store.add_pattern(
-        trigger_context="What is a function?",
-        response_text="A function is a reusable block of code.",
-        intent="learned_knowledge"
-    )
-    
-    print("📚 Base Knowledge Added:")
-    print("  - What is Python?")
-    print("  - What is a function?")
-    print()
-    
-    # Test scenarios
-    scenarios = [
+        # Add some basic patterns
+        store.add_pattern(
+            trigger_context="What is Python?",
+            response_text="Python is a high-level programming language.",
+            intent="learned_knowledge"
+        )
+        
+        store.add_pattern(
+            trigger_context="What is a function?",
+            response_text="A function is a reusable block of code.",
+            intent="learned_knowledge"
+        )
+        
+        print("📚 Base Knowledge Added:")
+        print("  - What is Python?")
+        print("  - What is a function?")
+        print()
+        
+        # Test scenarios
+        scenarios = [
         {
             'name': 'Known Query (Direct Match)',
             'query': 'What is Python?',
@@ -110,69 +110,69 @@ def test_gap_filling():
         }
     ]
     
-    results = {
-        'direct_match': 0,
-        'gap_filled': 0,
-        'external_source': 0,
-        'fallback': 0
-    }
-    
-    for i, scenario in enumerate(scenarios, 1):
-        print(f"\n{'─' * 70}")
-        print(f"Test {i}: {scenario['name']}")
-        print(f"Query: \"{scenario['query']}\"")
-        print(f"Expected: {scenario['expected']}")
+        results = {
+            'direct_match': 0,
+            'gap_filled': 0,
+            'external_source': 0,
+            'fallback': 0
+        }
+
+        for i, scenario in enumerate(scenarios, 1):
+            print(f"\n{'─' * 70}")
+            print(f"Test {i}: {scenario['name']}")
+            print(f"Query: \"{scenario['query']}\"")
+            print(f"Expected: {scenario['expected']}")
+            print()
+            
+            # Compose response
+            response = composer.compose_response(
+                context=scenario['query'],
+                user_input=scenario['query']
+            )
+            
+            # Analyze result
+            print(f"Result:")
+            print(f"  Confidence: {response.confidence:.3f}")
+            print(f"  Is Fallback: {response.is_fallback}")
+            print(f"  Fragment IDs: {response.fragment_ids}")
+            print(f"  Response: {response.text[:150]}{'...' if len(response.text) > 150 else ''}")
+            
+            # Categorize result
+            if not response.is_fallback and response.confidence >= 0.5:
+                if 'gap_filled' in str(response.fragment_ids):
+                    results['gap_filled'] += 1
+                    print(f"  ✨ Gap filled successfully!")
+                else:
+                    results['direct_match'] += 1
+                    print(f"  ✅ Direct match!")
+            elif response.is_fallback and not response.is_low_confidence:
+                # External source used
+                results['external_source'] += 1
+                print(f"  💡 External knowledge used!")
+            else:
+                results['fallback'] += 1
+                print(f"  ⚠️  Fell back to 'I don't know'")
+        
+        # Summary
+        print(f"\n{'=' * 70}")
+        print("SUMMARY")
+        print(f"{'=' * 70}")
+        print(f"Total queries: {len(scenarios)}")
+        print()
+        print(f"Results:")
+        print(f"  Direct matches: {results['direct_match']}")
+        print(f"  Gap-filled: {results['gap_filled']}")
+        print(f"  External sources: {results['external_source']}")
+        print(f"  True fallbacks: {results['fallback']}")
         print()
         
-        # Compose response
-        response = composer.compose_response(
-            context=scenario['query'],
-            user_input=scenario['query']
-        )
+        # Calculate seamlessness score
+        seamless = results['direct_match'] + results['gap_filled'] + results['external_source']
+        seamless_rate = seamless / len(scenarios) * 100
         
-        # Analyze result
-        print(f"Result:")
-        print(f"  Confidence: {response.confidence:.3f}")
-        print(f"  Is Fallback: {response.is_fallback}")
-        print(f"  Fragment IDs: {response.fragment_ids}")
-        print(f"  Response: {response.text[:150]}{'...' if len(response.text) > 150 else ''}")
+        print(f"Seamlessness Score: {seamless}/{len(scenarios)} ({seamless_rate:.1f}%)")
+        print()
         
-        # Categorize result
-        if not response.is_fallback and response.confidence >= 0.5:
-            if 'gap_filled' in str(response.fragment_ids):
-                results['gap_filled'] += 1
-                print(f"  ✨ Gap filled successfully!")
-            else:
-                results['direct_match'] += 1
-                print(f"  ✅ Direct match!")
-        elif response.is_fallback and not response.is_low_confidence:
-            # External source used
-            results['external_source'] += 1
-            print(f"  💡 External knowledge used!")
-        else:
-            results['fallback'] += 1
-            print(f"  ⚠️  Fell back to 'I don't know'")
-    
-    # Summary
-    print(f"\n{'=' * 70}")
-    print("SUMMARY")
-    print(f"{'=' * 70}")
-    print(f"Total queries: {len(scenarios)}")
-    print()
-    print(f"Results:")
-    print(f"  Direct matches: {results['direct_match']}")
-    print(f"  Gap-filled: {results['gap_filled']}")
-    print(f"  External sources: {results['external_source']}")
-    print(f"  True fallbacks: {results['fallback']}")
-    print()
-    
-    # Calculate seamlessness score
-    seamless = results['direct_match'] + results['gap_filled'] + results['external_source']
-    seamless_rate = seamless / len(scenarios) * 100
-    
-    print(f"Seamlessness Score: {seamless}/{len(scenarios)} ({seamless_rate:.1f}%)")
-    print()
-    
         if seamless_rate >= 80:
             print("✅ Excellent! Most queries handled seamlessly with online learning.")
         elif seamless_rate >= 60:
@@ -190,8 +190,6 @@ def test_gap_filling():
             for source, count in stats['sources'].items():
                 if count > 0:
                     print(f"    {source}: {count}")
-        
-        return seamless_rate
     
     finally:
         # Cleanup temporary database

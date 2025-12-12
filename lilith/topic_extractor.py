@@ -220,6 +220,8 @@ class TopicExtractor:
     
     def _cosine_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
         """Compute cosine similarity between two embeddings."""
+        if a.shape != b.shape or a.size == 0 or b.size == 0:
+            return 0.0
         return float(np.dot(a, b))
     
     def _strip_scaffolding(self, query: str) -> str:

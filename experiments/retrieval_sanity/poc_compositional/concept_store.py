@@ -15,9 +15,9 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 
-# Optional: Import PMFlow retrieval extensions
+# Import PMFlow retrieval extensions
 try:
-    from pmflow_bnn_enhanced import CompositionalRetrievalPMField, SemanticNeighborhoodPMField
+    from pmflow.core.retrieval import CompositionalRetrievalPMField, SemanticNeighborhoodPMField
     PMFLOW_EXTENSIONS_AVAILABLE = True
 except ImportError:
     PMFLOW_EXTENSIONS_AVAILABLE = False

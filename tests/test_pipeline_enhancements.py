@@ -18,6 +18,13 @@ from experiments.retrieval_sanity.pipeline.pipeline import SymbolicPipeline
 
 
 def _ensure_pmflow_on_path() -> None:
+    # Prefer installed PMFlow; only fall back to workspace checkout if necessary.
+    try:
+        importlib.import_module("pmflow.pmflow")
+        return
+    except ModuleNotFoundError:
+        pass
+
     workspace_root = Path(__file__).resolve().parents[1]
     candidate = workspace_root / "Pushing-Medium" / "src"
     if candidate.exists() and str(candidate) not in sys.path:
@@ -43,10 +50,17 @@ def test_pipeline_falls_back_without_pmflow(monkeypatch: pytest.MonkeyPatch) -> 
     original_import_module = importlib.import_module
 
     def fake_import(name: str, package: str | None = None):
-        if name == "pmflow_bnn.pmflow":
+        if name in {
+            "pmflow.pmflow",
+            "PMFlow.pmflow",
+        }:
             raise ModuleNotFoundError(name)
         return original_import_module(name, package)
 
+    monkeypatch.setattr(
+        "experiments.retrieval_sanity.pipeline.embedding.PM_MODULE",
+        None,
+    )
     monkeypatch.setattr(
         "experiments.retrieval_sanity.pipeline.embedding.importlib.import_module",
         fake_import,
@@ -58,7 +72,7 @@ def test_pipeline_falls_back_without_pmflow(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_pmflow_embedding_dimensions() -> None:
     _ensure_pmflow_on_path()
-    pytest.importorskip("pmflow_bnn.pmflow")
+    pytest.importorskip("pmflow.pmflow")
     encoder = PMFlowEmbeddingEncoder(dimension=48, latent_dim=24)
     vector = encoder.encode(["hola", "hospital"])
     assert vector.shape == (1, 72)
@@ -69,7 +83,7 @@ def test_pmflow_embedding_dimensions() -> None:
 
 def test_pipeline_with_pmflow_encodes_frames() -> None:
     _ensure_pmflow_on_path()
-    pmflow_module = pytest.importorskip("pmflow_bnn.pmflow")
+    pmflow_module = pytest.importorskip("pmflow.pmflow")
     assert any(
         hasattr(pmflow_module, attr) for attr in ("PMField", "ParallelPMField")
     ), "pmflow module lacks field implementation"

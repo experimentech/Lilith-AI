@@ -12,6 +12,8 @@ from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 import re
 
+from lilith.personality import PersonalityProfile, MoodState, apply_style, maybe_add_followup
+
 
 @dataclass
 class SessionConfig:
@@ -48,6 +50,10 @@ class SessionConfig:
     # Declarative learning
     enable_declarative_learning: bool = True
 
+    # Personality / mood (optional, neutral by default)
+    enable_personality: bool = False
+    enable_mood: bool = False
+
 
 @dataclass
 class SessionResponse:
@@ -60,6 +66,8 @@ class SessionResponse:
     is_low_confidence: bool = False
     source: str = "internal"  # internal, external_wikipedia, etc.
     learned_fact: Optional[str] = None  # If declarative learning occurred
+    personality: Optional[PersonalityProfile] = None  # Optional personality metadata
+    mood: Optional[MoodState] = None  # Optional mood metadata for UI/UX
 
 
 class LilithSession:
@@ -134,6 +142,10 @@ class LilithSession:
         
         # Create conversation history (short-term memory - recent turns, sliding window)
         self.conversation_history = ConversationHistory(max_turns=10)
+
+        # Personality and mood (neutral/no-op unless enabled)
+        self.personality_profile = PersonalityProfile.neutral() if self.config.enable_personality else None
+        self.mood_state = MoodState.neutral() if self.config.enable_mood else None
         
         # Initialize pragmatic templates (Layer 4: linguistic patterns)
         pragmatic_templates = None
@@ -279,7 +291,9 @@ class LilithSession:
             
             return SessionResponse(
                 text="",
-                learned_fact=learned_fact
+                learned_fact=learned_fact,
+                personality=self.personality_profile if self.config.enable_personality else None,
+                mood=self.mood_state if self.config.enable_mood else None,
             )
         
         # Check for feedback from previous message
@@ -302,11 +316,30 @@ class LilithSession:
             # Return empty response - feedback was applied, no need to respond
             return SessionResponse(
                 text="",
-                learned_fact=learned_fact
+                learned_fact=learned_fact,
+                personality=self.personality_profile if self.config.enable_personality else None,
+                mood=self.mood_state if self.config.enable_mood else None,
             )
         
         # Generate response using enriched context (includes topic history for pronoun resolution)
         response = self.composer.compose_response(context=enriched_context, user_input=content)
+
+        # Gentle bias: adjust confidence by personality interests/aversions on primary intent
+        if self.config.enable_personality and self.personality_profile and getattr(response, "primary_pattern", None):
+            intent = getattr(response.primary_pattern, "intent", None)
+            if intent:
+                boost = 1.0
+                if intent in self.personality_profile.interests:
+                    boost *= 1.05
+                if intent in self.personality_profile.aversions:
+                    boost *= 0.95
+                # clamp
+                response.confidence = max(0.0, min(1.0, response.confidence * boost))
+
+        # Apply optional personality style and proactivity (no-op when disabled/neutral)
+        if self.config.enable_personality and self.personality_profile:
+            response.text = apply_style(response.text, self.personality_profile)
+            response.text = maybe_add_followup(response.text, self.personality_profile, getattr(response, 'confidence', 0.0))
         
         # Record turn in conversation history for continuity tracking
         if self.conversation_history:
@@ -360,7 +393,9 @@ class LilithSession:
             is_fallback=getattr(response, 'is_fallback', False),
             is_low_confidence=getattr(response, 'is_low_confidence', False),
             source=self._determine_source(self.last_pattern_id),
-            learned_fact=learned_fact
+            learned_fact=learned_fact,
+            personality=self.personality_profile if self.config.enable_personality else None,
+            mood=self.mood_state if self.config.enable_mood else None,
         )
     
     def _update_conversation_context(self, content: str) -> str:

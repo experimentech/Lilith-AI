@@ -8,7 +8,7 @@ from typing import Any, Dict, Iterable, List
 
 import torch
 
-from ..storage.sqlite_store import SQLiteVectorStore
+from experiments.retrieval_sanity.storage.sqlite_store import SQLiteVectorStore
 from .base import PipelineArtifact
 
 

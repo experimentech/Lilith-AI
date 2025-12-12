@@ -137,16 +137,7 @@ class LilithDiscordBot:
         self._base_store = None  # Loaded lazily
         
         # Session configuration
-        self.session_config = self._SessionConfig(
-            data_path=str(self.data_path),
-            learning_enabled=True,
-            enable_declarative_learning=True,
-            enable_feedback_detection=True,
-            plasticity_enabled=True,
-            syntax_plasticity_interval=5,
-            pmflow_plasticity_interval=10,
-            contrastive_interval=5
-        )
+        self.session_config = self._build_session_config(default_learning=True)
         
         # Per-user session caches with last activity tracking
         self._user_sessions: Dict[str, Any] = {}
@@ -187,6 +178,30 @@ class LilithDiscordBot:
             self._free_user_session(cache_key)
         
         return len(to_cleanup)
+
+    def _build_session_config(self, default_learning: bool) -> SessionConfig:
+        """Create SessionConfig honoring env flags for personality/mood."""
+
+        def _truthy(name: str) -> bool:
+            return os.getenv(name, "").lower() in {"1", "true", "yes", "on"}
+
+        cfg = self._SessionConfig(
+            data_path=str(self.data_path),
+            learning_enabled=default_learning,
+            enable_declarative_learning=default_learning,
+            enable_feedback_detection=True,
+            plasticity_enabled=default_learning,
+            syntax_plasticity_interval=5,
+            pmflow_plasticity_interval=10,
+            contrastive_interval=5
+        )
+
+        if _truthy("LILITH_PERSONALITY_ENABLE"):
+            cfg.enable_personality = True
+        if _truthy("LILITH_MOOD_ENABLE"):
+            cfg.enable_mood = True
+
+        return cfg
     
     def _free_user_session(self, cache_key: str) -> None:
         """
@@ -363,16 +378,7 @@ class LilithDiscordBot:
             print(f"  💬 Creating DM context session for {user_id}")
         
         # Create session config with server/DM-specific settings
-        config = self._SessionConfig(
-            data_path=str(self.data_path),
-            learning_enabled=learning_enabled,
-            enable_declarative_learning=learning_enabled,
-            enable_feedback_detection=True,
-            plasticity_enabled=learning_enabled,
-            syntax_plasticity_interval=5,
-            pmflow_plasticity_interval=10,
-            contrastive_interval=5
-        )
+        config = self._build_session_config(default_learning=learning_enabled)
         
         # Create session
         session = self._LilithSession(
@@ -606,6 +612,12 @@ class LilithDiscordBot:
         
         # Build response text
         response_text = response.text
+
+        # Optionally surface mood/personality in the reply (emoji prefix only to stay unobtrusive)
+        if getattr(response, "mood", None) is not None and response.mood.emoji:
+            response_text = f"{response.mood.emoji} {response_text}"
+        if getattr(response, "personality", None) is not None and response.personality.tone != "neutral":
+            response_text = f"{response_text}\n(tone: {response.personality.tone})"
         
         # If we learned their name, add confirmation
         if 'name' in learned:

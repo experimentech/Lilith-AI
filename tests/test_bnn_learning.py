@@ -73,15 +73,11 @@ print("-" * 80)
 
 # Import plasticity function
 try:
-    from pmflow_bnn.pmflow import pm_local_plasticity
+    from pmflow.pmflow import vectorized_pm_plasticity as pm_local_plasticity
     has_plasticity = True
-except:
-    try:
-        from pmflow_bnn.pmflow import vectorized_pm_plasticity as pm_local_plasticity
-        has_plasticity = True
-    except:
-        has_plasticity = False
-        print("⚠️  Plasticity function not available - skipping training")
+except Exception:
+    has_plasticity = False
+    print("⚠️  Plasticity function not available - skipping training")
 
 if has_plasticity:
     # Training loop: reinforce similar phrases

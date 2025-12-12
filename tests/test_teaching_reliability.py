@@ -19,7 +19,13 @@ sys.path.insert(0, str(Path(__file__).parent))
 from conversation_loop import ConversationLoop
 
 
-def test_teaching_scenario(scenario_name: str, user_query: str, teaching_text: str, test_query: str, expected_keywords: list):
+def test_teaching_scenario(
+    scenario_name: str = "Machine Learning Definition",
+    user_query: str = "What is machine learning?",
+    teaching_text: str = "Machine learning is a branch of artificial intelligence that enables computers to learn from data without explicit programming.",
+    test_query: str = "Tell me about machine learning",
+    expected_keywords: list | None = None,
+):
     """
     Test a single teaching scenario.
     
@@ -74,7 +80,8 @@ def test_teaching_scenario(scenario_name: str, user_query: str, teaching_text: s
     
     # Check if response contains expected keywords
     response_lower = response3.lower()
-    found_keywords = [kw for kw in expected_keywords if kw.lower() in response_lower]
+    keywords = expected_keywords or ["artificial", "intelligence", "data", "learn"]
+    found_keywords = [kw for kw in keywords if kw.lower() in response_lower]
     
     if found_keywords:
         print(f"   ✅ SUCCESS: Found keywords: {found_keywords}")

@@ -16,7 +16,7 @@ from .concept_database import ConceptDatabase
 
 # Import PMFlow retrieval extensions
 try:
-    from pmflow_bnn_enhanced import CompositionalRetrievalPMField, SemanticNeighborhoodPMField
+    from pmflow.core.retrieval import CompositionalRetrievalPMField, SemanticNeighborhoodPMField
     PMFLOW_EXTENSIONS_AVAILABLE = True
 except ImportError:
     PMFLOW_EXTENSIONS_AVAILABLE = False

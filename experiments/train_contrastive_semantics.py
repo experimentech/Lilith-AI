@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'experiments/retrieva
 import torch
 import numpy as np
 from pathlib import Path
-from pmflow_bnn_enhanced.pmflow import contrastive_plasticity
+from pmflow import contrastive_plasticity
 
 # Import Lilith components
 from lilith.database_fragment_store import DatabaseBackedFragmentStore

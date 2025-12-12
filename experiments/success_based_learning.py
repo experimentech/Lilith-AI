@@ -28,7 +28,7 @@ import torch
 import numpy as np
 from pathlib import Path
 from typing import List, Tuple
-from pmflow_bnn_enhanced.pmflow import contrastive_plasticity
+from pmflow import contrastive_plasticity
 from lilith.embedding import PMFlowEmbeddingEncoder
 
 

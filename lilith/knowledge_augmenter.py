@@ -42,9 +42,10 @@ class WikipediaLookup:
     Supports BioNN-based topic extraction via TopicExtractor when available.
     """
     
-    def __init__(self):
+    def __init__(self, timeout_seconds: float = 3.0):
         self.base_url = "https://en.wikipedia.org/api/rest_v1/page/summary/"
         self.user_agent = "Lilith/1.0 (Educational neuro-symbolic AI)"
+        self.timeout = timeout_seconds
         self.topic_extractor = None  # Set by KnowledgeAugmenter.set_topic_extractor()
         
     def lookup(self, query: str, conversation_history: str = "") -> Optional[Dict[str, Any]]:
@@ -180,7 +181,7 @@ class WikipediaLookup:
             url = self.base_url + quote(title)
             headers = {'User-Agent': self.user_agent}
             
-            response = requests.get(url, headers=headers, timeout=5)
+            response = requests.get(url, headers=headers, timeout=self.timeout)
             
             if response.status_code == 200:
                 data = response.json()
@@ -393,7 +394,7 @@ class WikipediaLookup:
             }
             headers = {'User-Agent': self.user_agent}
             
-            response = requests.get(search_url, params=params, headers=headers, timeout=5)
+            response = requests.get(search_url, params=params, headers=headers, timeout=self.timeout)
             
             if response.status_code == 200:
                 data = response.json()
@@ -444,9 +445,10 @@ class WiktionaryLookup:
     Better than Wikipedia for vocabulary, word meanings, and language questions.
     """
     
-    def __init__(self):
+    def __init__(self, timeout_seconds: float = 3.0):
         self.base_url = "https://en.wiktionary.org/api/rest_v1/page/definition/"
         self.user_agent = "Lilith/1.0 (Educational neuro-symbolic AI)"
+        self.timeout = timeout_seconds
     
     def lookup(self, word: str) -> Optional[Dict[str, Any]]:
         """
@@ -469,7 +471,7 @@ class WiktionaryLookup:
             url = self.base_url + quote(cleaned_word)
             headers = {'User-Agent': self.user_agent}
             
-            response = requests.get(url, headers=headers, timeout=5)
+            response = requests.get(url, headers=headers, timeout=self.timeout)
             
             if response.status_code == 200:
                 data = response.json()
@@ -675,8 +677,9 @@ class FreeDictionaryLookup:
     Good balance of features: definitions, phonetics, usage examples.
     """
     
-    def __init__(self):
+    def __init__(self, timeout_seconds: float = 3.0):
         self.base_url = "https://api.dictionaryapi.dev/api/v2/entries/en/"
+        self.timeout = timeout_seconds
     
     def lookup(self, word: str) -> Optional[Dict[str, Any]]:
         """
@@ -698,7 +701,7 @@ class FreeDictionaryLookup:
             
             url = self.base_url + quote(cleaned_word)
             
-            response = requests.get(url, timeout=5)
+            response = requests.get(url, timeout=self.timeout)
             
             if response.status_code == 200:
                 data = response.json()
@@ -789,20 +792,22 @@ class KnowledgeAugmenter:
     to extract topics from queries instead of regex patterns.
     """
     
-    def __init__(self, enabled: bool = True, topic_extractor=None):
+    def __init__(self, enabled: bool = True, topic_extractor=None, timeout_seconds: float = 3.0):
         """
         Args:
             enabled: Whether external lookups are enabled (can be toggled)
             topic_extractor: Optional TopicExtractor for BioNN-based topic extraction
+            timeout_seconds: Timeout for external HTTP lookups
         """
         self.enabled = enabled
         self.topic_extractor = topic_extractor
+        self.timeout_seconds = timeout_seconds
         
         # Initialize all lookup sources
         self.wordnet = WordNetLookup()
-        self.wiktionary = WiktionaryLookup()
-        self.free_dictionary = FreeDictionaryLookup()
-        self.wikipedia = WikipediaLookup()
+        self.wiktionary = WiktionaryLookup(timeout_seconds=timeout_seconds)
+        self.free_dictionary = FreeDictionaryLookup(timeout_seconds=timeout_seconds)
+        self.wikipedia = WikipediaLookup(timeout_seconds=timeout_seconds)
         
         # Statistics
         self.lookup_count = 0

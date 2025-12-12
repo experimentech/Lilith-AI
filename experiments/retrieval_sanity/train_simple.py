@@ -11,8 +11,10 @@ from pathlib import Path
 from typing import List, Tuple
 
 # Import PMFlow Enhanced and base encoder
-from pmflow_bnn_enhanced.pmflow import (
+from pmflow import (
+    PMField,
     MultiScalePMField,
+    vectorized_pm_plasticity,
     contrastive_plasticity,
     batch_plasticity_update,
     hybrid_similarity,

@@ -16,7 +16,10 @@
                          Confidence: 0.80
                               ↓
         ┌────────────────────────────────────────┐
-        │  Contains: mean, define, definition    │
+        │  Definition queries (single-word):      │
+        │  - "What is X?" / "What are X?"         │
+        │  - "What does X mean?"                  │
+        │  - "Define X" / "Meaning of X"          │
         └────────────────────────────────────────┘
                               ↓
                     📘 Wiktionary (online)
@@ -29,10 +32,27 @@
                               ↓
         ┌────────────────────────────────────────┐
         │  General knowledge queries             │
+        │  Multi-word topics                     │
+        │  - "Tell me about X"                   │
+        │  - "Who is/was X?"                     │
         └────────────────────────────────────────┘
                               ↓
                     🌐 Wikipedia (online)
                     Confidence: 0.75
+```
+
+## Topic Extraction
+
+The system uses **BNN-based TopicExtractor** to identify topics from queries:
+
+1. **Learned Topics**: If the topic was taught before, BNN similarity matching finds it
+2. **Unknown Topics**: Falls back to regex pattern extraction
+
+```python
+# TopicExtractor in action
+"Tell me about dogs" → "dogs" (if learned) 
+"What does ephemeral mean?" → "ephemeral"
+"Do you know about elephants?" → "elephants"
 ```
 
 ## Example Queries

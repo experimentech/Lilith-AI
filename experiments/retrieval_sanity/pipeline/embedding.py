@@ -12,6 +12,20 @@ import torch
 import torch.nn.functional as F
 
 
+def _init_pm_modules():
+    """Prefer installed PMFlow package, fallback to bundled variants."""
+    for module_name in ["pmflow.pmflow", "PMFlow.pmflow"]:
+        try:
+            module = importlib.import_module(module_name)
+            return module
+        except ModuleNotFoundError:
+            continue
+    return None
+
+
+PM_MODULE = _init_pm_modules()
+
+
 class HashedEmbeddingEncoder:
     """Convert tokens into a fixed-width embedding via hashing.
 
@@ -76,14 +90,9 @@ class PMFlowEmbeddingEncoder:
 
     @staticmethod
     def _init_pm_field(latent_dim: int, seed: int):
-        try:
-            module = importlib.import_module("pmflow_bnn_enhanced.pmflow")
-        except ModuleNotFoundError:
-            # Fallback to original pmflow_bnn if enhanced version not available
-            try:
-                module = importlib.import_module("pmflow_bnn.pmflow")
-            except ModuleNotFoundError as exc:  # pragma: no cover - handled by caller fallback
-                raise RuntimeError("pmflow_bnn is required for PMFlow embeddings") from exc
+        module = PM_MODULE or _init_pm_modules()
+        if module is None:
+            raise ImportError("PMFlow is not installed; please install experimentech/PMFlow")
 
         # Try to use MultiScalePMField for hierarchical concept learning
         PMFieldCls = getattr(module, "MultiScalePMField", None)
@@ -216,6 +225,13 @@ class PMFlowEmbeddingEncoder:
             else:
                 # Standard PMField returns single tensor
                 raw_refined: torch.Tensor = pm_output
+
+            # Normalize latent dimensionality for downstream consumers expecting fixed width
+            if raw_refined.shape[-1] > self.latent_dim:
+                raw_refined = raw_refined[..., : self.latent_dim]
+            elif raw_refined.shape[-1] < self.latent_dim:
+                pad_width = self.latent_dim - raw_refined.shape[-1]
+                raw_refined = torch.nn.functional.pad(raw_refined, (0, pad_width))
             
             refined = F.normalize(raw_refined, p=2, dim=1)
             if self.combine_mode == "concat":

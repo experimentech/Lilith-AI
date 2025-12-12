@@ -7,6 +7,7 @@ Supports different auth modes:
 """
 
 import sys
+import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -15,6 +16,10 @@ from lilith.embedding import PMFlowEmbeddingEncoder
 from lilith.multi_tenant_store import MultiTenantFragmentStore
 from lilith.user_auth import UserAuthenticator, AuthMode
 from lilith.session import LilithSession, SessionConfig
+
+
+def _truthy(name: str) -> bool:
+    return os.getenv(name, "").lower() in {"1", "true", "yes", "on"}
 
 
 def main():
@@ -68,8 +73,13 @@ def main():
         learning_enabled=True,
         enable_declarative_learning=True,
         enable_feedback_detection=True,
-        plasticity_enabled=True
+        plasticity_enabled=True,
     )
+
+    if _truthy("LILITH_PERSONALITY_ENABLE"):
+        config.enable_personality = True
+    if _truthy("LILITH_MOOD_ENABLE"):
+        config.enable_mood = True
     
     session = LilithSession(
         user_id=user_identity.user_id,
@@ -78,7 +88,7 @@ def main():
         store=fragment_store,
         display_name=user_identity.display_name or "User"
     )
-    
+
     print("🤖 Lilith initialized")
     if session.feedback_tracker:
         print("   🎯 Auto-feedback detection enabled")
@@ -311,7 +321,14 @@ def main():
         if response.learned_fact:
             print(f"   � Learned: {response.learned_fact}")
         
-        print(f"Lilith: {response.text}")
+        # Prefix mood emoji if available and enabled
+        prefix = ""
+        if getattr(response, "mood", None) is not None and response.mood.emoji:
+            prefix = f"{response.mood.emoji} "
+        suffix = ""
+        if getattr(response, "personality", None) is not None and response.personality.tone != "neutral":
+            suffix = f" (tone: {response.personality.tone})"
+        print(f"Lilith: {prefix}{response.text}{suffix}")
         
         # Enhanced fallback feedback
         if response.is_fallback:

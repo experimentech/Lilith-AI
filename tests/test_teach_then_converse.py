@@ -50,7 +50,12 @@ def teach_topic(loop, teachings):
     print(f"✅ Teaching complete! Taught {len(teachings)} concepts.\n")
 
 
-def test_multi_turn_conversation(loop, scenario_name, turns, expected_keywords):
+def test_multi_turn_conversation(
+    loop,
+    scenario_name: str = "Machine Learning Basics",
+    turns=None,
+    expected_keywords=None,
+):
     """
     Test multi-turn conversation after teaching.
     
@@ -64,6 +69,15 @@ def test_multi_turn_conversation(loop, scenario_name, turns, expected_keywords):
     print(f"🧪 TESTING: {scenario_name}")
     print("="*80 + "\n")
     
+    if turns is None:
+        turns = [
+            "What is machine learning?",
+            "How does supervised learning work?",
+            "Thanks!",
+        ]
+    if expected_keywords is None:
+        expected_keywords = {1: ["supervised", "labeled"]}
+
     results = []
     
     for i, user_input in enumerate(turns):

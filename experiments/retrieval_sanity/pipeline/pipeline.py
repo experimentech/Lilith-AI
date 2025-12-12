@@ -43,7 +43,7 @@ class SymbolicPipeline:
             return HashedEmbeddingEncoder()
         try:
             return PMFlowEmbeddingEncoder(**(pmflow_kwargs or {}))
-        except RuntimeError as exc:
+        except (RuntimeError, ImportError) as exc:
             logging.getLogger(__name__).warning(
                 "PMFlow embeddings unavailable (%s); falling back to hashed encoder.",
                 exc,
