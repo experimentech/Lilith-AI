@@ -5,9 +5,22 @@ Provides user-isolated databases with base knowledge fallback.
 Users can learn and store patterns without corrupting base knowledge.
 """
 
+import json
+import os
+import shutil
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, List, Tuple, Dict
+
 import numpy as np
+
+QUIET = os.getenv("LILITH_QUIET", "").lower() in {"1", "true", "yes", "on", "quiet"}
+
+
+def _log(msg: str) -> None:
+    if not QUIET:
+        print(msg)
 
 from .response_fragments_sqlite import ResponseFragmentStoreSQLite as ResponseFragmentStore, ResponsePattern
 from .user_auth import UserIdentity, get_user_data_path
@@ -91,7 +104,7 @@ class MultiTenantFragmentStore:
         if user_identity.is_teacher():
             # Teacher mode: user_store is same as base_store
             self.user_store = None
-            print(f"  👨‍🏫 Teacher mode: Writing to base knowledge")
+            _log(f"  👨‍🏫 Teacher mode: Writing to base knowledge")
         else:
             # User mode: separate user database (SQLite)
             # Users start with empty storage, no bootstrap
@@ -108,7 +121,7 @@ class MultiTenantFragmentStore:
             # Note: SQLite stores are self-contained, no manual save needed
             # New users automatically start with empty database
             
-            print(f"  👤 User mode: {user_identity.display_name} (isolated storage)")
+            _log(f"  👤 User mode: {user_identity.display_name} (isolated storage)")
         
         # Vocabulary tracker (if enabled) - Initialize BEFORE concept store
         # so we can pass it to concept store for query expansion
@@ -122,7 +135,7 @@ class MultiTenantFragmentStore:
                 vocab_db_path = str(Path(user_data_path) / "vocabulary.db")
             
             self.vocabulary = VocabularyTracker(vocab_db_path)
-            print(f"  📖 Vocabulary tracker enabled: {vocab_db_path}")
+            _log(f"  📖 Vocabulary tracker enabled: {vocab_db_path}")
         else:
             self.vocabulary = None
         
@@ -141,16 +154,16 @@ class MultiTenantFragmentStore:
                 db_path=concept_db_path,
                 vocabulary_tracker=self.vocabulary  # ← Now with vocabulary expansion!
             )
-            print(f"  🧠 Concept store enabled: {concept_db_path}")
+            _log(f"  🧠 Concept store enabled: {concept_db_path}")
             if self.vocabulary:
-                print(f"     ✨ Vocabulary-enhanced concept retrieval enabled")
+                _log(f"     ✨ Vocabulary-enhanced concept retrieval enabled")
         else:
             self.concept_store = None
         
         # Concept taxonomy (if enabled)
         if TAXONOMY_AVAILABLE:
             self.taxonomy = ConceptTaxonomy()
-            print(f"  📚 Concept taxonomy initialized")
+            _log(f"  📚 Concept taxonomy initialized")
         else:
             self.taxonomy = None
         
@@ -165,7 +178,7 @@ class MultiTenantFragmentStore:
                 pattern_db_path = str(Path(user_data_path) / "patterns.db")
             
             self.pattern_extractor = PatternExtractor(pattern_db_path)
-            print(f"  📝 Pattern extractor enabled: {pattern_db_path}")
+            _log(f"  📝 Pattern extractor enabled: {pattern_db_path}")
         else:
             self.pattern_extractor = None
     
@@ -220,7 +233,7 @@ class MultiTenantFragmentStore:
         if top_matches:
             _, _, source = top_matches[0]
             marker = "📘" if source == "base" else "📗"
-            print(f"     {marker} Retrieved from {source} knowledge")
+            _log(f"     {marker} Retrieved from {source} knowledge")
         
         # Return without source marker
         return [(pattern, conf) for pattern, conf, _ in top_matches]
@@ -288,7 +301,7 @@ class MultiTenantFragmentStore:
         if top_matches:
             _, _, source = top_matches[0]
             marker = "📘" if source == "base" else "📗"
-            print(f"     {marker} Retrieved from {source} knowledge")
+            _log(f"     {marker} Retrieved from {source} knowledge")
         
         # Return without source marker
         return [(pattern, score) for pattern, score, _ in top_matches]
@@ -384,7 +397,7 @@ class MultiTenantFragmentStore:
             conn.execute("DELETE FROM response_patterns")
             conn.commit()
             conn.close()
-            print(f"  🗑️  Cleared user patterns for {self.user_identity.display_name}")
+            _log(f"  🗑️  Cleared user patterns for {self.user_identity.display_name}")
     
     def reset_user_data(self, keep_backup: bool = True, bootstrap: bool = False):
         """
@@ -410,7 +423,7 @@ class MultiTenantFragmentStore:
             raise RuntimeError("User store not initialized")
         
         backup_path = self.user_store.reset_database(keep_backup=keep_backup, bootstrap=bootstrap)
-        print(f"  🔄 Reset complete for {self.user_identity.display_name}")
+        _log(f"  🔄 Reset complete for {self.user_identity.display_name}")
         
         return backup_path
     
@@ -463,7 +476,7 @@ class MultiTenantFragmentStore:
             if self.user_identity.is_teacher():
                 return self.base_store
             else:
-                print(f"  ⚠️  Cannot modify base pattern in user mode: {fragment_id}")
+                _log(f"  ⚠️  Cannot modify base pattern in user mode: {fragment_id}")
                 return None
         
         # Suppress warnings for known non-pattern IDs (templates, computed responses, etc.)
@@ -474,7 +487,7 @@ class MultiTenantFragmentStore:
             'acknowledgment_', 'opinion_', 'capability_'
         )
         if not fragment_id.startswith(non_pattern_prefixes):
-            print(f"  ⚠️  Pattern not found: {fragment_id}")
+            _log(f"  ⚠️  Pattern not found: {fragment_id}")
         return None
     
     def learn_from_wikipedia(
@@ -518,7 +531,7 @@ class MultiTenantFragmentStore:
                 concepts = extractor.extract_concepts(query, response_text)
                 
                 if concepts:
-                    print(f"  🧠 Extracting semantic concepts...")
+                    _log(f"  🧠 Extracting semantic concepts...")
                     for concept in concepts:
                         # Convert to dict format
                         concept_dict = extractor.concept_to_dict(concept)
@@ -526,25 +539,25 @@ class MultiTenantFragmentStore:
                         # Add to concept store
                         concept_id = self.concept_store.add_concept(**concept_dict)
                         
-                        print(f"     ✓ Learned concept: {concept.term}")
+                        _log(f"     ✓ Learned concept: {concept.term}")
                         if concept.entity_type:
-                            print(f"       - Entity type: {concept.entity_type}")
+                            _log(f"       - Entity type: {concept.entity_type}")
                         if concept.type_relations:
-                            print(f"       - Type: {concept.type_relations[0]}")
+                            _log(f"       - Type: {concept.type_relations[0]}")
                         if concept.properties:
-                            print(f"       - Properties: {', '.join(concept.properties[:3])}")
+                            _log(f"       - Properties: {', '.join(concept.properties[:3])}")
                         
                         # Add to taxonomy (Phase B: Entity recognition)
                         if self.taxonomy and concept.entity_type:
                             self._add_to_taxonomy(concept)
                 
             except Exception as e:
-                print(f"  ⚠️  Concept extraction failed: {e}")
+                _log(f"  ⚠️  Concept extraction failed: {e}")
         
         # 3. Track vocabulary (Phase C: Vocabulary expansion)
         if self.vocabulary:
             try:
-                print(f"  📖 Tracking vocabulary...")
+                _log(f"  📖 Tracking vocabulary...")
                 tracked = self.vocabulary.track_text(response_text, source="wikipedia")
                 
                 # Show technical terms found

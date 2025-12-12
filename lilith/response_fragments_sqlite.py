@@ -12,12 +12,20 @@ API-compatible with JSON ResponseFragmentStore but with proper concurrency handl
 
 import sqlite3
 import json
+import os
 import time
 import random
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, asdict
 import numpy as np
+
+QUIET = os.getenv("LILITH_QUIET", "").lower() in {"1", "true", "yes", "on", "quiet"}
+
+
+def _log(msg: str) -> None:
+    if not QUIET:
+        print(msg)
 
 # Optional: Import fuzzy matching for typo tolerance
 try:
@@ -65,6 +73,19 @@ class ResponseFragmentStoreSQLite:
         self.encoder = semantic_encoder
         self.storage_path = Path(storage_path)
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Optional neuro-symbolic helpers (present in JSON store); keep safe defaults
+        self.vocabulary = None
+        self.concept_store = None
+        self.pattern_extractor = None
+
+        # Handle in-memory SQLite with shared cache so multiple connections see the same schema
+        self._sqlite_uri = None
+        self._persistent_conn = None
+        if storage_path == ":memory:":
+            self._sqlite_uri = "file:pmflow_memdb?mode=memory&cache=shared"
+            self._persistent_conn = sqlite3.connect(self._sqlite_uri, timeout=30.0, uri=True)
+            self._persistent_conn.row_factory = sqlite3.Row
         
         # Initialize fuzzy matcher if available
         self.fuzzy_matcher = None
@@ -74,9 +95,9 @@ class ResponseFragmentStoreSQLite:
                 token_overlap_threshold=0.6,
                 enable_phonetic=False
             )
-            print("  🔍 Fuzzy matching enabled for typo tolerance!")
+            _log("  🔍 Fuzzy matching enabled for typo tolerance!")
         elif enable_fuzzy_matching and not FUZZY_MATCHING_AVAILABLE:
-            print("  ⚠️  Fuzzy matching not available")
+            _log("  ⚠️  Fuzzy matching not available")
         
         # Initialize database with WAL mode for concurrency
         self._init_database()
@@ -88,8 +109,7 @@ class ResponseFragmentStoreSQLite:
     def _init_database(self):
         """Initialize database with schema and enable WAL mode."""
         try:
-            conn = sqlite3.connect(str(self.storage_path))
-            conn.row_factory = sqlite3.Row
+            conn = self._get_connection()
             
             # Enable WAL mode for better concurrent access
             conn.execute("PRAGMA journal_mode=WAL")
@@ -128,14 +148,15 @@ class ResponseFragmentStoreSQLite:
             """)
             
             conn.commit()
-            conn.close()
+            if self._persistent_conn is None:
+                self._close_connection(conn)
             
         except sqlite3.DatabaseError as e:
-            print(f"⚠️  Database corruption detected: {e}")
-            print(f"⚠️  Attempting to recover database: {self.storage_path}")
+            _log(f"⚠️  Database corruption detected: {e}")
+            _log(f"⚠️  Attempting to recover database: {self.storage_path}")
             self._recover_corrupted_database()
         except Exception as e:
-            print(f"❌ Failed to initialize database: {e}")
+            _log(f"❌ Failed to initialize database: {e}")
             raise
     
     def _recover_corrupted_database(self):
@@ -156,7 +177,7 @@ class ResponseFragmentStoreSQLite:
         try:
             # Backup corrupted database
             shutil.copy2(self.storage_path, backup_path)
-            print(f"  💾 Backed up corrupted database to: {backup_path}")
+            _log(f"  💾 Backed up corrupted database to: {backup_path}")
             
             # Try to dump recoverable data
             recoverable_patterns = []
@@ -166,12 +187,12 @@ class ResponseFragmentStoreSQLite:
                 for row in cursor:
                     try:
                         recoverable_patterns.append(dict(row))
-                    except:
+                    except Exception:
                         pass  # Skip corrupted rows
-                conn.close()
-                print(f"  ✅ Recovered {len(recoverable_patterns)} patterns")
+                self._close_connection(conn)
+                _log(f"  ✅ Recovered {len(recoverable_patterns)} patterns")
             except Exception as e:
-                print(f"  ⚠️  Could not recover data: {e}")
+                _log(f"  ⚠️  Could not recover data: {e}")
             
             # Remove corrupted database
             self.storage_path.unlink()
@@ -216,17 +237,17 @@ class ResponseFragmentStoreSQLite:
                         pattern.get('usage_count', 0)
                     ))
                 except Exception as e:
-                    print(f"  ⚠️  Could not restore pattern {pattern.get('fragment_id')}: {e}")
+                    _log(f"  ⚠️  Could not restore pattern {pattern.get('fragment_id')}: {e}")
             
             conn.commit()
-            conn.close()
+            self._close_connection(conn)
             
-            print(f"  ✅ Database recovered successfully")
-            print(f"  📝 Restored {len(recoverable_patterns)} patterns")
+            _log(f"  ✅ Database recovered successfully")
+            _log(f"  📝 Restored {len(recoverable_patterns)} patterns")
             
         except Exception as e:
-            print(f"  ❌ Recovery failed: {e}")
-            print(f"  💡 Manual intervention required. Backup at: {backup_path}")
+            _log(f"  ❌ Recovery failed: {e}")
+            _log(f"  💡 Manual intervention required. Backup at: {backup_path}")
             raise
     
     def reset_database(self, keep_backup: bool = True, bootstrap: bool = False):
@@ -255,7 +276,7 @@ class ResponseFragmentStoreSQLite:
             conn = self._get_connection()
             cursor = conn.execute("SELECT COUNT(*) FROM response_patterns")
             old_count = cursor.fetchone()[0]
-            conn.close()
+            self._close_connection(conn)
         except:
             old_count = "unknown"
         
@@ -280,16 +301,27 @@ class ResponseFragmentStoreSQLite:
     
     def _get_connection(self):
         """Get a new database connection with proper timeout."""
+        if self._persistent_conn is not None:
+            return self._persistent_conn
+        if self._sqlite_uri:
+            conn = sqlite3.connect(self._sqlite_uri, timeout=30.0, uri=True)
+            conn.row_factory = sqlite3.Row
+            return conn
         conn = sqlite3.connect(str(self.storage_path), timeout=30.0)
         conn.row_factory = sqlite3.Row
         return conn
+
+    def _close_connection(self, conn):
+        """Close connection unless it's the persistent shared in-memory handle."""
+        if self._persistent_conn is None or conn is not self._persistent_conn:
+            conn.close()
     
     def _is_empty(self) -> bool:
         """Check if database has any patterns."""
         conn = self._get_connection()
         cursor = conn.execute("SELECT COUNT(*) FROM response_patterns")
         count = cursor.fetchone()[0]
-        conn.close()
+        self._close_connection(conn)
         return count == 0
     
     def _bootstrap_seed_patterns(self):
@@ -353,7 +385,7 @@ class ResponseFragmentStoreSQLite:
             """, (fragment_id, trigger, response, score, intent))
         
         conn.commit()
-        conn.close()
+        self._close_connection(conn)
         print(f"  📚 Bootstrapped with {len(seed_patterns)} seed patterns")
     
     def add_pattern(
@@ -394,7 +426,7 @@ class ResponseFragmentStoreSQLite:
                 """, (fragment_id, trigger_context, response_text, success_score, intent))
                 
                 conn.commit()
-                conn.close()
+                self._close_connection(conn)
                 return fragment_id
                 
             except sqlite3.IntegrityError:
@@ -403,10 +435,10 @@ class ResponseFragmentStoreSQLite:
                 fragment_id = f"pattern_{intent}_{timestamp_ms}_{random_suffix}"
                 
                 if attempt == max_retries - 1:
-                    conn.close()
+                    self._close_connection(conn)
                     raise
         
-        conn.close()
+        self._close_connection(conn)
         return fragment_id
     
     def _extract_current_query(self, context: str) -> str:
@@ -694,7 +726,7 @@ class ResponseFragmentStoreSQLite:
         """, (min_score,))
         
         rows = cursor.fetchall()
-        conn.close()
+        self._close_connection(conn)
         
         if not rows:
             return []
@@ -858,7 +890,7 @@ class ResponseFragmentStoreSQLite:
             
             conn.commit()
         
-        conn.close()
+        self._close_connection(conn)
     
     def retrieve_patterns_hybrid(
         self,
@@ -987,7 +1019,7 @@ class ResponseFragmentStoreSQLite:
         """)
         stats_row = cursor.fetchone()
         
-        conn.close()
+        self._close_connection(conn)
         
         return {
             'total_patterns': total,
@@ -1008,7 +1040,7 @@ class ResponseFragmentStoreSQLite:
         conn = self._get_connection()
         cursor = conn.execute("SELECT * FROM response_patterns")
         rows = cursor.fetchall()
-        conn.close()
+        self._close_connection(conn)
         
         patterns_dict = {}
         for row in rows:
@@ -1054,7 +1086,7 @@ class ResponseFragmentStoreSQLite:
             (threshold,)
         )
         conn.commit()
-        conn.close()
+        self._close_connection(conn)
         
         return count
     
@@ -1079,6 +1111,6 @@ class ResponseFragmentStoreSQLite:
         """, (half_life_days, half_life_days))
         
         conn.commit()
-        conn.close()
+        self._close_connection(conn)
 
 

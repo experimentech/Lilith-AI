@@ -7,10 +7,18 @@ This is the production version of poc_compositional/concept_store.py
 
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple
+import os
 import numpy as np
 import torch
 import torch.nn.functional as F
 from pathlib import Path
+
+QUIET = os.getenv("LILITH_QUIET", "").lower() in {"1", "true", "yes", "on", "quiet"}
+
+
+def _log(msg: str) -> None:
+    if not QUIET:
+        print(msg)
 
 from .concept_database import ConceptDatabase
 
@@ -86,7 +94,7 @@ class ProductionConceptStore:
             self.neighborhood = SemanticNeighborhoodPMField(
                 semantic_encoder.pm_field
             )
-            print("  ✨ PMFlow retrieval extensions enabled (query expansion + hierarchical + attention)")
+            _log("  ✨ PMFlow retrieval extensions enabled (query expansion + hierarchical + attention)")
         else:
             self.compositional_retrieval = None
             self.neighborhood = None
@@ -146,7 +154,7 @@ class ProductionConceptStore:
         
         if existing:
             # Merge into existing concept
-            print(f"  🔗 Consolidating '{term}' into '{existing['term']}' (similarity: {self.consolidation_threshold:.2f}+)")
+            _log(f"  🔗 Consolidating '{term}' into '{existing['term']}' (similarity: {self.consolidation_threshold:.2f}+)")
             
             # Merge properties (avoid duplicates)
             existing_props = set(existing['properties'])
@@ -181,7 +189,7 @@ class ProductionConceptStore:
         # Cache embedding
         self._embedding_cache[concept_id] = embedding
         
-        print(f"  ➕ Created new concept: {term} ({concept_id})")
+        _log(f"  ➕ Created new concept: {term} ({concept_id})")
         return concept_id
     
     def retrieve_by_text(
@@ -404,7 +412,7 @@ class ProductionConceptStore:
                 if neighbor_dict['concept_id'] in concepts_to_remove:
                     continue
                 
-                print(f"  🔗 Merging '{neighbor_dict['term']}' into '{concept_dict['term']}' (field similarity: {score:.3f})")
+                _log(f"  🔗 Merging '{neighbor_dict['term']}' into '{concept_dict['term']}' (field similarity: {score:.3f})")
                 
                 # Merge properties
                 merged_props = list(set(concept_dict['properties'] + neighbor_dict['properties']))
