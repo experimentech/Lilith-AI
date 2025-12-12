@@ -12,7 +12,15 @@ from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 import re
 
-from lilith.personality import PersonalityProfile, MoodState, apply_style, maybe_add_followup, update_mood_state
+from lilith.personality import (
+    PersonalityProfile,
+    MoodState,
+    apply_style,
+    maybe_add_followup,
+    update_mood_state,
+    mood_confidence_scale,
+    mood_plasticity_scale,
+)
 
 
 @dataclass
@@ -393,6 +401,8 @@ class LilithSession:
 
         if self.config.enable_mood:
             self.mood_state = update_mood_state(self.mood_state, content)
+            # Limbic-style modulation: adjust confidence with mood
+            response.confidence = max(0.0, min(1.0, response.confidence * mood_confidence_scale(self.mood_state)))
         
         return SessionResponse(
             text=response.text,
@@ -784,6 +794,8 @@ class LilithSession:
         """Apply neuroplasticity updates based on interaction count."""
         if not self.composer.syntax_stage:
             return
+
+        plasticity_scale = mood_plasticity_scale(self.mood_state) if self.config.enable_mood else 1.0
         
         # Syntax plasticity
         if self.interaction_count % self.config.syntax_plasticity_interval == 0:
@@ -794,7 +806,7 @@ class LilithSession:
                         if hasattr(self.composer.syntax_stage, '_apply_plasticity'):
                             self.composer.syntax_stage._apply_plasticity(
                                 pattern=pattern,
-                                feedback=0.8,
+                                feedback=0.8 * plasticity_scale,
                                 contrastive_pairs=None
                             )
             except Exception as e:
@@ -804,7 +816,10 @@ class LilithSession:
         if self.interaction_count % self.config.contrastive_interval == 0:
             try:
                 if hasattr(self.composer.syntax_stage, 'apply_contrastive_learning'):
-                    self.composer.syntax_stage.apply_contrastive_learning()
+                    try:
+                        self.composer.syntax_stage.apply_contrastive_learning(scale=plasticity_scale)
+                    except TypeError:
+                        self.composer.syntax_stage.apply_contrastive_learning()
             except Exception as e:
                 print(f"  ⚠️  Contrastive learning error: {e}")
     

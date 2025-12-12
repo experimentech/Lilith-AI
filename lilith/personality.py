@@ -117,6 +117,44 @@ def _emoji_for_label(label: str) -> str:
     }.get(label, "🙂")
 
 
+def mood_confidence_scale(mood: Optional[MoodState]) -> float:
+    """Scale confidence based on mood intensity and valence.
+
+    - Positive mood: slight boost up to +10%.
+    - Concerned mood: slight dampening down to -10%.
+    - Neutral/no mood: 1.0 (no change).
+    """
+
+    if mood is None or mood.label == "neutral":
+        return 1.0
+
+    intensity = min(max(mood.intensity, 0.0), 1.0)
+    if mood.label == "positive":
+        return 1.0 + 0.1 * intensity
+    if mood.label == "concerned":
+        return max(0.8, 1.0 - 0.1 * intensity)
+    return 1.0
+
+
+def mood_plasticity_scale(mood: Optional[MoodState]) -> float:
+    """Scale plasticity learning rates based on mood.
+
+    - Positive mood: slightly more plastic (up to +15%).
+    - Concerned mood: slightly less plastic (down to -15%).
+    - Neutral/no mood: 1.0.
+    """
+
+    if mood is None or mood.label == "neutral":
+        return 1.0
+
+    intensity = min(max(mood.intensity, 0.0), 1.0)
+    if mood.label == "positive":
+        return 1.0 + 0.15 * intensity
+    if mood.label == "concerned":
+        return max(0.75, 1.0 - 0.15 * intensity)
+    return 1.0
+
+
 def update_mood_state(current: Optional[MoodState], user_text: str) -> MoodState:
     """Update mood using lightweight sentiment cues and decay toward neutral.
 
