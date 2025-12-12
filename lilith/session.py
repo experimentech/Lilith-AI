@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 import re
 
-from lilith.personality import PersonalityProfile, MoodState, apply_style, maybe_add_followup
+from lilith.personality import PersonalityProfile, MoodState, apply_style, maybe_add_followup, update_mood_state
 
 
 @dataclass
@@ -288,6 +288,9 @@ class LilithSession:
                 self.interaction_count += 1
                 if self.interaction_count % 10 == 0:
                     self._apply_plasticity()
+
+            if self.config.enable_mood:
+                self.mood_state = update_mood_state(self.mood_state, content)
             
             return SessionResponse(
                 text="",
@@ -313,6 +316,8 @@ class LilithSession:
         # Check if this is ONLY feedback (emoji or short feedback phrase)
         # If so, don't generate a response - just acknowledge the feedback
         if feedback_applied and self._is_pure_feedback(content):
+            if self.config.enable_mood:
+                self.mood_state = update_mood_state(self.mood_state, content)
             # Return empty response - feedback was applied, no need to respond
             return SessionResponse(
                 text="",
@@ -385,6 +390,9 @@ class LilithSession:
         if self.config.plasticity_enabled and self.config.learning_enabled:
             self.interaction_count += 1
             self._apply_plasticity()
+
+        if self.config.enable_mood:
+            self.mood_state = update_mood_state(self.mood_state, content)
         
         return SessionResponse(
             text=response.text,
