@@ -411,6 +411,32 @@ class ResponseComposer:
         # Track query for success learning
         self.last_query = user_input if user_input else context
         
+        # FAST-TRACK: Handle simple greetings immediately without heavy processing
+        if user_input:
+            user_lower = user_input.lower().strip()
+            simple_greetings = ["hello", "hi", "hey", "greetings", "good morning", "good afternoon", "good evening"]
+            if user_lower in simple_greetings or (len(user_lower.split()) == 1 and user_lower in ["hello", "hi", "hey"]):
+                # Use pragmatic template for greeting if available
+                if self.pragmatic_templates:
+                    greeting_response = self._compose_with_pragmatic_templates(context, user_input)
+                    if greeting_response and greeting_response.confidence > 0.70:
+                        self.last_response = greeting_response
+                        self.last_approach = 'pragmatic'
+                        return greeting_response
+                # Fallback to simple greeting response
+                greeting_texts = ["Hello! How can I help you?", "Hi! What would you like to talk about?", "Hey! What's up?"]
+                import random
+                return ComposedResponse(
+                    text=random.choice(greeting_texts),
+                    fragment_ids=["greeting_fasttrack"],
+                    composition_weights=[1.0],
+                    coherence_score=0.95,
+                    primary_pattern=None,
+                    confidence=0.95,
+                    is_fallback=False,
+                    is_low_confidence=False
+                )
+        
         # MODAL ROUTING: Check if query is mathematical/code/etc.
         if self.modal_classifier and user_input:
             modality, confidence = self.modal_classifier.classify(user_input)
@@ -532,6 +558,12 @@ class ResponseComposer:
                     conversational_context = f"recent_topics: {'; '.join(recent_topics[-2:])}"
                     print(f"  💬 Conversation context: {len(recent_turns)} recent turns")
         
+        # 0.7 PERSONALITY BIAS: Inject limbic-style embedding bias from session
+        # This modulates BNN retrieval based on interests/aversions
+        personality_bias_fn = None
+        if hasattr(self, '_personality_bias_fn'):
+            personality_bias_fn = self._personality_bias_fn
+        
         # 1. SYMBOLIC REASONING: Deliberate on cleaned query (core thinking layer)
         # This is LANGUAGE-AGNOSTIC - works on PMFlow embeddings and concepts
         deliberation_result = None
@@ -640,7 +672,12 @@ class ResponseComposer:
             external_result = aug_for_unknowns.lookup(user_input, conversation_history=conv_context, min_confidence=0.6)
             if external_result:
                 response_text, confidence, source = external_result
-                response_text = self._clean_composed_response(response_text)
+
+                # Ingest the snippet into vocab/concepts/patterns before replying
+                self._ingest_external_knowledge(user_input, response_text, confidence, source)
+
+                # Respond with a concise, cleaned snippet
+                response_text = self._clean_composed_response(self._first_sentence(response_text))
                 print(f"  💡 Found external knowledge from {source} (confidence: {confidence:.2f})")
                 
                 return ComposedResponse(
@@ -3074,8 +3111,11 @@ class ResponseComposer:
             if external_result:
                 response_text, confidence, source = external_result
                 
-                # Clean up grammar issues (plural agreement, etc.)
-                response_text = self._clean_composed_response(response_text)
+                # Ingest the snippet into vocab/concepts/patterns before replying
+                self._ingest_external_knowledge(user_input, response_text, confidence, source)
+
+                # Clean up grammar issues (plural agreement, etc.) and keep concise
+                response_text = self._clean_composed_response(self._first_sentence(response_text))
                 
                 print(f"  💡 Filled knowledge gap from {source} (confidence: {confidence:.2f})")
                 
@@ -3441,6 +3481,93 @@ class ResponseComposer:
             )
         
         return None
+
+    def _first_sentence(self, text: str) -> str:
+        """Return the first sentence (or a short snippet) to avoid verbatim dumps."""
+
+        if not text:
+            return ""
+        sentence = text.split('.')[0].strip()
+        if sentence:
+            return sentence
+        return text[:240].strip()
+
+    def _ingest_external_knowledge(self, term_hint: str, definition: str, confidence: float, source: str) -> None:
+        """Feed external snippets into vocabulary/concepts/patterns without verbatim dumping."""
+
+        if not definition:
+            return
+
+        term = self._extract_concept_from_query(term_hint) or term_hint.strip()
+        if not term:
+            return
+
+        snippet = self._first_sentence(definition)
+
+        # Vocabulary tracking
+        if hasattr(self.fragments, 'vocabulary') and self.fragments.vocabulary:
+            try:
+                self.fragments.vocabulary.track_text(text=f"{term}: {snippet}", source=source)
+                print(f"     📖 Vocabulary: tracked '{term}' from {source}")
+            except Exception as exc:
+                print(f"     ⚠️  Vocabulary tracking failed: {exc}")
+
+        # Concept store
+        if hasattr(self.fragments, 'concept_store') and self.fragments.concept_store:
+            try:
+                self.fragments.concept_store.add_concept(
+                    term=term.lower(),
+                    properties=[snippet],
+                    source=source,
+                    confidence=confidence
+                )
+                print(f"     🧠 Concepts: added '{term}' from {source}")
+            except Exception as exc:
+                print(f"     ⚠️  Concept learning failed: {exc}")
+
+        # Syntax patterns
+        if hasattr(self.fragments, 'pattern_extractor') and self.fragments.pattern_extractor:
+            try:
+                patterns = self.fragments.pattern_extractor.extract_patterns(text=snippet, source=source)
+                if patterns:
+                    print(f"     📝 Syntax: extracted {len(patterns)} patterns from {source}")
+            except Exception as exc:
+                print(f"     ⚠️  Pattern extraction failed: {exc}")
+
+        # Contrastive/BioNN associations
+        if self.contrastive_learner:
+            try:
+                import re
+                pairs_added = 0
+                type_match = re.search(r"is\s+(?:a\s+)?(?:type|kind|form|sort)\s+of\s+(\w+)", snippet.lower())
+                if type_match:
+                    related = type_match.group(1)
+                    self.contrastive_learner.add_pair(
+                        anchor=term.lower(),
+                        other=related,
+                        relationship="positive",
+                        weight=confidence,
+                        source=f"external_{source}"
+                    )
+                    pairs_added += 1
+
+                proper_nouns = re.findall(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b", snippet)
+                for related in proper_nouns[:2]:
+                    related_lower = related.lower()
+                    if related_lower != term.lower():
+                        self.contrastive_learner.add_pair(
+                            anchor=term.lower(),
+                            other=related_lower,
+                            relationship="positive",
+                            weight=confidence * 0.7,
+                            source=f"external_cooccur_{source}"
+                        )
+                        pairs_added += 1
+
+                if pairs_added:
+                    print(f"     🧠 BioNN: added {pairs_added} semantic pairs from {source}")
+            except Exception as exc:
+                print(f"     ⚠️  BioNN semantic learning failed: {exc}")
     
     def _compose_with_learned_concepts(
         self,
@@ -3778,8 +3905,11 @@ class ResponseComposer:
             if external_result:
                 response_text, confidence, source = external_result
                 
-                # Clean up grammar issues (plural agreement, etc.)
-                response_text = self._clean_composed_response(response_text)
+                # Ingest the snippet into vocab/concepts/patterns before replying
+                self._ingest_external_knowledge(user_input, response_text, confidence, source)
+
+                # Clean up grammar issues (plural agreement, etc.) and keep concise
+                response_text = self._clean_composed_response(self._first_sentence(response_text))
                 
                 print(f"  💡 Low confidence resolved by {source} (confidence: {confidence:.2f})")
                 

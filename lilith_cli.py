@@ -80,6 +80,16 @@ def main():
         config.enable_personality = True
     if _truthy("LILITH_MOOD_ENABLE"):
         config.enable_mood = True
+    if _truthy("LILITH_PREFERENCES_ENABLE"):
+        config.enable_preferences = True
+    if _truthy("LILITH_DISABLE_KA"):
+        config.enable_knowledge_augmentation = False
+    if _truthy("LILITH_DISABLE_MODAL"):
+        config.enable_modal_routing = False
+    if _truthy("LILITH_DISABLE_COMPOSITIONAL"):
+        config.enable_compositional = False
+    if _truthy("LILITH_DISABLE_PRAGMATIC"):
+        config.enable_pragmatic_templates = False
     
     session = LilithSession(
         user_id=user_identity.user_id,

@@ -26,6 +26,7 @@ class UserPreferences:
     user_id: str
     display_name: Optional[str] = None  # What the user wants to be called
     interests: List[str] = field(default_factory=list)
+    aversions: List[str] = field(default_factory=list)
     custom_data: Dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
@@ -46,6 +47,7 @@ class UserPreferences:
             user_id=data['user_id'],
             display_name=data.get('display_name'),
             interests=data.get('interests', []),
+            aversions=data.get('aversions', []),
             custom_data=data.get('custom_data', {}),
             created_at=data.get('created_at', datetime.now().isoformat()),
             updated_at=data.get('updated_at', datetime.now().isoformat()),
@@ -154,6 +156,13 @@ class UserPreferencesStore:
         prefs = self.load(user_id)
         if interest not in prefs.interests:
             prefs.interests.append(interest)
+            self.save(prefs)
+
+    def add_aversion(self, user_id: str, aversion: str) -> None:
+        """Add a topic the user wants to avoid."""
+        prefs = self.load(user_id)
+        if aversion not in prefs.aversions:
+            prefs.aversions.append(aversion)
             self.save(prefs)
     
     def set_custom(self, user_id: str, key: str, value: Any) -> None:
@@ -289,6 +298,15 @@ class PreferenceExtractor:
         r"\bmy (?:favorite|favourite) (?:thing|hobby) is ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)\b",
         r"\bi work (?:with|on|in) ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)\b",
     ]
+
+    # Patterns for aversion/avoidance extraction
+    AVERSION_PATTERNS = [
+        r"\bi (?:really )?(?:dislike|hate) ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)\b",
+        r"\bplease avoid ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)\b",
+        r"\bdon't talk about ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)\b",
+        r"\bno (?:discussion|talk) about ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)\b",
+        r"\bi'?m not comfortable with ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)\b",
+    ]
     
     # Words that are NOT names (prevent "I'm happy" → name="Happy")
     NOT_NAMES = {
@@ -308,6 +326,9 @@ class PreferenceExtractor:
         ]
         self.compiled_interest_patterns = [
             re.compile(p, re.IGNORECASE) for p in self.INTEREST_PATTERNS
+        ]
+        self.compiled_aversion_patterns = [
+            re.compile(p, re.IGNORECASE) for p in self.AVERSION_PATTERNS
         ]
     
     def extract_name(self, text: str) -> Optional[str]:
@@ -365,6 +386,18 @@ class PreferenceExtractor:
                 if len(interest) > 2 and interest not in interests:
                     interests.append(interest)
         return interests
+
+    def extract_aversions(self, text: str) -> List[str]:
+        """Extract topics the user wants to avoid."""
+
+        aversions = []
+        for pattern in self.compiled_aversion_patterns:
+            matches = pattern.findall(text)
+            for match in matches:
+                aversion = match.strip().lower()
+                if len(aversion) > 2 and aversion not in aversions:
+                    aversions.append(aversion)
+        return aversions
     
     def extract_all(self, text: str) -> Dict[str, Any]:
         """
@@ -385,6 +418,10 @@ class PreferenceExtractor:
         interests = self.extract_interests(text)
         if interests:
             result['interests'] = interests
+
+        aversions = self.extract_aversions(text)
+        if aversions:
+            result['aversions'] = aversions
         
         return result
 
@@ -443,6 +480,12 @@ class UserPreferenceLearner:
             for interest in extracted['interests']:
                 self.store.add_interest(user_id, interest)
             learned['interests'] = extracted['interests']
+
+        # Store aversions if found
+        if 'aversions' in extracted:
+            for aversion in extracted['aversions']:
+                self.store.add_aversion(user_id, aversion)
+            learned['aversions'] = extracted['aversions']
         
         return learned
     

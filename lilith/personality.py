@@ -40,7 +40,11 @@ class MoodState:
 
 
 def apply_style(text: str, profile: PersonalityProfile) -> str:
-    """Lightweight style adjustment. Defaults to no change for neutral profiles."""
+    """Lightweight style adjustment. Defaults to no change for neutral profiles.
+    
+    Note: Most personality influence happens at the BNN embedding level during retrieval.
+    This function only applies minimal post-processing for extreme settings.
+    """
 
     if profile is None:
         return text
@@ -50,63 +54,68 @@ def apply_style(text: str, profile: PersonalityProfile) -> str:
 
     styled = text
 
-    # Warm tone: add a soft closing if not present
-    if profile.warmth > 0.6 and not styled.endswith("."):
-        styled = f"{styled}."
-    if profile.warmth > 0.6:
-        styled = f"{styled} (happy to help)"
-
-    # Brevity: lightly trim trailing whitespace (placeholder for future summarization)
-    if profile.brevity > 0.7:
+    # Brevity: lightly trim for very terse settings
+    if profile.brevity > 0.8:
         styled = styled.strip()
-
-    # Humor: append a light, short aside if enabled
-    if profile.humor > 0.6:
-        styled = f"{styled} (just a tiny bit of humor)"
 
     return styled
 
 
 def maybe_add_followup(text: str, profile: PersonalityProfile, confidence: float) -> str:
-    """Optionally add a short follow-up when proactivity is enabled and confidence is high."""
+    """Optionally add a short follow-up when proactivity is enabled and confidence is high.
+    
+    Note: Proactivity primarily influences BNN retrieval, not text appending.
+    This is a minimal fallback for backwards compatibility.
+    """
 
     if profile is None or profile.proactivity <= 0.0:
         return text
-    if confidence < 0.65:
+    if confidence < 0.70:  # Only for high confidence
         return text
 
-    followup = " Want to go deeper on that?"
-    # Keep it concise if brevity is high
-    if profile.brevity > 0.7:
-        followup = " More?"
-
-    return f"{text}{followup}"
-
-
-# Simple lexicon for lightweight mood tracking. This is intentionally
-# conservative: only strong cues flip the mood; otherwise it decays toward neutral.
-POSITIVE_CUES = {
-    "great", "good", "happy", "excited", "glad", "awesome", "amazing", "love", "thanks", "thank you",
-    "cool", "nice", "wonderful", "fantastic"
-}
-NEGATIVE_CUES = {
-    "sad", "upset", "angry", "frustrated", "worried", "anxious", "tired", "confused", "bad",
-    "hate", "terrible", "awful", "annoyed", "stressed"
-}
+    # Simple, non-intrusive followup
+    if profile.brevity < 0.5:
+        return f"{text} Anything else you'd like to know?"
+    
+    return text
 
 
-def _sentiment_score(text: str) -> int:
-    """Very small sentiment heuristic based on keyword hits."""
-
-    lowered = text.lower()
-    score = 0
-    for cue in POSITIVE_CUES:
-        if cue in lowered:
-            score += 1
-    for cue in NEGATIVE_CUES:
-        if cue in lowered:
-            score -= 1
-    return score
+def compute_sentiment_from_embedding(embedding, encoder, positive_anchors=None, negative_anchors=None):
+    """Compute sentiment by comparing embedding to learned positive/negative anchors.
+    
+    This uses BNN embeddings instead of hard-coded word lists.
+    Should be called from session/composer with access to encoder.
+    
+    Args:
+        embedding: Query embedding tensor
+        encoder: PMFlow encoder to compute anchor embeddings
+        positive_anchors: List of positive reference terms (e.g., ['happy', 'excited'])
+        negative_anchors: List of negative reference terms (e.g., ['sad', 'frustrated'])
+    
+    Returns:
+        Score from -1.0 (negative) to 1.0 (positive)
+    """
+    import torch
+    import torch.nn.functional as F
+    
+    if positive_anchors is None:
+        positive_anchors = ['good', 'happy', 'excited']
+    if negative_anchors is None:
+        negative_anchors = ['sad', 'frustrated', 'worried']
+    
+    # Compute anchor embeddings
+    pos_embs = [encoder.encode(term) for term in positive_anchors]
+    neg_embs = [encoder.encode(term) for term in negative_anchors]
+    
+    # Compute similarities
+    pos_sims = [F.cosine_similarity(embedding, emb, dim=-1).item() for emb in pos_embs]
+    neg_sims = [F.cosine_similarity(embedding, emb, dim=-1).item() for emb in neg_embs]
+    
+    # Score based on relative similarity
+    pos_score = max(pos_sims) if pos_sims else 0.0
+    neg_score = max(neg_sims) if neg_sims else 0.0
+    
+    return pos_score - neg_score
 
 
 def _emoji_for_label(label: str) -> str:
@@ -155,21 +164,24 @@ def mood_plasticity_scale(mood: Optional[MoodState]) -> float:
     return 1.0
 
 
-def update_mood_state(current: Optional[MoodState], user_text: str) -> MoodState:
-    """Update mood using lightweight sentiment cues and decay toward neutral.
+def update_mood_state(current: Optional[MoodState], sentiment_score: float = 0.0) -> MoodState:
+    """Update mood using BNN-derived sentiment and decay toward neutral.
 
-    - Strong positive/negative cues set the mood immediately.
-    - Otherwise, the previous mood decays toward neutral using ``decay``.
+    Args:
+        current: Current mood state
+        sentiment_score: Score from -1.0 (negative) to 1.0 (positive) from BNN embeddings
+    
+    Returns:
+        Updated mood state
     """
 
     current = current or MoodState.neutral()
-    score = _sentiment_score(user_text)
 
-    # Positive or negative swing overrides decay
-    if score >= 2:
-        return MoodState(label="positive", emoji=_emoji_for_label("positive"), decay=current.decay, intensity=1.0)
-    if score <= -2:
-        return MoodState(label="concerned", emoji=_emoji_for_label("concerned"), decay=current.decay, intensity=1.0)
+    # Strong positive/negative signals from BNN embeddings
+    if sentiment_score > 0.5:
+        return MoodState(label="positive", emoji=_emoji_for_label("positive"), decay=current.decay, intensity=0.8)
+    if sentiment_score < -0.5:
+        return MoodState(label="concerned", emoji=_emoji_for_label("concerned"), decay=current.decay, intensity=0.8)
 
     # No strong signal: decay toward neutral
     decayed_intensity = current.intensity * current.decay

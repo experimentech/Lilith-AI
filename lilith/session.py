@@ -12,6 +12,8 @@ from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 import re
 
+import torch
+
 from lilith.personality import (
     PersonalityProfile,
     MoodState,
@@ -21,6 +23,7 @@ from lilith.personality import (
     mood_confidence_scale,
     mood_plasticity_scale,
 )
+from lilith.user_preferences import UserPreferenceLearner
 
 
 @dataclass
@@ -61,6 +64,9 @@ class SessionConfig:
     # Personality / mood (optional, neutral by default)
     enable_personality: bool = False
     enable_mood: bool = False
+
+    # Preference learning (interests/avoid topics)
+    enable_preferences: bool = False
 
 
 @dataclass
@@ -123,6 +129,15 @@ class LilithSession:
         self.cache_key = f"{user_id}:{self.context_id}"
         self.display_name = display_name
         self.config = config or SessionConfig()
+
+        # Preference learner (optional)
+        self.preference_learner = None
+        self.user_preferences = None
+        if self.config.enable_preferences:
+            self.preference_learner = UserPreferenceLearner(base_path=self.config.data_path)
+            self.user_preferences = self.preference_learner.store.load(self.user_id)
+            if self.user_preferences.display_name:
+                self.display_name = self.user_preferences.display_name
         
         # Initialize encoder
         self.encoder = PMFlowEmbeddingEncoder()
@@ -153,7 +168,21 @@ class LilithSession:
 
         # Personality and mood (neutral/no-op unless enabled)
         self.personality_profile = PersonalityProfile.neutral() if self.config.enable_personality else None
+        if self.personality_profile:
+            # Make persona slightly warm and proactive by default
+            self.personality_profile.warmth = 0.65
+            self.personality_profile.humor = 0.1
+            self.personality_profile.proactivity = 0.45
         self.mood_state = MoodState.neutral() if self.config.enable_mood else None
+
+        # Seed personality with stored preferences when available
+        if self.config.enable_preferences and self.personality_profile and self.user_preferences:
+            self.personality_profile.interests = list(self.user_preferences.interests)
+            self.personality_profile.aversions = list(self.user_preferences.aversions)
+        
+        # Wire personality bias into composer for limbic-style BNN modulation
+        if self.config.enable_personality:
+            self.composer._personality_bias_fn = self._compute_personality_bias
         
         # Initialize pragmatic templates (Layer 4: linguistic patterns)
         pragmatic_templates = None
@@ -284,6 +313,9 @@ class LilithSession:
         
         # Update conversation state for topic tracking and pronoun resolution
         enriched_context = self._update_conversation_context(content)
+
+        # Learn preferences (name, interests, aversions) from the incoming text
+        learned_preferences = self._process_preferences(content)
         
         # In passive mode, just learn and return
         if passive_mode:
@@ -305,6 +337,7 @@ class LilithSession:
                 learned_fact=learned_fact,
                 personality=self.personality_profile if self.config.enable_personality else None,
                 mood=self.mood_state if self.config.enable_mood else None,
+                # Preferences learning in passive mode is implicit
             )
         
         # Check for feedback from previous message
@@ -337,22 +370,24 @@ class LilithSession:
         # Generate response using enriched context (includes topic history for pronoun resolution)
         response = self.composer.compose_response(context=enriched_context, user_input=content)
 
-        # Gentle bias: adjust confidence by personality interests/aversions on primary intent
-        if self.config.enable_personality and self.personality_profile and getattr(response, "primary_pattern", None):
+        # Gentle bias: adjust confidence by learned interests/aversions on primary intent
+        if getattr(response, "primary_pattern", None):
             intent = getattr(response.primary_pattern, "intent", None)
             if intent:
                 boost = 1.0
-                if intent in self.personality_profile.interests:
+                interests, aversions = self._preference_terms()
+                if intent in interests:
                     boost *= 1.05
-                if intent in self.personality_profile.aversions:
-                    boost *= 0.95
-                # clamp
+                if intent in aversions:
+                    boost *= 0.85
                 response.confidence = max(0.0, min(1.0, response.confidence * boost))
 
-        # Apply optional personality style and proactivity (no-op when disabled/neutral)
+        # Apply optional personality style (minimal - most influence is at BNN level)
         if self.config.enable_personality and self.personality_profile:
+            # Only apply subtle post-processing (main influence is embedding bias)
             response.text = apply_style(response.text, self.personality_profile)
-            response.text = maybe_add_followup(response.text, self.personality_profile, getattr(response, 'confidence', 0.0))
+            if self.personality_profile.proactivity > 0.7:  # Only for high proactivity
+                response.text = maybe_add_followup(response.text, self.personality_profile, getattr(response, 'confidence', 0.0))
         
         # Record turn in conversation history for continuity tracking
         if self.conversation_history:
@@ -400,7 +435,16 @@ class LilithSession:
             self._apply_plasticity()
 
         if self.config.enable_mood:
-            self.mood_state = update_mood_state(self.mood_state, content)
+            # Compute sentiment from BNN embedding instead of keywords
+            try:
+                from lilith.personality import compute_sentiment_from_embedding
+                content_emb = self.encoder.encode(content)
+                sentiment_score = compute_sentiment_from_embedding(content_emb, self.encoder)
+                self.mood_state = update_mood_state(self.mood_state, sentiment_score)
+            except Exception:
+                # Fallback: just decay mood
+                self.mood_state = update_mood_state(self.mood_state, 0.0)
+            
             # Limbic-style modulation: adjust confidence with mood
             response.confidence = max(0.0, min(1.0, response.confidence * mood_confidence_scale(self.mood_state)))
         
@@ -415,6 +459,138 @@ class LilithSession:
             personality=self.personality_profile if self.config.enable_personality else None,
             mood=self.mood_state if self.config.enable_mood else None,
         )
+
+    def _process_preferences(self, content: str) -> Dict[str, Any]:
+        """Extract and persist preferences from user text, refreshing in-memory state."""
+
+        if not self.config.enable_preferences or not self.preference_learner:
+            return {}
+
+        learned = self.preference_learner.process_input(self.user_id, content)
+        self.user_preferences = self.preference_learner.store.load(self.user_id)
+
+        # Keep personality profile in sync when enabled
+        if self.personality_profile:
+            self.personality_profile.interests = list(self.user_preferences.interests)
+            self.personality_profile.aversions = list(self.user_preferences.aversions)
+
+        # Refresh display name if newly learned
+        if 'name' in learned and self.user_preferences.display_name:
+            self.display_name = self.user_preferences.display_name
+
+        return learned
+
+    def _preference_terms(self) -> Tuple[list, list]:
+        """Return (interests, aversions) from stored preferences/personality."""
+
+        interests = []
+        aversions = []
+
+        if self.config.enable_preferences and self.user_preferences:
+            interests.extend(self.user_preferences.interests)
+            aversions.extend(self.user_preferences.aversions)
+
+        if self.personality_profile:
+            interests.extend(x for x in self.personality_profile.interests if x not in interests)
+            aversions.extend(x for x in self.personality_profile.aversions if x not in aversions)
+
+        return interests, aversions
+    
+    def _compute_personality_bias(self, query_embedding: torch.Tensor) -> torch.Tensor:
+        """Apply limbic-style bias to query embedding based on interests/aversions.
+        
+        This modulates BNN retrieval by pulling embeddings toward interests
+        and pushing away from aversions - analogous to emotional attention.
+        
+        Args:
+            query_embedding: Original query embedding from encoder
+            
+        Returns:
+            Biased embedding for retrieval
+        """
+        import torch.nn.functional as F
+        
+        if not self.config.enable_personality or not self.personality_profile:
+            return query_embedding
+        
+        interests, aversions = self._preference_terms()
+        if not interests and not aversions:
+            return query_embedding
+        
+        biased = query_embedding.clone()
+        
+        # Compute interest embeddings and bias toward them
+        for interest in interests[:5]:  # Limit to top 5 to avoid over-biasing
+            try:
+                interest_emb = self.encoder.encode(interest)
+                similarity = F.cosine_similarity(query_embedding, interest_emb, dim=-1)
+                
+                if similarity > 0.25:  # Related to interest
+                    # Pull query toward interest (limbic attention boost)
+                    bias_strength = 0.20 * self.personality_profile.proactivity
+                    biased = biased + bias_strength * interest_emb
+            except Exception:
+                continue
+        
+        # Compute aversion embeddings and bias away from them
+        for aversion in aversions[:5]:
+            try:
+                aversion_emb = self.encoder.encode(aversion)
+                similarity = F.cosine_similarity(query_embedding, aversion_emb, dim=-1)
+                
+                if similarity > 0.25:  # Related to aversion
+                    # Push query away from aversion (limbic avoidance)
+                    bias_strength = 0.15 * self.personality_profile.proactivity
+                    biased = biased - bias_strength * aversion_emb
+            except Exception:
+                continue
+        
+        # Re-normalize to keep embedding in valid space
+        biased = F.normalize(biased, p=2, dim=-1)
+        
+        return biased
+
+    def _persona_engagement(self, response: Any, user_input: str) -> Optional[str]:
+        """Add a short persona-driven opinion or invitation to chat.
+
+        Activated only when personality is enabled and proactivity is non-zero.
+        Uses learned interests/aversions to stay grounded while avoiding
+        hallucinated facts when confidence is low.
+        """
+
+        profile = self.personality_profile
+        if not profile or profile.proactivity <= 0.0:
+            return None
+
+        interests, aversions = self._preference_terms()
+        user_lower = user_input.lower()
+
+        # Look for overlap between the user's message and known interests/aversions
+        matched_interest = next((t for t in interests if t.lower() in user_lower), None)
+        matched_aversion = next((t for t in aversions if t.lower() in user_lower), None)
+
+        is_low_conf = getattr(response, 'is_low_confidence', False)
+        is_fallback = getattr(response, 'is_fallback', False)
+
+        # For fallbacks/low confidence, ONLY add engagement if there's a matched interest/aversion
+        # Don't randomly mention unrelated interests
+        if is_fallback or is_low_conf:
+            if matched_aversion:
+                return f"I usually keep some distance from {matched_aversion}, but I'm listening -- what matters to you about it?"
+            if matched_interest:
+                return f"I haven't stored much on {matched_interest} yet, but I'm curious. What part should I learn first?"
+            # Don't add generic engagement for fallbacks - let the fallback message speak for itself
+            return None
+
+        # For successful responses, add engagement only if there's a match
+        if matched_aversion:
+            return f"{matched_aversion} isn't my favorite area, but I'm listening. What draws you to it?"
+
+        if matched_interest:
+            return f"I'm into {matched_interest}. What's your take?"
+
+        # Don't add generic engagement for unrelated topics
+        return None
     
     def _update_conversation_context(self, content: str) -> str:
         """
@@ -513,13 +689,9 @@ class LilithSession:
                             print(f"  🔗 Resolved pronoun: '{content}' → '{resolved}'")
                             return resolved
             
-            # If no pronoun resolution, still build enriched context for retrieval
-            if snapshot.topics:
-                topic_summaries = [topic.summary for topic in snapshot.topics[:3]]
-                if topic_summaries:
-                    topics_str = ", ".join(topic_summaries)
-                    enriched = f"Recent topics: {topics_str} | Current: {content}"
-                    return enriched
+            # If no pronoun resolution, avoid injecting previous facts to reduce echoes
+            # Keep raw content to prevent repeating past answers verbatim
+            return content
                     
         except Exception as e:
             # If parsing fails, fall back to raw content

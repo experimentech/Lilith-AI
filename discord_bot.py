@@ -200,6 +200,16 @@ class LilithDiscordBot:
             cfg.enable_personality = True
         if _truthy("LILITH_MOOD_ENABLE"):
             cfg.enable_mood = True
+        if _truthy("LILITH_PREFERENCES_ENABLE"):
+            cfg.enable_preferences = True
+        if _truthy("LILITH_DISABLE_KA"):
+            cfg.enable_knowledge_augmentation = False
+        if _truthy("LILITH_DISABLE_MODAL"):
+            cfg.enable_modal_routing = False
+        if _truthy("LILITH_DISABLE_COMPOSITIONAL"):
+            cfg.enable_compositional = False
+        if _truthy("LILITH_DISABLE_PRAGMATIC"):
+            cfg.enable_pragmatic_templates = False
 
         return cfg
     
