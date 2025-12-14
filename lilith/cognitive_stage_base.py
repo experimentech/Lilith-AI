@@ -786,10 +786,11 @@ class CognitiveStageBase(ABC):
     def _row_to_pattern(self, row: sqlite3.Row) -> CognitivePattern:
         """Convert SQLite row to CognitivePattern."""
         # Reconstruct tensors from bytes
-        embedding_array = np.frombuffer(row["embedding"], dtype=np.float32)
+        # NOTE: np.frombuffer returns read-only arrays, so copy them for PyTorch
+        embedding_array = np.frombuffer(row["embedding"], dtype=np.float32).copy()
         embedding = torch.from_numpy(embedding_array)
         
-        latent_array = np.frombuffer(row["latent"], dtype=np.float32)
+        latent_array = np.frombuffer(row["latent"], dtype=np.float32).copy()
         latent = torch.from_numpy(latent_array)
         
         metadata = json.loads(row["metadata"]) if row["metadata"] else {}
