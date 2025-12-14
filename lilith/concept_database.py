@@ -242,6 +242,34 @@ class ConceptDatabase:
         """, (concept_id,))
         self.conn.commit()
     
+    def get_relations_from(self, concept_id: str, relation_type: Optional[str] = None) -> List[Dict]:
+        """
+        Get all relations from a concept.
+        
+        Args:
+            concept_id: Source concept ID
+            relation_type: Optional filter by relation type (e.g., "is_type_of", "has_property", "used_for")
+            
+        Returns:
+            List of relation dicts with keys: relation_type, target, confidence
+        """
+        cursor = self.conn.cursor()
+        
+        if relation_type:
+            cursor.execute("""
+                SELECT relation_type, target, confidence
+                FROM relations
+                WHERE concept_id = ? AND relation_type = ?
+            """, (concept_id, relation_type))
+        else:
+            cursor.execute("""
+                SELECT relation_type, target, confidence
+                FROM relations
+                WHERE concept_id = ?
+            """, (concept_id,))
+        
+        return [dict(r) for r in cursor.fetchall()]
+    
     def get_stats(self) -> Dict:
         """Get database statistics."""
         cursor = self.conn.cursor()

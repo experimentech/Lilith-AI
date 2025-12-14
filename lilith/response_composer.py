@@ -12,8 +12,9 @@ Pure neuro-symbolic - no LLM!
 """
 
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Tuple, Union, TYPE_CHECKING
+from typing import List, Optional, Dict, Tuple, Union, Any, TYPE_CHECKING
 import numpy as np
+import re
 
 from .response_fragments import ResponseFragmentStore, ResponsePattern
 from .conversation_state import ConversationState
@@ -84,6 +85,13 @@ try:
 except ImportError:
     PRAGMATIC_TEMPLATES_AVAILABLE = False
 
+# Optional: Import world model for grounded reasoning
+try:
+    from .world_model_stage import WorldModelStage
+    WORLD_MODEL_AVAILABLE = True
+except ImportError:
+    WORLD_MODEL_AVAILABLE = False
+
 
 @dataclass
 class ComposedResponse:
@@ -123,7 +131,9 @@ class ResponseComposer:
         enable_modal_routing: bool = True,
         pragmatic_templates: Optional['PragmaticTemplateStore'] = None,
         enable_pragmatic_templates: bool = True,
-        knowledge_timeout_seconds: float = 3.0
+        knowledge_timeout_seconds: float = 3.0,
+        enable_world_model: bool = False,
+        data_path: str = "data"
     ):
         """
         Initialize response composer.
@@ -232,6 +242,46 @@ class ResponseComposer:
                 )
             except Exception as e:
                 print(f"  ⚠️  Reasoning stage not available: {e}")
+        
+        # Initialize world model stage for grounded reasoning
+        self.world_model = None
+        if enable_world_model and WORLD_MODEL_AVAILABLE:
+            try:
+                from pathlib import Path
+                world_model_path = Path(data_path) / "world_model_patterns"
+                self.world_model = WorldModelStage(
+                    encoder=semantic_encoder,
+                    storage_path=world_model_path,
+                    use_sqlite=True,  # Use SQLite for production
+                    plasticity_enabled=True,
+                    enable_tracking=True,
+                )
+                print("  🌍 World model stage enabled (spatial/temporal/causal grounding)!")
+                
+                # Bootstrap with seed data if database is empty/new
+                try:
+                    # Check actual database count, not in-memory patterns
+                    import sqlite3
+                    db_path = world_model_path.with_suffix('.db')
+                    if db_path.exists():
+                        conn = sqlite3.connect(str(db_path))
+                        cursor = conn.execute("SELECT COUNT(*) FROM world_model_patterns")
+                        pattern_count = cursor.fetchone()[0]
+                        conn.close()
+                    else:
+                        pattern_count = 0
+                    
+                    if pattern_count < 10:  # Bootstrap if less than 10 patterns
+                        seed_count = self.world_model.bootstrap_from_seed_data()
+                        if seed_count > 0:
+                            print(f"     🌱 Bootstrapped with {seed_count} seed situations")
+                except Exception as e:
+                    print(f"     ⚠️  Seed bootstrap skipped: {e}")
+                    
+            except Exception as e:
+                print(f"  ⚠️  World model stage not available: {e}")
+        elif enable_world_model and not WORLD_MODEL_AVAILABLE:
+            print("  ⚠️  World model stage not available (missing world_model_stage.py)")
         
         # Contrastive learner for online semantic training
         self.contrastive_learner = None
@@ -579,21 +629,48 @@ class ResponseComposer:
                 if deliberation_result.inferences:
                     print(f"🧠 Deliberated for {deliberation_result.deliberation_steps} steps")
                     
+                    # Show relation chains
+                    chains = [inf for inf in deliberation_result.inferences if inf.inference_type == "relation_chain"]
+                    if chains:
+                        print(f"  🔗 Found {len(chains)} relation chain(s):")
+                        for chain in chains[:2]:  # Show top 2
+                            print(f"     • {' → '.join(chain.reasoning_path[:5])}")
+                    
                     # Show key inferences
-                    for inf in deliberation_result.inferences[:3]:  # Top 3
-                        if inf.inference_type == "connection":
-                            print(f"  📎 Found {len(deliberation_result.inferences)} connections:")
-                            for conn in deliberation_result.inferences[:3]:
-                                print(f"     • {conn.conclusion}")
-                            break
+                    connections = [inf for inf in deliberation_result.inferences if inf.inference_type == "connection"]
+                    if connections:
+                        print(f"  📎 Found {len(connections)} connection(s):")
+                        for conn in connections[:3]:
+                            print(f"     • {conn.conclusion}")
                     
                     # Show implications
                     implications = [i for i in deliberation_result.inferences if i.inference_type == "implication"]
                     if implications:
-                        print(f"  ➡️  Found {len(implications)} implications")
+                        print(f"  ➡️  Found {len(implications)} implication(s)")
                         
             except Exception as e:
                 print(f"  ⚠️ Deliberation failed: {e}")
+        
+        # 1.5 WORLD MODEL GROUNDING - Extract entities and relations
+        world_situation = None
+        if self.world_model and cleaned_user_input:
+            try:
+                world_situation = self.world_model.process_utterance(cleaned_user_input)
+                if world_situation:
+                    total_relations = (len(world_situation.spatial_relations) + 
+                                     len(world_situation.temporal_relations) + 
+                                     len(world_situation.causal_relations))
+                    print(f"  🌍 World model extracted {len(world_situation.entities)} entities, "
+                          f"{total_relations} relations")
+                    
+                    # Store the situation for future retrieval (but not bare questions)
+                    # Only store if it has relations OR multiple entities (statements, not questions)
+                    is_question = any(q in cleaned_user_input.lower() for q in ['?', 'what', 'where', 'when', 'who', 'how', 'why'])
+                    if not is_question and (total_relations > 0 or len(world_situation.entities) >= 2):
+                        self.world_model.learn_situation(world_situation, success_feedback=0.5)
+                        print(f"     ✓ Stored situation for future retrieval")
+            except Exception as e:
+                print(f"  ⚠️ World model processing failed: {e}")
         
         # 2. QUERY PATTERN MATCHING - Extract query structure and intent
         # Use CLEANED query for better pattern matching
@@ -769,6 +846,20 @@ class ResponseComposer:
         if not patterns:
             return self._fallback_response(user_input)
         
+        # 4.5 WORLD MODEL ENRICHMENT - Retrieve similar situations
+        world_results = []
+        if self.world_model and world_situation and cleaned_user_input:
+            try:
+                world_results = self.world_model.retrieve_similar_situations(
+                    cleaned_user_input,
+                    topk=3
+                )
+                if world_results:
+                    print(f"  🌍 Found {len(world_results)} similar world situations")
+                    # Could use world_results to enrich context, but for now just log
+            except Exception as e:
+                print(f"  ⚠️ World model retrieval failed: {e}")
+        
         # 2c. Filter out assumptive responses (assume prior conversation context)
         # These patterns come from different conversations and don't fit
         patterns = self._filter_assumptive_responses(patterns)
@@ -806,6 +897,15 @@ class ResponseComposer:
             confidence_threshold = 0.80
         
         if best_score < confidence_threshold:
+            # Before falling back, check if world model has relevant information
+            # NOTE: Disabled for now - world model matching needs improvement
+            # The similarity threshold is too loose and returns unrelated patterns
+            # if world_results:
+            #     world_answer = self._try_world_model_answer(user_input, world_results, world_situation)
+            #     if world_answer:
+            #         print(f"  🌍 Answering from world model knowledge")
+            #         return world_answer
+            
             return self._fallback_response_low_confidence(user_input, best_pattern, best_score)
         
         # 2d. Additional check: is user asking about specific topic not in training data?
@@ -827,6 +927,7 @@ class ResponseComposer:
         # 3. REASONING STAGE: Deliberate on query before composition
         # This adds a "thinking" step where the BioNN explores concept connections
         deliberation_result = None
+        reasoning_concepts = []
         if self.reasoning_stage and user_input:
             try:
                 # Run deliberation with retrieved patterns
@@ -839,6 +940,10 @@ class ResponseComposer:
                 # If reasoning resolved a clearer intent, use it
                 if deliberation_result.resolved_intent and not intent_hint:
                     intent_hint = deliberation_result.resolved_intent
+                
+                # Extract concepts from reasoning for use in composition
+                if deliberation_result.focus_concepts:
+                    reasoning_concepts = deliberation_result.focus_concepts[:3]
                     
                 # Print reasoning summary for visibility
                 summary = self.reasoning_stage.get_reasoning_summary(deliberation_result)
@@ -2287,8 +2392,15 @@ class ResponseComposer:
                 available_slots["properties"] = ", ".join(main_concept_data.properties[1:3])
         
         # Add inference information if available
-        connections = [inf for inf in inferences if inf.inference_type == "connection"]
+        connections = [inf for inf in inferences if inf.inference_type in ["connection", "relation_chain"]]
         if connections:
+            # For relation chains, use the reasoning path
+            for inf in connections[:2]:
+                if inf.inference_type == "relation_chain" and inf.reasoning_path:
+                    available_slots["chain"] = " → ".join(inf.reasoning_path[:4])  # Limit chain length
+                    break
+            
+            # Also add related terms from regular connections
             related_terms = [inf.source_concepts[1] for inf in connections[:2] 
                            if len(inf.source_concepts) > 1]
             if related_terms:
@@ -2750,7 +2862,11 @@ class ResponseComposer:
         """
         Extract concept term from query.
         
-        Simple version - strips question patterns.
+        Handles patterns like:
+        - "What is X?" → X
+        - "What is the capital of France?" → France (the actual subject)
+        - "Where is X?" → X
+        - "Who is X?" → X
         
         Args:
             query: User query
@@ -2758,13 +2874,28 @@ class ResponseComposer:
         Returns:
             Concept term or None
         """
-        query_lower = query.lower()
+        import re
         
+        query_lower = query.lower().strip()
+        
+        # Pattern 1: "What/Where/Who is [property] of [subject]" → extract subject
+        # Examples: "What is the capital of France" → "France"
+        #           "What is the color of the sky" → "sky"
+        property_of_match = re.search(
+            r'(?:what|where|who|which)\s+(?:is|are|was|were)\s+(?:the|a|an)?\s*\w+\s+of\s+(?:the\s+)?(.+?)\??$',
+            query_lower
+        )
+        if property_of_match:
+            subject = property_of_match.group(1).strip()
+            return subject
+        
+        # Pattern 2: Standard definition questions "What is X?" → X
         # Remove question patterns (including knowledge queries)
         for pattern in [
             "do you know about", "do you know what", "do you know of",
             "have you heard of", "have you heard about", "are you familiar with",
-            "what is", "what are", "define", "definition of", "tell me about", "explain"
+            "what is", "what are", "what's", "whats", "define", "definition of", 
+            "tell me about", "explain", "describe"
         ]:
             query_lower = query_lower.replace(pattern, "").strip()
         
@@ -2776,7 +2907,7 @@ class ResponseComposer:
         words = query_lower.split()
         
         # Only remove leading question words, not articles that are part of the concept name
-        while words and words[0] in ["what", "how", "why", "when", "where", "who"]:
+        while words and words[0] in ["what", "how", "why", "when", "where", "who", "which"]:
             words.pop(0)
         
         # Remove trailing articles but keep leading ones for compound proper nouns
@@ -2831,19 +2962,35 @@ class ResponseComposer:
     
     def _clean_composed_response(self, response: str) -> str:
         """
-        Clean up common grammar issues in composed responses.
+        Clean up common grammar issues and format responses naturally.
         
         Fixes:
         - Double "is is" or "are are"
         - Singular/plural agreement for common patterns
+        - Raw metadata labels ("(noun):", "(adjective):")
+        - Awkward phrasing from template fills
         
         Args:
             response: Raw composed response
             
         Returns:
-            Cleaned response
+            Cleaned, natural-sounding response
         """
         import re
+        
+        # Remove metadata labels like "(noun):", "(adjective):", etc.
+        response = re.sub(r'\s*\([^)]*\):\s*', ' ', response)
+        
+        # Remove awkward template prefixes
+        response = re.sub(r'^For example,\s+', '', response, flags=re.IGNORECASE)
+        response = re.sub(r'^It can also be\s+', '', response, flags=re.IGNORECASE)
+        
+        # Remove redundant "X is X" patterns that slip through
+        # Example: "Python is Python is a language" -> "Python is a language"
+        words = response.split()
+        if len(words) >= 4:
+            if words[0] == words[2] and words[1] in ['is', 'are', 'was', 'were']:
+                response = ' '.join(words[2:])
         
         # Fix double verb patterns
         response = re.sub(r'\bis\s+is\b', 'is', response, flags=re.IGNORECASE)
@@ -3232,6 +3379,7 @@ class ResponseComposer:
             result = aug_for_terms.lookup(f"What is {term}?", conversation_history=conv_context, min_confidence=0.6)
             if result:
                 definition, confidence, source = result
+                
                 term_definitions[term] = {
                     'definition': definition,
                     'confidence': confidence,
@@ -3603,39 +3751,90 @@ class ResponseComposer:
         primary_data = concept_data.get(primary_concept_id, {})
         
         if category == "definition" and primary_data:
+            import re
+            
             # Extract concept term from the query or data
             concept_term = self._extract_concept_from_query(query)
             if not concept_term and 'term' in primary_data:
                 concept_term = primary_data['term']
             
             if concept_term:
-                available_slots["concept"] = concept_term.capitalize()
-                
                 # Use learned definition
                 if 'definition' in primary_data:
                     definition_text = primary_data['definition']
-                    # Extract the property part from "X is Y" style definitions
-                    # Handle: "The wyvern, sometimes spelled wivern, is a type of mythical dragon"
-                    # Should extract: "a type of mythical dragon"
-                    primary_property = self._extract_property_from_definition(definition_text, concept_term)
                     
-                    # Split remaining into elaboration
-                    sentences = definition_text.split('.')
-                    if primary_property:
-                        available_slots["primary_property"] = primary_property
-                    elif sentences:
-                        available_slots["primary_property"] = sentences[0].strip()
+                    # Check if query is asking for a specific property ("What is X of Y?")
+                    # Example: "What is the capital of France?" where we learned about France
+                    property_query_match = re.search(
+                        r'(?:what|where|who|which)\s+(?:is|are|was|were)\s+(?:the|a|an)?\s*(\w+)\s+of',
+                        query.lower()
+                    )
                     
-                    if len(sentences) > 1:
-                        available_slots["elaboration"] = sentences[1].strip()
-                
-                # Add properties if available
-                if 'properties' in primary_data:
-                    properties = primary_data['properties']
-                    if isinstance(properties, list):
-                        available_slots["properties"] = ", ".join(properties[:3])
-                    elif isinstance(properties, str):
-                        available_slots["properties"] = properties
+                    if property_query_match:
+                        # User is asking for a specific property, not a general definition
+                        property_name = property_query_match.group(1)
+                        
+                        # Try to extract the answer from the definition
+                        # For "capital", look for capital city name in definition
+                        if 'capital' in property_name.lower():
+                            # Look for capital city pattern in definition - multiple patterns
+                            capital_patterns = [
+                                r'capital\s+(?:and\s+\w+\s+)?(?:is|city|:)\s+(?:is\s+)?([A-Z][\w\s-]+?)(?:[,.]|\s+and|;)',
+                                r'([A-Z][\w\s-]+?)\s+is\s+the\s+capital',
+                                r'capital[^.]*?([A-Z][\w\s-]+?)(?:[,.]|$)'
+                            ]
+                            answer = None
+                            for pattern in capital_patterns:
+                                capital_match = re.search(pattern, definition_text)
+                                if capital_match:
+                                    answer = capital_match.group(1).strip()
+                                    break
+                            
+                            if answer:
+                                available_slots["answer"] = answer
+                                available_slots["subject"] = concept_term.capitalize()
+                                available_slots["property"] = property_name
+                                # Use answer template instead of definition template
+                                category = "answer"
+                            else:
+                                # Fallback: provide context-appropriate response
+                                # Extract first informative sentence
+                                sentences = [s.strip() for s in definition_text.split('.') if s.strip()]
+                                best_sentence = sentences[0] if sentences else definition_text[:100]
+                                available_slots["concept"] = concept_term.capitalize()
+                                available_slots["elaboration"] = best_sentence
+                        else:
+                            # General property query - provide most relevant info
+                            sentences = [s.strip() for s in definition_text.split('.') if s.strip()]
+                            available_slots["concept"] = concept_term.capitalize()
+                            available_slots["elaboration"] = sentences[0] if sentences else definition_text[:100]
+                    else:
+                        # Standard "What is X?" definition question
+                        available_slots["concept"] = concept_term.capitalize()
+                        
+                        # Extract the property part from "X is Y" style definitions
+                        primary_property = self._extract_property_from_definition(definition_text, concept_term)
+                        
+                        # Split remaining into elaboration
+                        sentences = definition_text.split('.')
+                        if primary_property:
+                            available_slots["primary_property"] = primary_property
+                        elif sentences:
+                            available_slots["primary_property"] = sentences[0].strip()
+                        
+                        if len(sentences) > 1:
+                            available_slots["elaboration"] = sentences[1].strip()
+                    
+                    # Add properties if available
+                    if 'properties' in primary_data:
+                        properties = primary_data['properties']
+                        if isinstance(properties, list):
+                            available_slots["properties"] = ", ".join(properties[:3])
+                        elif isinstance(properties, str):
+                            available_slots["properties"] = properties
+                else:
+                    # No definition, just use concept name
+                    available_slots["concept"] = concept_term.capitalize()
         
         elif category == "elaboration" and primary_data:
             concept_term = self._extract_concept_from_query(query)
@@ -3726,6 +3925,42 @@ class ResponseComposer:
                 )
         
         return None
+    
+    def _extract_most_relevant_sentence(self, text: str, query: str) -> str:
+        """
+        Extract the most relevant sentence from text based on query keywords.
+        
+        Args:
+            text: Full text (e.g., Wikipedia paragraph)
+            query: User's question
+            
+        Returns:
+            Most relevant sentence, or first sentence if no good match
+        """
+        if not text or len(text) < 50:
+            return text
+            
+        # Split into sentences
+        sentences = re.split(r'[.!?]+\s+', text.strip())
+        if len(sentences) <= 1:
+            return text
+            
+        # Extract keywords from query (ignore common words)
+        stop_words = {'what', 'is', 'are', 'the', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'for', 'with'}
+        query_keywords = [w.lower() for w in query.split() if w.lower() not in stop_words and len(w) > 2]
+        
+        # Score each sentence by keyword overlap
+        best_sentence = sentences[0]
+        best_score = 0
+        
+        for sentence in sentences:
+            sentence_lower = sentence.lower()
+            score = sum(1 for kw in query_keywords if kw in sentence_lower)
+            if score > best_score:
+                best_score = score
+                best_sentence = sentence
+                
+        return best_sentence.strip()
     
     def _extract_unknown_terms(self, query: str) -> List[str]:
         """
@@ -3865,6 +4100,130 @@ class ResponseComposer:
         
         return " ".join(context_parts)
     
+    def _try_world_model_answer(
+        self, 
+        user_input: str, 
+        world_results: List[Any],
+        world_situation: Any
+    ) -> Optional[ComposedResponse]:
+        """
+        Try to generate an answer from world model knowledge.
+        
+        Handles queries like:
+        - "where is X?" - answer with spatial location from stored relations
+        - "who likes X?" - answer with entities that have relations to X
+        - "what happened after X?" - answer with temporal sequences
+        
+        Args:
+            user_input: User's query
+            world_results: Retrieved similar situations from world model (List[RetrievalResult])
+            world_situation: Current utterance's extracted situation
+            
+        Returns:
+            ComposedResponse if world model can answer, None otherwise
+        """
+        if not world_results or not self.world_model:
+            return None
+        
+        user_lower = user_input.lower()
+        
+        # Check for spatial queries: "where is X?"
+        if any(q in user_lower for q in ['where is', 'where are', 'where does', 'location of']):
+            # Extract entity being asked about
+            entity_name = None
+            for pattern in ['where is the ', 'where is ', 'where are the ', 'where are ']:
+                if pattern in user_lower:
+                    rest = user_lower.split(pattern, 1)[1]
+                    entity_name = rest.strip('?').strip()
+                    break
+            
+            if entity_name:
+                # Look for spatial relations in retrieved situations
+                # The pattern.content contains text representation like "ball | ball (object) | ball in box"
+                for result in world_results:
+                    pattern = result.pattern
+                    content_lower = pattern.content.lower()
+                    
+                    # Check if this situation mentions the entity
+                    if entity_name in content_lower:
+                        # Parse for spatial relations in the content
+                        for marker in ['in', 'on', 'under', 'above', 'next to', 'near', 'beside']:
+                            if f"{entity_name} {marker}" in content_lower:
+                                # Extract what comes after the marker
+                                parts = content_lower.split(f"{entity_name} {marker}")
+                                if len(parts) > 1:
+                                    location = parts[1].split('|')[0].strip().split()[0]
+                                    answer = f"The {entity_name} is {marker} the {location}."
+                                    return ComposedResponse(
+                                        text=answer,
+                                        fragment_ids=["world_model_spatial"],
+                                        composition_weights=[result.similarity],
+                                        coherence_score=result.similarity,
+                                        primary_pattern=None,
+                                        confidence=result.similarity,
+                                        is_fallback=False,
+                                        is_low_confidence=False
+                                    )
+        
+        # Check for preference/property queries: "who likes X?", "what does X like?"
+        if any(q in user_lower for q in ['who ', 'what does ', 'what is ']):
+            # Look through retrieved situations for matching information
+            best_match = None
+            best_score = 0.0
+            
+            for result in world_results:
+                pattern = result.pattern
+                # Use the original description from metadata if available
+                if hasattr(pattern, 'metadata') and pattern.metadata and 'original_description' in pattern.metadata:
+                    description = pattern.metadata['original_description']
+                else:
+                    # Fall back to pattern content
+                    description = pattern.content.split('|')[0].strip()
+                
+                if result.similarity > best_score and result.similarity > 0.85:
+                    best_score = result.similarity
+                    best_match = description
+            
+            if best_match and best_score > 0.85:
+                return ComposedResponse(
+                    text=best_match,
+                    fragment_ids=["world_model_retrieval"],
+                    composition_weights=[best_score],
+                    coherence_score=best_score,
+                    primary_pattern=None,
+                    confidence=best_score,
+                    is_fallback=False,
+                    is_low_confidence=False
+                )
+        
+        # Check for temporal queries: "what happened after X?", "when did X?"
+        if any(q in user_lower for q in ['when ', 'what happened', 'what did']):
+            for result in world_results:
+                pattern = result.pattern
+                content_lower = pattern.content.lower()
+                
+                # Look for temporal markers in content
+                for marker in ['before', 'after', 'during', 'then', 'next']:
+                    if marker in content_lower and result.similarity > 0.80:
+                        # Use the description from metadata or content
+                        if hasattr(pattern, 'metadata') and pattern.metadata and 'original_description' in pattern.metadata:
+                            answer = pattern.metadata['original_description']
+                        else:
+                            answer = pattern.content.split('|')[0].strip()
+                        
+                        return ComposedResponse(
+                            text=answer,
+                            fragment_ids=["world_model_temporal"],
+                            composition_weights=[result.similarity],
+                            coherence_score=result.similarity,
+                            primary_pattern=None,
+                            confidence=result.similarity,
+                            is_fallback=False,
+                            is_low_confidence=False
+                        )
+        
+        return None
+
     def _fallback_response_low_confidence(
         self, 
         user_input: str,

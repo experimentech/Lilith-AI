@@ -516,6 +516,88 @@ class ProductionConceptStore:
         """
         return self._embedding_cache.copy()
     
+    def get_relations_from(self, concept_id: str, relation_type: Optional[str] = None) -> List[Relation]:
+        """
+        Get all relations from a concept.
+        
+        Args:
+            concept_id: Source concept ID
+            relation_type: Optional filter by relation type
+            
+        Returns:
+            List of Relation objects
+        """
+        relations_data = self.db.get_relations_from(concept_id, relation_type)
+        return [
+            Relation(
+                relation_type=r['relation_type'],
+                target=r['target'],
+                confidence=r['confidence']
+            )
+            for r in relations_data
+        ]
+    
+    def traverse_relations(
+        self, 
+        start_concept_id: str, 
+        max_depth: int = 3,
+        relation_types: Optional[List[str]] = None
+    ) -> List[Tuple[List[str], float]]:
+        """
+        Traverse relations from a starting concept to find chains.
+        
+        This performs breadth-first search through the relation graph to find
+        paths from the start concept to other concepts.
+        
+        Args:
+            start_concept_id: Starting concept ID
+            max_depth: Maximum path length (default 3)
+            relation_types: Optional filter for specific relation types
+            
+        Returns:
+            List of (path, confidence) tuples where path is [concept_id, concept_id, ...]
+            and confidence is the minimum confidence along the path
+        """
+        chains = []
+        visited = set()
+        
+        # Queue: (current_concept_id, path, min_confidence)
+        queue = [(start_concept_id, [start_concept_id], 1.0)]
+        
+        while queue:
+            current_id, path, path_confidence = queue.pop(0)
+            
+            if len(path) > max_depth:
+                continue
+            
+            if current_id in visited:
+                continue
+            visited.add(current_id)
+            
+            # Get relations from current concept
+            relations = self.get_relations_from(current_id)
+            
+            for relation in relations:
+                # Filter by relation type if specified
+                if relation_types and relation.relation_type not in relation_types:
+                    continue
+                
+                target = relation.target
+                new_path = path + [target]
+                new_confidence = min(path_confidence, relation.confidence)
+                
+                # Add this chain (only if it's longer than just the start)
+                if len(new_path) > 1:
+                    chains.append((new_path, new_confidence))
+                
+                # Continue traversing if target is a concept_id (not a property string)
+                if target.startswith('concept_'):
+                    queue.append((target, new_path, new_confidence))
+        
+        # Sort by confidence descending
+        chains.sort(key=lambda x: x[1], reverse=True)
+        return chains
+    
     def _cosine_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
         """Calculate cosine similarity."""
         dot = np.dot(a, b)

@@ -331,9 +331,37 @@ class ReasoningStage:
                 activation=0.5,
                 source="context"
             )
+        
+        # Step 1.5: Traverse relations between activated concepts
+        relation_inferences = self._traverse_relations(activated)
+        inferences = relation_inferences.copy()
+        
+        # Activate intermediate concepts from relation chains
+        for inference in relation_inferences:
+            if inference.inference_type == "relation_chain":
+                for concept_name in inference.reasoning_path:
+                    # Check if this is a concept we haven't activated yet
+                    if concept_name not in [c.term for c in self.working_memory.values()]:
+                        # Try to get the concept from the store
+                        if self.concept_store:
+                            try:
+                                # Find concept by term
+                                all_concepts = self.concept_store.get_all_embeddings()
+                                for cid, emb in all_concepts.items():
+                                    concept = self.concept_store.get_concept_by_id(cid)
+                                    if concept and concept.term.lower() == concept_name.lower():
+                                        # Activate intermediate concept
+                                        self.activate_concept(
+                                            term=concept.term,
+                                            embedding=torch.tensor(emb) if isinstance(emb, np.ndarray) else emb,
+                                            activation=0.6,  # Moderate activation for chain concepts
+                                            source="relation_chain"
+                                        )
+                                        break
+                            except Exception as e:
+                                logger.debug(f"Could not activate chain concept {concept_name}: {e}")
             
         # Step 2: Run deliberation steps
-        inferences = []
         for step in range(steps):
             step_inferences = self._deliberation_step(step)
             inferences.extend(step_inferences)
@@ -359,6 +387,117 @@ class ReasoningStage:
             confidence=confidence,
             cleaned_query=None  # Query already cleaned at intake layer
         )
+    
+    def _traverse_relations(self, activated_concepts: List[ActivatedConcept]) -> List[Inference]:
+        """
+        Traverse relation chains from activated concepts.
+        
+        This discovers implicit connections by following the relation graph.
+        For example, if we have:
+          - "plants" (activated)
+          - "sunlight" (activated)
+          - relations: plants --[use]--> photosynthesis --[requires]--> sunlight
+        
+        We can infer the connection via the relation chain.
+        
+        Args:
+            activated_concepts: Currently activated concepts
+            
+        Returns:
+            List of relation-based inferences
+        """
+        if not self.concept_store or not hasattr(self.concept_store, 'traverse_relations'):
+            logger.debug("No concept_store or traverse_relations method available")
+            return []
+        
+        inferences = []
+        
+        # Get concept IDs for activated concepts
+        # Handle both "concept_xxx" and "active_concept_xxx" formats
+        concept_ids = []
+        for c in activated_concepts:
+            cid = c.concept_id
+            # Strip "active_" prefix if present
+            if cid.startswith('active_'):
+                cid = cid[7:]  # Remove "active_"
+            # Only include if it looks like a real concept_id
+            if cid.startswith('concept_'):
+                concept_ids.append(cid)
+                logger.debug(f"Found valid concept_id: {cid} (from {c.concept_id})")
+            else:
+                logger.debug(f"Skipping invalid concept_id: {cid} (from {c.concept_id})")
+        
+        logger.debug(f"Relation traversal with {len(concept_ids)} concept IDs: {concept_ids}")
+        
+        if len(concept_ids) < 2:
+            logger.debug(f"Relation traversal needs at least 2 concepts, got {len(concept_ids)}")
+            return inferences
+        
+        # For each pair of activated concepts, try to find relation chains
+        for i, start_id in enumerate(concept_ids):
+            for j, end_id in enumerate(concept_ids):
+                if i >= j:
+                    continue
+                
+                try:
+                    # Traverse relations from start to find paths
+                    chains = self.concept_store.traverse_relations(
+                        start_concept_id=start_id,
+                        max_depth=3  # Don't go too deep
+                    )
+                    
+                    logger.debug(f"Traversing from {start_id} to {end_id}: found {len(chains)} chains")
+                    
+                    # Look for chains that reach the end concept
+                    for path, confidence in chains:
+                        if end_id in path:
+                            # Found a relation chain connecting these concepts!
+                            # Find the activated concepts (need to match with normalized IDs)
+                            start_concept = None
+                            end_concept = None
+                            for c in activated_concepts:
+                                cid = c.concept_id
+                                if cid.startswith('active_'):
+                                    cid = cid[7:]
+                                if cid == start_id:
+                                    start_concept = c
+                                if cid == end_id:
+                                    end_concept = c
+                            
+                            if start_concept and end_concept:
+                                # Get concept names for the intermediate steps
+                                path_names = []
+                                for concept_id in path:
+                                    if concept_id.startswith('concept_'):
+                                        concept_obj = self.concept_store.get_concept_by_id(concept_id)
+                                        if concept_obj:
+                                            path_names.append(concept_obj.term)
+                                    else:
+                                        # It's a property string
+                                        path_names.append(concept_id)
+                                
+                                # Create inference from relation chain
+                                inference = Inference(
+                                    inference_type="relation_chain",
+                                    source_concepts=[start_concept.term if start_concept.term.startswith('concept_') else self.concept_store.get_concept_by_id(start_id).term,
+                                                    end_concept.term if end_concept.term.startswith('concept_') else self.concept_store.get_concept_by_id(end_id).term],
+                                    conclusion=f"Found chain: {' → '.join(path_names)}",
+                                    confidence=confidence * 0.9,  # Slightly penalize chain length
+                                    reasoning_path=path_names
+                                )
+                                inferences.append(inference)
+                                
+                                logger.debug(f"Found relation chain: {' → '.join(path_names)} (confidence: {confidence:.3f})")
+                                
+                                # Only keep the best chain for this pair
+                                break
+                                break
+                                
+                except Exception as e:
+                    logger.debug(f"Error traversing relations from {start_id}: {e}")
+                    continue
+        
+        return inferences
         
     def _deliberation_step(self, step_num: int) -> List[Inference]:
         """
