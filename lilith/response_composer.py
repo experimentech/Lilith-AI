@@ -2336,39 +2336,9 @@ class ResponseComposer:
                 except Exception as e:
                     print(f"  ⚠️ Bridge failed for {concept_id}: {e}")
         
-        # Fallback: try text-based retrieval if no symbolic match
-        if not main_concept_data and focus_term:
-            try:
-                retrieved = self.concept_store.retrieve_by_text(focus_term, top_k=1, min_similarity=0.6)
-                if retrieved:
-                    candidate_concept, score = retrieved[0]
-                    
-                    # VALIDATE: Check relevance to actual user query (not just focus_term)
-                    if self.semantic_encoder and user_input:
-                        query_emb = self.semantic_encoder.encode(user_input)
-                        concept_emb = self.semantic_encoder.encode(candidate_concept.term)
-                        
-                        if hasattr(query_emb, 'cpu'):
-                            query_emb = query_emb.cpu().numpy().flatten()
-                        if hasattr(concept_emb, 'cpu'):
-                            concept_emb = concept_emb.cpu().numpy().flatten()
-                        
-                        query_norm = query_emb / (np.linalg.norm(query_emb) + 1e-8)
-                        concept_norm = concept_emb / (np.linalg.norm(concept_emb) + 1e-8)
-                        concept_relevance = float(np.dot(query_norm, concept_norm))
-                        
-                        if concept_relevance < 0.5:
-                            print(f"  ⚠️ Rejecting fallback concept '{candidate_concept.term}' - low relevance ({concept_relevance:.3f})")
-                        else:
-                            main_concept_data = candidate_concept
-                            print(f"  🔍 Fallback retrieval: {main_concept_data.term} (score: {score:.2f}, relevance: {concept_relevance:.3f})")
-                    else:
-                        main_concept_data = candidate_concept
-                        print(f"  🔍 Fallback retrieval: {main_concept_data.term} (score: {score:.2f})")
-            except Exception as e:
-                print(f"  ⚠️ Fallback retrieval failed: {e}")
-        
-        if not main_concept_data or not main_concept_data.properties:
+        # Don't try fallback text retrieval - if reasoning didn't find relevant concepts,
+        # return None and let regular pattern-based composition handle it
+        if not main_concept_data:
             return None
         
         # BUILD SLOTS from concept data (linguistic content)
