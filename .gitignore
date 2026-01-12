@@ -65,6 +65,9 @@ data/demo/
 data/generated/
 data/production/
 
+# Local world-model seed artifacts
+data/world_model_seed.json
+
 # Downloaded datasets (large, regeneratable)
 data/datasets/*.txt
 data/datasets/*.json

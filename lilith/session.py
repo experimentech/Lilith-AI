@@ -196,6 +196,10 @@ class LilithSession:
         # Initialize encoder
         self.encoder = PMFlowEmbeddingEncoder()
 
+        # Per-user persistence root (ignored by git)
+        user_root = Path(self.config.data_path) / "users" / self.user_id
+        user_root.mkdir(parents=True, exist_ok=True)
+
         # Optional modality-agnostic memory leaf (DB-backed, embedding-addressable)
         self.memory_leaf_adapter = None
         self._memory_leaf_store = None
@@ -205,8 +209,6 @@ class LilithSession:
                 from lilith.memory import MemoryEvent, MemoryLeaf, MemoryLeafAdapter
                 from lilith.storage.sqlite_memory_store import SQLiteMemoryStore
 
-                user_root = Path(self.config.data_path) / "users" / self.user_id
-                user_root.mkdir(parents=True, exist_ok=True)
                 memory_db_path = user_root / self.config.memory_leaf_db_name
 
                 self._memory_leaf_store = SQLiteMemoryStore(memory_db_path)
@@ -267,7 +269,7 @@ class LilithSession:
         if self.config.enable_pragmatic_templates:
             try:
                 from lilith.pragmatic_templates import PragmaticTemplateStore
-                templates_path = Path(self.config.data_path) / "pragmatic_templates.json"
+                templates_path = user_root / "pragmatic_templates.json"
                 
                 if templates_path.exists():
                     # Load existing templates
@@ -349,7 +351,7 @@ class LilithSession:
         self.topic_extractor = None
         try:
             from lilith.topic_extractor import TopicExtractor
-            topics_path = Path(self.config.data_path) / "topics.json"
+            topics_path = user_root / "topics.json"
             self.topic_extractor = TopicExtractor(
                 encoder=self.encoder,
                 storage_path=topics_path

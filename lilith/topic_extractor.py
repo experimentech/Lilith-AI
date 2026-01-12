@@ -58,7 +58,7 @@ class TopicExtractor:
             similarity_threshold: Minimum similarity to match a topic
         """
         self.encoder = encoder
-        self.storage_path = storage_path or Path("data/topics.json")
+        self.storage_path = storage_path or Path("data/generated/topics.json")
         self.similarity_threshold = similarity_threshold
         
         # Topic store: name -> LearnedTopic
