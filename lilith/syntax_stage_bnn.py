@@ -241,17 +241,19 @@ class SyntaxStage:
     _PREPOSITIONS = frozenset(['in', 'on', 'at', 'to', 'for', 'with', 'by', 'from', 'of', 'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under', 'over', 'among', 'along', 'across', 'behind', 'beyond', 'near', 'within', 'without', 'against', 'toward', 'towards', 'upon', 'throughout', 'beside', 'besides', 'around', 'outside', 'inside'])
     _AUXILIARIES = frozenset(['is', 'are', 'am', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing', 'will', 'would', 'shall', 'should', 'can', 'could', 'may', 'might', 'must', "don't", "doesn't", "didn't", "won't", "wouldn't", "can't", "couldn't", "shouldn't", "mustn't", "isn't", "aren't", "wasn't", "weren't", "haven't", "hasn't", "hadn't"])
     _MODALS = frozenset(['can', 'could', 'may', 'might', 'must', 'shall', 'should', 'will', 'would', 'ought'])
-    _COMMON_VERBS = frozenset(['go', 'goes', 'went', 'gone', 'going', 'come', 'comes', 'came', 'coming', 'get', 'gets', 'got', 'getting', 'make', 'makes', 'made', 'making', 'know', 'knows', 'knew', 'known', 'knowing', 'think', 'thinks', 'thought', 'thinking', 'take', 'takes', 'took', 'taken', 'taking', 'see', 'sees', 'saw', 'seen', 'seeing', 'want', 'wants', 'wanted', 'wanting', 'look', 'looks', 'looked', 'looking', 'use', 'uses', 'used', 'using', 'find', 'finds', 'found', 'finding', 'give', 'gives', 'gave', 'given', 'giving', 'tell', 'tells', 'told', 'telling', 'work', 'works', 'worked', 'working', 'call', 'calls', 'called', 'calling', 'try', 'tries', 'tried', 'trying', 'ask', 'asks', 'asked', 'asking', 'need', 'needs', 'needed', 'needing', 'feel', 'feels', 'felt', 'feeling', 'become', 'becomes', 'became', 'becoming', 'leave', 'leaves', 'left', 'leaving', 'put', 'puts', 'putting', 'mean', 'means', 'meant', 'meaning', 'keep', 'keeps', 'kept', 'keeping', 'let', 'lets', 'letting', 'begin', 'begins', 'began', 'begun', 'beginning', 'seem', 'seems', 'seemed', 'seeming', 'help', 'helps', 'helped', 'helping', 'show', 'shows', 'showed', 'shown', 'showing', 'hear', 'hears', 'heard', 'hearing', 'play', 'plays', 'played', 'playing', 'run', 'runs', 'ran', 'running', 'move', 'moves', 'moved', 'moving', 'like', 'likes', 'liked', 'liking', 'live', 'lives', 'lived', 'living', 'believe', 'believes', 'believed', 'believing', 'bring', 'brings', 'brought', 'bringing', 'happen', 'happens', 'happened', 'happening', 'write', 'writes', 'wrote', 'written', 'writing', 'provide', 'provides', 'provided', 'providing', 'sit', 'sits', 'sat', 'sitting', 'stand', 'stands', 'stood', 'standing', 'lose', 'loses', 'lost', 'losing', 'pay', 'pays', 'paid', 'paying', 'meet', 'meets', 'met', 'meeting', 'include', 'includes', 'included', 'including', 'continue', 'continues', 'continued', 'continuing', 'set', 'sets', 'setting', 'learn', 'learns', 'learned', 'learning', 'change', 'changes', 'changed', 'changing', 'lead', 'leads', 'led', 'leading', 'understand', 'understands', 'understood', 'understanding', 'watch', 'watches', 'watched', 'watching', 'follow', 'follows', 'followed', 'following', 'stop', 'stops', 'stopped', 'stopping', 'create', 'creates', 'created', 'creating', 'speak', 'speaks', 'spoke', 'spoken', 'speaking', 'read', 'reads', 'reading', 'spend', 'spends', 'spent', 'spending', 'grow', 'grows', 'grew', 'grown', 'growing', 'open', 'opens', 'opened', 'opening', 'walk', 'walks', 'walked', 'walking', 'win', 'wins', 'won', 'winning', 'teach', 'teaches', 'taught', 'teaching', 'offer', 'offers', 'offered', 'offering', 'remember', 'remembers', 'remembered', 'remembering', 'love', 'loves', 'loved', 'loving', 'consider', 'considers', 'considered', 'considering', 'appear', 'appears', 'appeared', 'appearing', 'buy', 'buys', 'bought', 'buying', 'wait', 'waits', 'waited', 'waiting', 'serve', 'serves', 'served', 'serving', 'die', 'dies', 'died', 'dying', 'send', 'sends', 'sent', 'sending', 'expect', 'expects', 'expected', 'expecting', 'build', 'builds', 'built', 'building', 'stay', 'stays', 'stayed', 'staying', 'fall', 'falls', 'fell', 'fallen', 'falling', 'cut', 'cuts', 'cutting', 'reach', 'reaches', 'reached', 'reaching', 'kill', 'kills', 'killed', 'killing', 'remain', 'remains', 'remained', 'remaining', 'suggest', 'suggests', 'suggested', 'suggesting', 'raise', 'raises', 'raised', 'raising', 'pass', 'passes', 'passed', 'passing', 'sell', 'sells', 'sold', 'selling', 'require', 'requires', 'required', 'requiring', 'report', 'reports', 'reported', 'reporting', 'decide', 'decides', 'decided', 'deciding', 'pull', 'pulls', 'pulled', 'pulling'])
+    _COMMON_VERBS = frozenset(['go', 'goes', 'went', 'gone', 'going', 'come', 'comes', 'came', 'coming', 'get', 'gets', 'got', 'getting', 'make', 'makes', 'made', 'making', 'know', 'knows', 'knew', 'known', 'knowing', 'think', 'thinks', 'thought', 'thinking', 'take', 'takes', 'took', 'taken', 'taking', 'see', 'sees', 'saw', 'seen', 'seeing', 'want', 'wants', 'wanted', 'wanting', 'look', 'looks', 'looked', 'looking', 'use', 'uses', 'used', 'using', 'find', 'finds', 'found', 'finding', 'give', 'gives', 'gave', 'given', 'giving', 'tell', 'tells', 'told', 'telling', 'work', 'works', 'worked', 'working', 'call', 'calls', 'called', 'calling', 'try', 'tries', 'tried', 'trying', 'ask', 'asks', 'asked', 'asking', 'need', 'needs', 'needed', 'needing', 'feel', 'feels', 'felt', 'feeling', 'become', 'becomes', 'became', 'becoming', 'leave', 'leaves', 'left', 'leaving', 'put', 'puts', 'putting', 'mean', 'means', 'meant', 'meaning', 'keep', 'keeps', 'kept', 'keeping', 'let', 'lets', 'letting', 'begin', 'begins', 'began', 'begun', 'beginning', 'seem', 'seems', 'seemed', 'seeming', 'help', 'helps', 'helped', 'helping', 'show', 'shows', 'showed', 'shown', 'showing', 'hear', 'hears', 'heard', 'hearing', 'play', 'plays', 'played', 'playing', 'run', 'runs', 'ran', 'running', 'move', 'moves', 'moved', 'moving', 'like', 'likes', 'liked', 'liking', 'live', 'lives', 'lived', 'living', 'believe', 'believes', 'believed', 'believing', 'bring', 'brings', 'brought', 'bringing', 'happen', 'happens', 'happened', 'happening', 'write', 'writes', 'wrote', 'written', 'writing', 'provide', 'provides', 'provided', 'providing', 'sit', 'sits', 'sat', 'sitting', 'stand', 'stands', 'stood', 'standing', 'lose', 'loses', 'lost', 'losing', 'pay', 'pays', 'paid', 'paying', 'meet', 'meets', 'met', 'meeting', 'include', 'includes', 'included', 'including', 'continue', 'continues', 'continued', 'continuing', 'set', 'sets', 'setting', 'learn', 'learns', 'learned', 'learning', 'change', 'changes', 'changed', 'changing', 'lead', 'leads', 'led', 'leading', 'understand', 'understands', 'understood', 'understanding', 'watch', 'watches', 'watched', 'watching', 'follow', 'follows', 'followed', 'following', 'stop', 'stops', 'stopped', 'stopping', 'create', 'creates', 'created', 'creating', 'speak', 'speaks', 'spoke', 'spoken', 'speaking', 'read', 'reads', 'reading', 'spend', 'spends', 'spent', 'spending', 'grow', 'grows', 'grew', 'grown', 'growing', 'open', 'opens', 'opened', 'opening', 'walk', 'walks', 'walked', 'walking', 'win', 'wins', 'won', 'winning', 'teach', 'teaches', 'taught', 'teaching', 'offer', 'offers', 'offered', 'offering', 'remember', 'remembers', 'remembered', 'remembering', 'love', 'loves', 'loved', 'loving', 'consider', 'considers', 'considered', 'considering', 'appear', 'appears', 'appeared', 'appearing', 'buy', 'buys', 'bought', 'buying', 'wait', 'waits', 'waited', 'waiting', 'serve', 'serves', 'served', 'serving', 'die', 'dies', 'died', 'dying', 'send', 'sends', 'sent', 'sending', 'expect', 'expects', 'expected', 'expecting', 'build', 'builds', 'built', 'building', 'stay', 'stays', 'stayed', 'staying', 'fall', 'falls', 'fell', 'fallen', 'falling', 'cut', 'cuts', 'cutting', 'reach', 'reaches', 'reached', 'reaching', 'kill', 'kills', 'killed', 'killing', 'remain', 'remains', 'remained', 'remaining', 'suggest', 'suggests', 'suggested', 'suggesting', 'raise', 'raises', 'raised', 'raising', 'pass', 'passes', 'passed', 'passing', 'sell', 'sells', 'sold', 'selling', 'require', 'requires', 'required', 'requiring', 'report', 'reports', 'reported', 'reporting', 'decide', 'decides', 'decided', 'deciding', 'pull', 'pulls', 'pulled', 'pulling', 'jump', 'jumps', 'jumped', 'jumping', 'fly', 'flies', 'flew', 'flying', 'catch', 'catches', 'caught', 'catching', 'throw', 'throws', 'threw', 'throwing'])
     _COMMON_ADJECTIVES = frozenset(['good', 'new', 'first', 'last', 'long', 'great', 'little', 'own', 'other', 'old', 'right', 'big', 'high', 'different', 'small', 'large', 'next', 'early', 'young', 'important', 'few', 'public', 'bad', 'same', 'able', 'free', 'sure', 'clear', 'full', 'special', 'easy', 'strong', 'true', 'whole', 'real', 'best', 'better', 'nice', 'cool', 'interesting', 'amazing', 'awesome', 'beautiful', 'wonderful', 'terrible', 'horrible', 'fantastic', 'excellent', 'perfect', 'simple', 'hard', 'soft', 'fast', 'slow', 'hot', 'cold', 'warm', 'dark', 'light', 'open', 'close', 'short', 'happy', 'sad', 'angry', 'afraid', 'alone', 'certain', 'likely', 'possible', 'impossible', 'necessary', 'ready', 'sorry', 'wrong', 'late', 'recent', 'main', 'major', 'general', 'specific', 'particular', 'available', 'popular', 'common', 'natural', 'physical', 'final', 'local', 'international', 'national', 'political', 'economic', 'social', 'human', 'personal', 'private', 'military', 'legal', 'medical', 'single', 'various', 'similar', 'dead', 'central', 'current', 'foreign', 'federal', 'normal', 'serious', 'financial', 'basic', 'pretty'])
     _COMMON_ADVERBS = frozenset(['not', 'just', 'also', 'very', 'often', 'however', 'too', 'usually', 'really', 'early', 'never', 'always', 'sometimes', 'together', 'likely', 'simply', 'generally', 'instead', 'actually', 'already', 'again', 'rather', 'almost', 'especially', 'ever', 'quickly', 'probably', 'certainly', 'perhaps', 'maybe', 'finally', 'recently', 'still', 'well', 'here', 'there', 'now', 'then', 'today', 'tomorrow', 'yesterday', 'soon', 'ago', 'yet', 'later', 'even', 'only', 'quite', 'enough', 'thus', 'therefore', 'hence', 'extremely', 'absolutely', 'completely', 'totally', 'entirely', 'nearly', 'barely', 'hardly', 'merely', 'mostly', 'partly', 'slightly', 'somewhat', 'fairly', 'rather'])
     _INTERJECTIONS = frozenset(['oh', 'ah', 'wow', 'hey', 'hi', 'hello', 'bye', 'goodbye', 'yes', 'no', 'yeah', 'nah', 'ok', 'okay', 'please', 'thanks', 'thank', 'sorry', 'excuse', 'well', 'um', 'uh', 'hmm', 'huh', 'oops', 'ouch', 'yay', 'hooray', 'alas', 'whoa', 'gee', 'gosh', 'damn', 'darn', 'shoot', 'yikes', 'phew', 'ugh', 'meh', 'aw', 'aww'])
     
     def _extract_pos_tags(self, tokens: List[str]) -> List[str]:
         """
-        Extract POS tags from tokens using improved heuristics.
+        Extract POS tags from tokens using CONTEXT-AWARE heuristics.
+        
+        IMPROVED: Uses context (previous/next words) for disambiguation.
         
         BioNN-native approach: No external NLP dependencies.
-        Uses expanded word lists, suffix rules, and context hints.
+        Uses expanded word lists, suffix rules, and CONTEXT HINTS.
         
         POS Tag Key:
             WRB  - Wh-adverb (question words)
@@ -274,9 +276,11 @@ class SyntaxStage:
         """
         pos_tags = []
         prev_tag = None
+        prev_token = None
         
         for i, token in enumerate(tokens):
             token_lower = token.lower().strip()
+            next_token = tokens[i + 1].lower() if i + 1 < len(tokens) else None
             
             # Handle punctuation
             if token in '.,!?;:"\'-()[]{}':
@@ -288,74 +292,160 @@ class SyntaxStage:
             if token_lower in self._QUESTION_WORDS:
                 pos_tags.append('WRB')
                 prev_tag = 'WRB'
+                prev_token = token_lower
                 continue
             
             # Interjections (often at start)
             if token_lower in self._INTERJECTIONS:
                 pos_tags.append('UH')
                 prev_tag = 'UH'
+                prev_token = token_lower
                 continue
             
             # Determiners
             if token_lower in self._DETERMINERS:
                 pos_tags.append('DT')
                 prev_tag = 'DT'
+                prev_token = token_lower
                 continue
             
             # Pronouns (but not when used as determiners)
             if token_lower in self._PRONOUNS and prev_tag not in ('DT',):
                 pos_tags.append('PRON')
                 prev_tag = 'PRON'
+                prev_token = token_lower
                 continue
             
             # Coordinating conjunctions
             if token_lower in self._COORDINATORS:
                 pos_tags.append('CC')
                 prev_tag = 'CC'
+                prev_token = token_lower
                 continue
             
             # Prepositions and subordinating conjunctions
             if token_lower in self._PREPOSITIONS or token_lower in self._SUBORDINATORS:
                 pos_tags.append('IN')
                 prev_tag = 'IN'
+                prev_token = token_lower
                 continue
             
             # Modals
             if token_lower in self._MODALS:
                 pos_tags.append('MD')
                 prev_tag = 'MD'
+                prev_token = token_lower
                 continue
             
             # Auxiliaries (as verbs)
             if token_lower in self._AUXILIARIES:
                 pos_tags.append('VBZ')
                 prev_tag = 'VBZ'
+                prev_token = token_lower
                 continue
             
             # Common verbs
             if token_lower in self._COMMON_VERBS:
-                # Try to determine verb form from suffix
+                # CONTEXT-AWARE: Disambiguate verb forms
                 if token_lower.endswith('ing'):
                     pos_tags.append('VBG')
                 elif token_lower.endswith('ed'):
                     pos_tags.append('VBD')
                 elif token_lower.endswith('s') and not token_lower.endswith('ss'):
-                    pos_tags.append('VBZ')
+                    # Check context: after subject → VBZ
+                    if prev_tag in ('PRON', 'NN', 'NNS'):
+                        pos_tags.append('VBZ')
+                    else:
+                        pos_tags.append('VB')
                 else:
-                    pos_tags.append('VB')
+                    # Base form - but check context
+                    if prev_token == 'to' or prev_tag == 'MD':
+                        pos_tags.append('VB')  # Infinitive or after modal
+                    else:
+                        pos_tags.append('VB')
                 prev_tag = pos_tags[-1]
+                prev_token = token_lower
                 continue
             
             # Common adjectives
             if token_lower in self._COMMON_ADJECTIVES:
                 pos_tags.append('JJ')
                 prev_tag = 'JJ'
+                prev_token = token_lower
                 continue
             
             # Common adverbs
             if token_lower in self._COMMON_ADVERBS:
                 pos_tags.append('RB')
                 prev_tag = 'RB'
+                prev_token = token_lower
+                continue
+            
+            # ─────────────────────────────────────────────────────
+            # CONTEXT-AWARE disambiguation for unknown words
+            # ─────────────────────────────────────────────────────
+            
+            # Check if token could be a verb based on context
+            is_likely_verb = False
+            
+            # After pronoun → likely verb ("I jump", "they run")
+            if prev_tag == 'PRON' and not token_lower.endswith(('tion', 'ment', 'ness')):
+                is_likely_verb = True
+            
+            # After "to" → infinitive verb ("to jump", "to run")
+            if prev_token == 'to':
+                is_likely_verb = True
+            
+            # After modal → base verb ("can jump", "will run")  
+            if prev_tag == 'MD':
+                is_likely_verb = True
+            
+            # 3rd person singular after subject
+            if token_lower.endswith('s') and prev_tag in ('NN', 'PRON', 'NNS'):
+                # "fox jumps", "it flies" - but not "happiness", "business"
+                if not token_lower.endswith(('ss', 'ness', 'ous', 'ious')):
+                    is_likely_verb = True
+            
+            # If context suggests verb, tag it as such
+            if is_likely_verb:
+                if token_lower.endswith('s') and not token_lower.endswith('ss'):
+                    pos_tags.append('VBZ')
+                elif token_lower.endswith('ing'):
+                    pos_tags.append('VBG')
+                elif token_lower.endswith('ed'):
+                    pos_tags.append('VBD')
+                else:
+                    pos_tags.append('VB')
+                prev_tag = pos_tags[-1]
+                prev_token = token_lower
+                continue
+            
+            # Check if token is likely adjective based on context
+            is_likely_adjective = False
+            
+            # After "is/are/was/were" → predicate adjective ("is important", "are fast")
+            if prev_tag == 'VBZ' and next_token not in ('a', 'an', 'the'):
+                if any(token_lower.endswith(suf) for suf in ['ant', 'ent', 'ful', 'ous', 'ive', 'able', 'ible', 'al']):
+                    is_likely_adjective = True
+            
+            # After "very", "really", "quite" → adjective
+            if prev_token in ('very', 'really', 'quite', 'extremely', 'highly'):
+                is_likely_adjective = True
+            
+            # Before noun after determiner → likely adjective, BUT only if it has adjective features
+            # "The beautiful house" ✅ "The cat" ❌
+            if next_token and prev_tag == 'DT':
+                # Only if it looks like an adjective (suffix or in adjective list)
+                has_adj_features = any(token_lower.endswith(suf) for suf in [
+                    'ful', 'less', 'ous', 'ive', 'able', 'ible', 'al', 'ant', 'ent', 'ic', 'ical'
+                ])
+                if has_adj_features or token_lower in self._COMMON_ADJECTIVES:
+                    is_likely_adjective = True
+            
+            if is_likely_adjective:
+                pos_tags.append('JJ')
+                prev_tag = 'JJ'
+                prev_token = token_lower
                 continue
             
             # ─────────────────────────────────────────────────────
@@ -366,6 +456,7 @@ class SyntaxStage:
             if token_lower.endswith('ly') and len(token_lower) > 3:
                 pos_tags.append('RB')
                 prev_tag = 'RB'
+                prev_token = token_lower
                 continue
             
             # Gerunds/present participles: -ing
@@ -377,6 +468,7 @@ class SyntaxStage:
                 else:
                     pos_tags.append('VBG')
                 prev_tag = pos_tags[-1]
+                prev_token = token_lower
                 continue
             
             # Past tense/participle: -ed
@@ -387,18 +479,21 @@ class SyntaxStage:
                 else:
                     pos_tags.append('VBD')
                 prev_tag = pos_tags[-1]
+                prev_token = token_lower
                 continue
             
             # Adjectives: common suffixes
             if any(token_lower.endswith(suf) for suf in ['ful', 'less', 'ous', 'ive', 'able', 'ible', 'al', 'ish', 'ic', 'ical']):
                 pos_tags.append('JJ')
                 prev_tag = 'JJ'
+                prev_token = token_lower
                 continue
             
             # Nouns: common suffixes
             if any(token_lower.endswith(suf) for suf in ['tion', 'sion', 'ment', 'ness', 'ity', 'ance', 'ence', 'er', 'or', 'ist', 'ism', 'dom', 'ship', 'hood']):
                 pos_tags.append('NN')
                 prev_tag = 'NN'
+                prev_token = token_lower
                 continue
             
             # Plural nouns: -s/-es (but not verbs ending in -ss)
@@ -406,11 +501,13 @@ class SyntaxStage:
                 if not token_lower.endswith('ss') and prev_tag in ('DT', 'JJ', 'NN', None):
                     pos_tags.append('NNS')
                     prev_tag = 'NNS'
+                    prev_token = token_lower
                     continue
                 elif prev_tag in ('PRON', 'NN', 'NNS'):
                     # After subject, likely a verb
                     pos_tags.append('VBZ')
                     prev_tag = 'VBZ'
+                    prev_token = token_lower
                     continue
             
             # ─────────────────────────────────────────────────────
@@ -419,35 +516,44 @@ class SyntaxStage:
             
             # After determiner → likely noun or adjective
             if prev_tag == 'DT':
-                # If next word exists and looks like noun, this is adjective
-                if i + 1 < len(tokens) and not tokens[i + 1].lower() in self._AUXILIARIES:
-                    pos_tags.append('JJ')  # Assume adjective before noun
+                # Check if next word exists and has adjective-like suffix
+                has_adj_suffix = any(token_lower.endswith(suf) for suf in ['ful', 'less', 'ous', 'ive', 'able', 'ible', 'al', 'ant', 'ent'])
+                
+                if has_adj_suffix and i + 1 < len(tokens):
+                    # "The beautiful house" - adjective before noun
+                    pos_tags.append('JJ')
                 else:
+                    # "The cat", "The dog" - short words after determiner are usually nouns
                     pos_tags.append('NN')
                 prev_tag = pos_tags[-1]
+                prev_token = token_lower
                 continue
             
             # After adjective → likely noun
             if prev_tag == 'JJ':
                 pos_tags.append('NN')
                 prev_tag = 'NN'
+                prev_token = token_lower
                 continue
             
             # After modal/auxiliary → likely verb
             if prev_tag in ('MD', 'VBZ'):
                 pos_tags.append('VB')
                 prev_tag = 'VB'
+                prev_token = token_lower
                 continue
             
             # After preposition → likely noun
             if prev_tag == 'IN':
                 pos_tags.append('NN')
                 prev_tag = 'NN'
+                prev_token = token_lower
                 continue
             
             # Default: noun
             pos_tags.append('NN')
             prev_tag = 'NN'
+            prev_token = token_lower
                 
         return pos_tags
     

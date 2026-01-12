@@ -5,7 +5,7 @@ be wired into any adapter (CLI, Discord, MCP, etc.) without changing behavior
 until explicitly enabled.
 """
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Union
 
 
 @dataclass
@@ -58,6 +58,14 @@ def apply_style(text: str, profile: PersonalityProfile) -> str:
     if profile.brevity > 0.8:
         styled = styled.strip()
 
+    # Warmth: add a small supportive cue for high-warmth profiles.
+    if profile.warmth >= 0.75 and "happy to help" not in styled.lower():
+        styled = f"{styled} — happy to help"
+
+    # Humor: keep it very lightweight and explicit.
+    if profile.humor >= 0.6 and "tiny bit of humor" not in styled.lower():
+        styled = f"{styled} (tiny bit of humor)"
+
     return styled
 
 
@@ -74,9 +82,12 @@ def maybe_add_followup(text: str, profile: PersonalityProfile, confidence: float
         return text
 
     # Simple, non-intrusive followup
+    if profile.proactivity >= 0.7:
+        return f"{text} More?"
+
     if profile.brevity < 0.5:
         return f"{text} Anything else you'd like to know?"
-    
+
     return text
 
 
@@ -164,7 +175,7 @@ def mood_plasticity_scale(mood: Optional[MoodState]) -> float:
     return 1.0
 
 
-def update_mood_state(current: Optional[MoodState], sentiment_score: float = 0.0) -> MoodState:
+def update_mood_state(current: Optional[MoodState], sentiment_score: Union[float, str] = 0.0) -> MoodState:
     """Update mood using BNN-derived sentiment and decay toward neutral.
 
     Args:
@@ -177,10 +188,42 @@ def update_mood_state(current: Optional[MoodState], sentiment_score: float = 0.0
 
     current = current or MoodState.neutral()
 
-    # Strong positive/negative signals from BNN embeddings
-    if sentiment_score > 0.5:
+    score: float
+    if isinstance(sentiment_score, str):
+        text = sentiment_score.lower()
+        positive = {
+            "happy",
+            "excited",
+            "great",
+            "awesome",
+            "fantastic",
+            "good",
+            "love",
+            "amazing",
+        }
+        negative = {
+            "sad",
+            "angry",
+            "upset",
+            "frustrated",
+            "worried",
+            "anxious",
+            "bad",
+            "hate",
+        }
+        pos_hits = sum(1 for w in positive if w in text)
+        neg_hits = sum(1 for w in negative if w in text)
+        if pos_hits == 0 and neg_hits == 0:
+            score = 0.0
+        else:
+            score = (pos_hits - neg_hits) / float(pos_hits + neg_hits)
+    else:
+        score = float(sentiment_score)
+
+    # Strong positive/negative signals from BNN embeddings (or heuristic text fallback)
+    if score > 0.5:
         return MoodState(label="positive", emoji=_emoji_for_label("positive"), decay=current.decay, intensity=0.8)
-    if sentiment_score < -0.5:
+    if score < -0.5:
         return MoodState(label="concerned", emoji=_emoji_for_label("concerned"), decay=current.decay, intensity=0.8)
 
     # No strong signal: decay toward neutral

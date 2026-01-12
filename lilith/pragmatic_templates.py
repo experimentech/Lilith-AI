@@ -217,6 +217,41 @@ class PragmaticTemplateStore:
         )
         
         # ============================================================
+        # DIRECT ANSWER TEMPLATES (5)
+        # For factual property questions like "What is X of Y?"
+        # ============================================================
+        
+        self.templates["answer_property"] = PragmaticTemplate(
+            template_id="answer_property",
+            category="answer",
+            intent="property_answer",
+            template="The {property} of {subject} is {answer}.",
+            slots=["property", "subject", "answer"],
+            priority=9,
+            examples=["The capital of France is Paris."]
+        )
+        
+        self.templates["answer_simple"] = PragmaticTemplate(
+            template_id="answer_simple",
+            category="answer",
+            intent="simple_answer",
+            template="{answer}.",
+            slots=["answer"],
+            priority=7,
+            examples=["Paris."]
+        )
+        
+        self.templates["answer_with_elaboration"] = PragmaticTemplate(
+            template_id="answer_with_elaboration",
+            category="answer",
+            intent="answer_with_detail",
+            template="{answer}. {elaboration}",
+            slots=["answer", "elaboration"],
+            priority=8,
+            examples=["Paris. It's located in the north-central part of the country."]
+        )
+        
+        # ============================================================
         # CONTINUATION TEMPLATES (10)
         # ============================================================
         

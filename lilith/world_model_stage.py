@@ -614,6 +614,59 @@ class WorldModelStage(CognitiveStageBase):
         self.active_causal_relations.clear()
         logger.debug("Cleared world model tracking")
     
+    def bootstrap_from_seed_data(self, seed_path: Optional[Path] = None) -> int:
+        """
+        Bootstrap world model with seed data for better initial embeddings.
+        
+        Args:
+            seed_path: Path to seed JSON file (defaults to data/world_model_seed.json)
+            
+        Returns:
+            Number of situations learned
+        """
+        import json
+        
+        if seed_path is None:
+            seed_path = Path("data") / "world_model_seed.json"
+        
+        if not seed_path.exists():
+            logger.warning(f"Seed data not found: {seed_path}")
+            return 0
+        
+        try:
+            with open(seed_path, 'r') as f:
+                seed_data = json.load(f)
+            
+            count = 0
+            
+            # Load all categories of seed data
+            for category, statements in seed_data.items():
+                for statement in statements:
+                    try:
+                        # Process and store each statement
+                        situation = self.process_utterance(statement)
+                        if situation:
+                            self.learn_situation(situation, success_feedback=0.6)
+                            count += 1
+                    except Exception as e:
+                        logger.debug(f"Failed to process seed: {statement[:50]}... - {e}")
+                        continue
+            
+            # Apply plasticity update to improve embeddings
+            if count > 0 and self.plasticity_enabled:
+                try:
+                    self.apply_plasticity(success_rate=0.7)
+                    logger.debug("Applied plasticity update after bootstrap")
+                except Exception as e:
+                    logger.debug(f"Plasticity update failed: {e}")
+            
+            logger.info(f"Bootstrapped world model with {count} seed situations")
+            return count
+            
+        except Exception as e:
+            logger.error(f"Failed to load seed data: {e}")
+            return 0
+    
     def get_active_context(self) -> Dict[str, Any]:
         """Get current active world context."""
         return {

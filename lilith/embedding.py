@@ -25,7 +25,10 @@ class HashedEmbeddingEncoder:
         digest = hashlib.sha1(token.encode("utf-8")).digest()
         return int.from_bytes(digest[:4], "big") % self.dimension
 
-    def encode(self, tokens: Iterable[str]) -> torch.Tensor:
+    def encode(self, tokens: Iterable[str] | str) -> torch.Tensor:
+        # Convenience: many call sites pass raw text.
+        if isinstance(tokens, str):
+            tokens = tokens.split()
         vector = np.zeros(self.dimension, dtype=np.float32)
         for token in tokens:
             index = self._hash_token(token)
@@ -131,11 +134,11 @@ class PMFlowEmbeddingEncoder:
                 field.mus.copy_(mus)
             return field
 
-    def encode(self, tokens: Iterable[str]) -> torch.Tensor:
+    def encode(self, tokens: Iterable[str] | str) -> torch.Tensor:
         combined, _, _ = self._encode_internal(tokens)
         return combined
 
-    def encode_with_components(self, tokens: Iterable[str]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def encode_with_components(self, tokens: Iterable[str] | str) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Return embedding together with PMFlow latent and raw activations.
 
         The latent corresponds to the input fed into the PMFlow field and the
@@ -202,7 +205,9 @@ class PMFlowEmbeddingEncoder:
                 if "mus" in payload and hasattr(self.pm_field, 'mus'):
                     self.pm_field.mus.copy_(payload["mus"].to(self.device))
 
-    def _encode_internal(self, tokens: Iterable[str]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _encode_internal(self, tokens: Iterable[str] | str) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        if isinstance(tokens, str):
+            tokens = tokens.split()
         with torch.no_grad():
             base = self.base_encoder.encode(tokens).to(self.device)
             latent = base @ self._projection

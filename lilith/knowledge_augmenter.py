@@ -126,10 +126,9 @@ class WikipediaLookup:
         # Handle polar questions: "is X a Y?" or "are X Y?"
         # We want to extract X (the subject being asked about)
         polar_patterns = [
-            r'^(?:is|are|was|were)\s+(?:a|an|the)?\s*(.+?)\s+(?:a|an)\s+.+$',  # is X a Y?
-            r'^(?:is|are|was|were)\s+(.+?)\s+(?:a|an)\s+.+$',  # is X a Y? (no article before X)
-            r'^(?:is|are|was|were)\s+(?:a|an|the)?\s*(.+?)\s+\w+$',  # is X adjective?
-            r'^(?:do|does|did)\s+(?:a|an|the)?\s*(.+?)\s+(?:have|eat|live|fly|swim|run|walk|talk|speak)\b.+$',  # does X verb?
+            r'^(?:is|are|was|were)\s+(?:(?:a|an|the)\s+)?(.+?)\s+(?:a|an)\s+.+$',  # is X a Y? (with article)
+            r'^(?:is|are|was|were)\s+(?:(?:a|an|the)\s+)?(.+?)\s+(?:very\s+)?\w+\s*\??\s*$',  # is X adjective/noun?
+            r'^(?:do|does|did)\s+(?:(?:a|an|the)\s+)?(.+?)\s+(?:have|eat|live|fly|swim|run|walk|talk|speak)\b.+$',  # does X verb?
         ]
         
         for pattern in polar_patterns:
@@ -243,6 +242,71 @@ class WikipediaLookup:
         text_lower = text.lower()
         return any(pattern in text_lower for pattern in disambig_patterns)
     
+    def _extract_context_keywords(self, context: str, max_keywords: int = 20) -> Dict[str, float]:
+        """
+        Extract weighted keywords from conversation context.
+        
+        Recent messages are weighted higher than older ones.
+        Filters common stop words and question patterns.
+        
+        Args:
+            context: Full conversation context (history + query)
+            max_keywords: Maximum keywords to return
+            
+        Returns:
+            Dict mapping keyword -> weight (higher = more important)
+        """
+        if not context:
+            return {}
+        
+        # Expanded stop words list
+        stop_words = {
+            'what', 'is', 'are', 'was', 'were', 'the', 'a', 'an', 'tell', 'me', 'about', 
+            'you', 'your', 'how', 'why', 'when', 'where', 'which', 'who', 'do', 'does',
+            'did', 'can', 'could', 'would', 'should', 'have', 'has', 'had', 'of', 'in',
+            'on', 'at', 'to', 'for', 'with', 'from', 'by', 'as', 'be', 'been', 'being',
+            'it', 'this', 'that', 'these', 'those', 'i', 'my', 'we', 'our'
+        }
+        
+        # Split context into words and clean
+        words = context.lower().split()
+        
+        # Weight recent words more heavily (exponential decay)
+        # Last 10 words get full weight, earlier words decay
+        keyword_scores = {}
+        total_words = len(words)
+        
+        for i, word in enumerate(words):
+            # Clean word
+            word = word.strip('.,!?;:()\'"')
+            
+            # Skip if too short, stop word, or not alphabetic
+            if len(word) < 3 or word in stop_words or not word.isalpha():
+                continue
+            
+            # Calculate position weight (recent = higher)
+            # Words in last 20% of context get weight 1.0
+            # Earlier words decay exponentially
+            position_ratio = i / max(total_words, 1)
+            if position_ratio > 0.8:
+                weight = 1.0  # Recent words (last 20%)
+            elif position_ratio > 0.6:
+                weight = 0.7  # Semi-recent (60-80%)
+            elif position_ratio > 0.4:
+                weight = 0.4  # Middle (40-60%)
+            else:
+                weight = 0.2  # Older words (first 40%)
+            
+            # Accumulate weight for repeated words
+            if word in keyword_scores:
+                keyword_scores[word] = min(keyword_scores[word] + weight, 3.0)
+            else:
+                keyword_scores[word] = weight
+        
+        # Sort by weight and return top keywords
+        sorted_keywords = sorted(keyword_scores.items(), key=lambda x: x[1], reverse=True)
+        return dict(sorted_keywords[:max_keywords])
+    
     def _resolve_disambiguation(
         self, 
         title: str, 
@@ -253,30 +317,36 @@ class WikipediaLookup:
         Resolve disambiguation by using context from query.
         
         Strategy:
-        1. Extract disambiguation options from text
-        2. Score each option against context words
-        3. Fetch the highest-scoring option
+        1. Use Wikipedia search API to get disambiguation options
+        2. Extract weighted keywords from conversation context
+        3. Score each option against keywords
+        4. Fetch the highest-scoring option
         
         Args:
             title: Original title that was disambiguous
-            context: Original query for context clues
-            disambig_text: Disambiguation page text
+            context: Full context (conversation history + query)
+            disambig_text: Disambiguation page text (not used, kept for compatibility)
             
         Returns:
             Article dict for best match or None
         """
-        # Extract context words from original query
-        context_words = set(context.lower().split())
-        
-        # Common words to ignore
-        stop_words = {'what', 'is', 'are', 'the', 'a', 'an', 'tell', 'me', 'about', 'you', 'your'}
-        context_words = context_words - stop_words
-        
-        # Parse disambiguation options
-        options = self._parse_disambiguation_options(disambig_text)
+        # Get disambiguation options from Wikipedia search API
+        options = self._fetch_disambiguation_options(title)
         
         if not options:
+            print(f"  ⚠️  No disambiguation options found for '{title}'")
             return None
+        
+        print(f"  📋 Found {len(options)} disambiguation options for '{title}'")
+        
+        # Extract weighted keywords from conversation context
+        context_keywords = self._extract_context_keywords(context)
+        
+        if not context_keywords:
+            # Fallback to simple word extraction if no keywords found
+            context_words = set(context.lower().split())
+            stop_words = {'what', 'is', 'are', 'the', 'a', 'an', 'tell', 'me', 'about', 'you', 'your'}
+            context_keywords = {word: 1.0 for word in (context_words - stop_words)}
         
         # Initialize stemmer for better word matching (bird = birds)
         try:
@@ -287,56 +357,147 @@ class WikipediaLookup:
             stemmer = None
             use_stemming = False
         
-        # Score each option based on context overlap
+        # Score each option based on weighted context keyword overlap
         scored_options = []
         for option_title, option_desc in options:
-            # Count how many context words appear in the option description
+            # Combine title and description for scoring
+            # NOTE: OpenSearch API returns empty descriptions, so we rely mainly on titles
             desc_lower = (option_title + " " + option_desc).lower()
             desc_tokens = desc_lower.split()
             
-            score = 0
-            for word in context_words:
+            #Extract category/disambiguation hint from title (e.g., "Python (programming language)")
+            title_hint = ""
+            if '(' in option_title and ')' in option_title:
+                start = option_title.index('(')
+                end = option_title.index(')')
+                title_hint = option_title[start+1:end].lower()
+            
+            score = 0.0
+            matched_keywords = []
+            
+            # Special scoring for title hints (category indicators)
+            if title_hint:
+                # Map title hints to related keywords for boosting
+                hint_keywords = {
+                    'programming language': ['programming', 'code', 'coding', 'language', 'software', 'python'],
+                    'genus': ['snake', 'reptile', 'animal', 'species', 'python', 'snakes'],
+                    'mythology': ['myth', 'greek', 'legend', 'god', 'python'],
+                    'missile': ['weapon', 'military', 'missile', 'python'],
+                }
+                
+                for hint, keywords in hint_keywords.items():
+                    if hint in title_hint:
+                        # Check if conversation contains related keywords
+                        for kw in keywords:
+                            if kw in context_keywords:
+                                # Boost score significantly for matching hint category
+                                score += context_keywords[kw] * 5.0
+                                matched_keywords.append(f"{kw}(hint)")
+            
+            for keyword, weight in context_keywords.items():
                 # Try stem matching first (bird = birds)
                 if use_stemming:
-                    word_stem = stemmer.stem(word)
+                    keyword_stem = stemmer.stem(keyword)
                     for token in desc_tokens:
                         token_stem = stemmer.stem(token)
-                        if token_stem == word_stem:
-                            score += 3  # Highest weight for stem match
+                        if token_stem == keyword_stem:
+                            # Weighted score: weight * match_quality
+                            score += weight * 3.0  # Stem match with context weight
+                            matched_keywords.append(keyword)
                             break
                     else:
                         # No stem match, try exact/partial
-                        if word in desc_tokens:
-                            score += 2  # Exact word match
-                        elif word in desc_lower or any(word in token or token in word for token in desc_tokens):
-                            score += 1  # Partial match
+                        if keyword in desc_tokens:
+                            score += weight * 2.0  # Exact word match
+                            matched_keywords.append(keyword)
+                        elif keyword in desc_lower:
+                            score += weight * 1.0  # Partial match
+                            matched_keywords.append(keyword)
                 else:
-                    # No stemming available - use original logic
-                    if word in desc_tokens:
-                        score += 2  # Exact word match
-                    elif word in desc_lower or any(word in token or token in word for token in desc_tokens):
-                        score += 1  # Partial match
+                    # No stemming available - use direct matching
+                    if keyword in desc_tokens:
+                        score += weight * 2.0  # Exact word match
+                        matched_keywords.append(keyword)
+                    elif keyword in desc_lower:
+                        score += weight * 1.0  # Partial match
+                        matched_keywords.append(keyword)
             
-            scored_options.append((score, option_title, option_desc))
+            scored_options.append((score, option_title, option_desc, matched_keywords))
         
         # Sort by score (highest first)
         scored_options.sort(reverse=True, key=lambda x: x[0])
         
-        # Debug: Show top scoring options
+        # Debug: Show top scoring options with matched keywords
         if scored_options:
-            print(f"  📊 Disambiguation scores:")
-            for score, title, desc in scored_options[:3]:
-                print(f"     {score} pts: {title} - {desc[:50]}...")
+            print(f"  📊 Disambiguation scores (using context-aware weighting):")
+            for score, title, desc, matched in scored_options[:3]:
+                keywords_str = ", ".join(matched[:5]) if matched else "none"
+                print(f"     {score:.1f} pts: {title} - {desc[:50]}...")
+                print(f"       Matched keywords: {keywords_str}")
         
         # If top score is > 0, try to fetch that article
         if scored_options and scored_options[0][0] > 0:
             best_title = scored_options[0][1]
-            print(f"  ✨ Resolved to: '{best_title}' (score: {scored_options[0][0]})")
+            print(f"  ✨ Resolved to: '{best_title}' (score: {scored_options[0][0]:.1f})")
             
             # Fetch the resolved article (without context to avoid recursion)
             return self._fetch_article(best_title, context="")
         
         return None
+    
+    def _fetch_disambiguation_options(self, title: str) -> List[Tuple[str, str]]:
+        """
+        Fetch disambiguation options from Wikipedia search API.
+        
+        For ambiguous terms like "Python", Wikipedia search returns multiple
+        specific pages (e.g., "Python (programming language)", "Python (genus)").
+        
+        Args:
+            title: The ambiguous title to search for
+            
+        Returns:
+            List of (title, description) tuples
+        """
+        try:
+            url = "https://en.wikipedia.org/w/api.php"
+            params = {
+                'action': 'opensearch',
+                'search': title,
+                'limit': 10,
+                'namespace': 0,
+                'format': 'json'
+            }
+            headers = {'User-Agent': self.user_agent}
+            
+            response = requests.get(url, params=params, headers=headers, timeout=self.timeout)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # OpenSearch returns: [query, [titles], [descriptions], [urls]]
+                if len(data) >= 3:
+                    titles = data[1]
+                    descriptions = data[2]
+                    
+                    options = []
+                    for t, desc in zip(titles, descriptions):
+                        # Skip the main disambiguation page itself
+                        if t.lower() == title.lower() and not desc:
+                            continue
+                        
+                        # Use title as description if no description provided
+                        if not desc:
+                            desc = t
+                        
+                        options.append((t, desc))
+                    
+                    return options
+            
+            return []
+            
+        except Exception as e:
+            print(f"  ⚠️  Error fetching disambiguation options: {e}")
+            return []
     
     def _parse_disambiguation_options(self, text: str) -> List[Tuple[str, str]]:
         """
@@ -865,7 +1026,7 @@ class KnowledgeAugmenter:
             if result:
                 return result
         
-        # 2. Word definition queries -> Try Wiktionary, then Free Dictionary
+        # 2. Word definition queries -> Route intelligently based on context
         # Expanded to detect "what is X" and "what are X" patterns
         is_definition_query = (
             any(word in query_lower for word in ['mean', 'define', 'definition', 'meaning']) or
@@ -873,7 +1034,14 @@ class KnowledgeAugmenter:
         )
         
         if is_definition_query:
-            # For single-word topics, try dictionary sources first
+            # For single-word topics with conversation context, try Wikipedia first
+            # (better disambiguation for ambiguous terms like "Python")
+            if topic and ' ' not in topic and conversation_history:
+                result = self._try_wikipedia(query, conversation_history, min_confidence)
+                if result:
+                    return result
+            
+            # For single-word topics without context, try dictionary sources first
             if topic and ' ' not in topic:
                 # Try Wiktionary first (more comprehensive)
                 result = self._try_wiktionary(query, min_confidence)

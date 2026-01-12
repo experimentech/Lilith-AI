@@ -16,6 +16,12 @@ from typing import Optional, List, Tuple, Dict
 import numpy as np
 
 QUIET = os.getenv("LILITH_QUIET", "").lower() in {"1", "true", "yes", "on", "quiet"}
+TRACE_CONCEPT_SUBJECT = os.getenv("LILITH_TRACE_CONCEPT_SUBJECT", "").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 
 def _log(msg: str) -> None:
@@ -528,6 +534,18 @@ class MultiTenantFragmentStore:
                 from .semantic_extractor import SemanticExtractor
                 
                 extractor = SemanticExtractor()
+
+                # Optional trace: shows how the concept "term" label is derived from the query.
+                # This does not change pattern storage (BioNN retrieval still sees the raw query).
+                if TRACE_CONCEPT_SUBJECT:
+                    try:
+                        raw_query = query
+                        cleaned_subject = extractor._extract_subject_from_query(query)
+                        if cleaned_subject and cleaned_subject != raw_query:
+                            _log(f"  🧭 Concept subject: raw='{raw_query}' → term='{cleaned_subject}'")
+                    except Exception:
+                        pass
+
                 concepts = extractor.extract_concepts(query, response_text)
                 
                 if concepts:
@@ -648,3 +666,68 @@ class MultiTenantFragmentStore:
             return None
         
         return self.pattern_extractor.get_pattern_stats()
+    
+    def get_stats(self) -> Dict:
+        """
+        Get comprehensive statistics for multi-tenant store.
+        
+        Returns:
+            Dictionary with stats from both user and base stores
+        """
+        stats = {
+            'total': 0,
+            'user_patterns': 0,
+            'base_patterns': 0,
+            'by_intent': {},
+            'avg_success_score': 0.0,
+            'user_store': None,
+            'base_store': None
+        }
+        
+        # Get base store stats
+        if hasattr(self.base_store, 'get_stats'):
+            base_stats = self.base_store.get_stats()
+            stats['base_patterns'] = base_stats.get('total_patterns', 0)
+            stats['base_store'] = base_stats
+        
+        # Get user store stats (if exists)
+        if self.user_store and hasattr(self.user_store, 'get_stats'):
+            user_stats = self.user_store.get_stats()
+            stats['user_patterns'] = user_stats.get('total_patterns', 0)
+            stats['user_store'] = user_stats
+            
+            # Merge intent counts
+            for intent, data in user_stats.get('by_intent', {}).items():
+                if intent in stats['by_intent']:
+                    stats['by_intent'][intent]['count'] += data['count']
+                else:
+                    stats['by_intent'][intent] = data.copy()
+        
+        # Merge base intent counts
+        if stats['base_store']:
+            for intent, data in stats['base_store'].get('by_intent', {}).items():
+                if intent in stats['by_intent']:
+                    stats['by_intent'][intent]['count'] += data['count']
+                else:
+                    stats['by_intent'][intent] = data.copy()
+        
+        # Calculate totals
+        stats['total'] = stats['user_patterns'] + stats['base_patterns']
+        
+        # Calculate weighted average success score
+        total_patterns = stats['total']
+        if total_patterns > 0:
+            user_contrib = 0.0
+            base_contrib = 0.0
+            
+            if stats['user_store'] and stats['user_patterns'] > 0:
+                user_contrib = (stats['user_store'].get('avg_success_score', 0.0) * 
+                              stats['user_patterns'])
+            
+            if stats['base_store'] and stats['base_patterns'] > 0:
+                base_contrib = (stats['base_store'].get('avg_success_score', 0.0) * 
+                              stats['base_patterns'])
+            
+            stats['avg_success_score'] = (user_contrib + base_contrib) / total_patterns
+        
+        return stats

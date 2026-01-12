@@ -105,6 +105,7 @@ class ComposedResponse:
     is_fallback: bool = False          # Whether this was a fallback response
     is_low_confidence: bool = False    # Whether best pattern was below threshold
     modality: Optional['Modality'] = None  # Query modality (LINGUISTIC, MATH, CODE, etc.)
+    trace: Optional[List[Dict[str, Any]]] = None  # Optional decision trace for debugging
     
 
 class ResponseComposer:
@@ -133,6 +134,8 @@ class ResponseComposer:
         enable_pragmatic_templates: bool = True,
         knowledge_timeout_seconds: float = 3.0,
         enable_world_model: bool = False,
+        enable_reasoning: bool = True,
+        enable_trace: bool = False,
         data_path: str = "data"
     ):
         """
@@ -162,6 +165,10 @@ class ResponseComposer:
         self.state = conversation_state
         self.conversation_history = conversation_history
         self.composition_mode = composition_mode
+
+        # Optional per-call decision trace (debugging / observability)
+        self.enable_trace = enable_trace
+        self._trace_log: List[Dict[str, Any]] = []
         
         # Store semantic encoder for later use (relevance validation, etc.)
         self.semantic_encoder = semantic_encoder
@@ -232,7 +239,7 @@ class ResponseComposer:
         
         # Initialize reasoning stage for deliberative thinking
         self.reasoning_stage = None
-        if REASONING_AVAILABLE and semantic_encoder is not None:
+        if enable_reasoning and REASONING_AVAILABLE and semantic_encoder is not None:
             try:
                 self.reasoning_stage = ReasoningStage(
                     encoder=semantic_encoder,
@@ -301,6 +308,182 @@ class ResponseComposer:
         self.last_query = None
         self.last_response = None
         self.last_approach = None  # 'pattern', 'concept', 'parallel', or 'math'
+
+    def _trace(self, event: str, **data: Any) -> None:
+        if not self.enable_trace:
+            return
+        payload: Dict[str, Any] = {"event": event}
+        payload.update(data)
+        self._trace_log.append(payload)
+
+    def _return(self, response: ComposedResponse) -> ComposedResponse:
+        if self.enable_trace:
+            response.trace = list(self._trace_log)
+        return response
+
+    def _extract_word_list(self, text: str) -> List[str]:
+        """Extract a deterministic list of content words from a phrase."""
+        parts = re.split(r"[,:;\s]+", text.strip())
+        words = [p.strip("\"'()[]{}.!? ").lower() for p in parts if p.strip()]
+        stop = {
+            "the", "a", "an", "and", "or", "but", "with", "about", "of", "to", "in",
+            "on", "at", "for", "from", "into", "through", "over", "under", "up", "down",
+            "please", "can", "could", "would", "will", "you", "me", "my", "your", "now",
+            "make", "invent", "new", "sentence", "using", "words", "tell", "short",
+        }
+        out: List[str] = []
+        for w in words:
+            if not w or w in stop:
+                continue
+            if w not in out:
+                out.append(w)
+        return out
+
+    def _is_language_capability_response(self, response: ComposedResponse) -> bool:
+        """True if the response comes from the minimal language capability handler."""
+        if not response.fragment_ids:
+            return False
+        fid = response.fragment_ids[0]
+        return fid in {"rewrite", "generated_sentence_about", "generated_sentence_words"}
+
+    def _generate_sentence(self, *, topic: Optional[str] = None, words: Optional[List[str]] = None) -> str:
+        """Generate a simple, grammatical sentence without templates/LLMs.
+
+        This is intentionally minimal: it uses syntax-stage correction when available
+        and stays deterministic for testability.
+        """
+        chosen_words = [w for w in (words or []) if w]
+        if topic and topic.strip():
+            chosen_words = [topic.strip().lower()] + chosen_words
+
+        picked = chosen_words[:3]
+        if not picked and topic:
+            picked = [topic.strip().lower()]
+
+        if not picked:
+            return "I can do that. Tell me a topic or a few words to use."
+
+        if len(picked) == 1:
+            base = f"{picked[0].capitalize()} can feel quiet up close."
+        elif len(picked) == 2:
+            subj, verbish = picked[0], picked[1]
+            if verbish.endswith("ed"):
+                base = f"The {subj} {verbish} at dusk."
+            else:
+                base = f"The {subj} drifts with {verbish}."
+        else:
+            a, b, c = picked[0], picked[1], picked[2]
+            # Keep deterministic + simple, but avoid awkward repetition ("..., drift.")
+            # This also ensures we literally include all three words in the output.
+            if b.endswith("ed"):
+                base = f"The {a} {b} in the {c}."
+            else:
+                base = f"The {a} moves with {b} in the {c}."
+
+        if self.syntax_stage:
+            try:
+                base = self.syntax_stage.check_and_correct(base)
+            except Exception:
+                pass
+
+        if base and base[-1] not in ".!?":
+            base += "."
+        return base
+
+    def _rewrite_sentence(self, sentence: str) -> str:
+        """A tiny, deterministic rewrite pass for explicit rewrite requests."""
+        s = sentence.strip().strip("\"'")
+        if not s:
+            return "Tell me the sentence you want rephrased."
+
+        swaps = {
+            " sat on ": " rested on ",
+            " on the ": " upon the ",
+            " in the ": " within the ",
+        }
+        normalized = f" {s} "
+        for k, v in swaps.items():
+            normalized = normalized.replace(k, v)
+        out = normalized.strip()
+
+        if self.syntax_stage:
+            try:
+                out = self.syntax_stage.check_and_correct(out)
+            except Exception:
+                pass
+
+        if out and out[-1] not in ".!?":
+            out += "."
+        return out
+
+    def _compose_language_capability(self, user_input: str) -> Optional[ComposedResponse]:
+        """Handle simple language capability requests (generation/rewrite)."""
+        text = user_input.strip()
+        lower = text.lower().strip()
+
+        # Rephrase / rewrite
+        m = re.search(r"rephrase\s*:\s*(.+)$", text, flags=re.IGNORECASE)
+        if not m:
+            m = re.search(r"rephrase\s+['\"](.+?)['\"]\s*$", text, flags=re.IGNORECASE)
+        if m:
+            original = m.group(1).strip()
+            rewritten = self._rewrite_sentence(original)
+            self._trace("capability.rephrase", original=original, rewritten=rewritten)
+            return ComposedResponse(
+                text=rewritten,
+                fragment_ids=["rewrite"],
+                composition_weights=[1.0],
+                coherence_score=0.85,
+                primary_pattern=None,
+                confidence=0.85,
+                is_fallback=False,
+                is_low_confidence=False,
+            )
+
+        # "sentence about <topic>"
+        m = re.search(r"sentence\s+about\s+(.+?)(?:\?|\.|$)", lower)
+        if m:
+            topic_raw = m.group(1).strip()
+            topic_words = self._extract_word_list(topic_raw)
+            topic = topic_words[0] if topic_words else topic_raw
+            out = self._generate_sentence(topic=topic)
+            self._trace("capability.sentence_about", topic=topic, generated=out)
+            return ComposedResponse(
+                text=out,
+                fragment_ids=["generated_sentence_about"],
+                composition_weights=[1.0],
+                coherence_score=0.80,
+                primary_pattern=None,
+                confidence=0.80,
+                is_fallback=False,
+                is_low_confidence=False,
+            )
+
+        # "using the words: a, b, c" or "new sentence with a and b"
+        m = re.search(r"using\s+the\s+words\s*:\s*(.+)$", lower)
+        words: List[str] = []
+        if m:
+            words = self._extract_word_list(m.group(1))
+        else:
+            m2 = re.search(r"new\s+sentence\s+with\s+(.+?)(?:\?|\.|$)", lower)
+            if m2:
+                words = self._extract_word_list(m2.group(1))
+
+        if words:
+            out = self._generate_sentence(words=words)
+            self._trace("capability.sentence_using_words", words=words, generated=out)
+            return ComposedResponse(
+                text=out,
+                fragment_ids=["generated_sentence_words"],
+                composition_weights=[1.0],
+                coherence_score=0.80,
+                primary_pattern=None,
+                confidence=0.80,
+                is_fallback=False,
+                is_low_confidence=False,
+            )
+
+        return None
 
     def _ensure_knowledge_augmenter(self):
         """Lazily instantiate knowledge augmenter to avoid startup cost."""
@@ -460,6 +643,14 @@ class ResponseComposer:
         """
         # Track query for success learning
         self.last_query = user_input if user_input else context
+
+        # Reset trace for this call
+        self._trace_log = []
+        self._trace(
+            "compose.start",
+            composition_mode=self.composition_mode,
+            user_input=user_input,
+        )
         
         # FAST-TRACK: Handle simple greetings immediately without heavy processing
         if user_input:
@@ -472,11 +663,11 @@ class ResponseComposer:
                     if greeting_response and greeting_response.confidence > 0.70:
                         self.last_response = greeting_response
                         self.last_approach = 'pragmatic'
-                        return greeting_response
+                        return self._return(greeting_response)
                 # Fallback to simple greeting response
                 greeting_texts = ["Hello! How can I help you?", "Hi! What would you like to talk about?", "Hey! What's up?"]
                 import random
-                return ComposedResponse(
+                return self._return(ComposedResponse(
                     text=random.choice(greeting_texts),
                     fragment_ids=["greeting_fasttrack"],
                     composition_weights=[1.0],
@@ -485,7 +676,7 @@ class ResponseComposer:
                     confidence=0.95,
                     is_fallback=False,
                     is_low_confidence=False
-                )
+                ))
         
         # MODAL ROUTING: Check if query is mathematical/code/etc.
         if self.modal_classifier and user_input:
@@ -497,24 +688,63 @@ class ResponseComposer:
                 if math_response:  # Math computation succeeded
                     self.last_response = math_response
                     self.last_approach = 'math'
-                    return math_response
+                    return self._return(math_response)
                 # If math backend failed, fall through to linguistic
         
         # PRAGMATIC MODE: Use template + concept composition (Layer 4 restructured)
         # BUT: Don't immediately return - compare with pattern-based approach
         pragmatic_response = None
-        if self.composition_mode == "pragmatic" and self.pragmatic_templates and self.concept_store:
+        if self.composition_mode == "pragmatic" and self.pragmatic_templates:
             pragmatic_response = self._compose_with_pragmatic_templates(context, user_input)
             # Don't return yet - compare with pattern-based first
+            self._trace(
+                "compose.pragmatic_candidate",
+                present=bool(pragmatic_response),
+                confidence=getattr(pragmatic_response, "confidence", None) if pragmatic_response else None,
+                fragment_ids=getattr(pragmatic_response, "fragment_ids", None) if pragmatic_response else None,
+            )
+
+            # If the pragmatic candidate is a language capability response (rewrite/generation),
+            # short-circuit: pattern retrieval is known to score low on these instruction-style prompts
+            # and adds noise + latency without improving quality.
+            if pragmatic_response and self._is_language_capability_response(pragmatic_response):
+                # If we've previously written back a learned pattern for this prompt (or a near-exact
+                # match exists), prefer that high-confidence retrieval. This keeps capability bootstraps
+                # integrated with the normal memory substrate.
+                learned_override = self._try_high_confidence_retrieval(user_input=user_input)
+                if learned_override is not None:
+                    self._trace(
+                        "compose.capability_overridden_by_pattern",
+                        chosen_fragment_id=learned_override.fragment_ids[0],
+                        confidence=learned_override.confidence,
+                    )
+                    return self._return(learned_override)
+
+                self._trace(
+                    "compose.pattern_skipped",
+                    reason="language_capability",
+                    chosen_fragment_id=pragmatic_response.fragment_ids[0],
+                )
+                self.last_response = pragmatic_response
+                self.last_approach = 'pragmatic'
+                self.metrics['pragmatic_count'] = self.metrics.get('pragmatic_count', 0) + 1
+                return self._return(pragmatic_response)
         
         # PARALLEL MODE: Try both pattern-based AND concept-based approaches
         if self.composition_mode == "parallel" and self.concept_store is not None:
-            return self._compose_parallel(context, user_input, topk)
+            return self._return(self._compose_parallel(context, user_input, topk))
         
         # Standard pattern-based composition
         pattern_response = self._compose_from_patterns_internal(
             context, user_input, topk, 
             use_intent_filtering, use_semantic_retrieval, semantic_weight
+        )
+        self._trace(
+            "compose.pattern_result",
+            confidence=getattr(pattern_response, "confidence", None),
+            is_fallback=getattr(pattern_response, "is_fallback", None),
+            is_low_confidence=getattr(pattern_response, "is_low_confidence", None),
+            fragment_ids=getattr(pattern_response, "fragment_ids", None),
         )
         
         # PRAGMATIC MODE: Compare pragmatic vs pattern-based
@@ -533,22 +763,58 @@ class ResponseComposer:
                 self.last_response = pragmatic_response
                 self.last_approach = 'pragmatic'
                 self.metrics['pragmatic_count'] = self.metrics.get('pragmatic_count', 0) + 1
-                return pragmatic_response
+                return self._return(pragmatic_response)
             elif pattern_response.confidence > 0.85:
                 # Pattern has very high confidence (exact/near-exact match) - prefer it
                 print(f"  → Using pattern (very high confidence: {pattern_response.confidence:.3f})")
-                return pattern_response
+                return self._return(pattern_response)
             elif pragmatic_response.confidence > pattern_response.confidence + 0.15:
                 # Pragmatic is significantly better - use it
                 print(f"  → Using template (significantly better)")
                 self.last_response = pragmatic_response
                 self.last_approach = 'pragmatic'
                 self.metrics['pragmatic_count'] = self.metrics.get('pragmatic_count', 0) + 1
-                return pragmatic_response
+                return self._return(pragmatic_response)
             # Otherwise use pattern-based (comparable confidence)
             print(f"  → Using pattern (comparable/better confidence)")
         
-        return pattern_response
+        return self._return(pattern_response)
+
+    def _try_high_confidence_retrieval(self, *, user_input: str) -> Optional[ComposedResponse]:
+        """Attempt a very-high-confidence direct retrieval.
+
+        Used primarily to let written-back capability behaviors become retrievable
+        without paying the full pattern/semantic pipeline cost.
+        """
+
+        if not user_input:
+            return None
+
+        if not hasattr(self.fragments, "retrieve_patterns"):
+            return None
+
+        try:
+            patterns = self.fragments.retrieve_patterns(user_input, topk=1, min_score=0.85)
+        except Exception:
+            return None
+
+        if not patterns:
+            return None
+
+        best_pattern, best_score = patterns[0]
+        if best_score < 0.85:
+            return None
+
+        return ComposedResponse(
+            text=best_pattern.response_text,
+            fragment_ids=[best_pattern.fragment_id],
+            composition_weights=[best_score],
+            coherence_score=best_score,
+            primary_pattern=best_pattern,
+            confidence=best_score,
+            is_fallback=False,
+            is_low_confidence=False,
+        )
     
     def _compose_from_patterns_internal(
         self,
@@ -572,6 +838,11 @@ class ResponseComposer:
             cleaned_user_input = self.normalizer.clean_query(user_input)
             if cleaned_user_input.lower() != user_input.lower().strip():
                 print(f"  🧹 Cleaned query: '{user_input}' → '{cleaned_user_input}'")
+        self._trace(
+            "intake.cleaned",
+            original=user_input,
+            cleaned=cleaned_user_input,
+        )
         
         # 0.5 CONVERSATION HISTORY: Check for repetition and build conversational context
         # This enables "As you mentioned..." style continuity and prevents repetitive responses
@@ -582,6 +853,11 @@ class ResponseComposer:
         if self.conversation_history and cleaned_user_input:
             # Check if user is repeating themselves
             is_repetition = self.conversation_history.detect_repetition(cleaned_user_input)
+
+            self._trace(
+                "history.repetition_check",
+                is_repetition=is_repetition,
+            )
             
             if is_repetition:
                 print(f"  🔁 Detected query repetition - varying response")
@@ -736,8 +1012,15 @@ class ResponseComposer:
         # 3.6 PROACTIVE KNOWLEDGE AUGMENTATION for unknown topics
         # If deliberation couldn't find relevant concepts, try learning about the topic
         # BEFORE falling back to pattern matching (which might hallucinate)
+        # BUT: Only for questions, not declarative statements (which go to declarative learning)
         aug_for_unknowns = self._ensure_knowledge_augmenter()
-        if deliberation_failed_relevance and aug_for_unknowns and user_input:
+        
+        # Check if this is actually a question or a declarative statement
+        cleaned_user_input = user_input.strip() if user_input else ""
+        is_question = any(q in cleaned_user_input.lower() for q in ['?', 'what', 'where', 'when', 'who', 'how', 'why', 'which', 'whose', 'whom'])
+        
+        # Only trigger knowledge augmentation for questions about unknown topics
+        if deliberation_failed_relevance and aug_for_unknowns and user_input and is_question:
             print(f"  🔍 Attempting proactive knowledge lookup for unknown topic...")
             filled_response = self._fill_gaps_and_retry(user_input)
             if filled_response and filled_response.confidence >= 0.6:
@@ -767,6 +1050,11 @@ class ResponseComposer:
                     is_fallback=True,
                     is_low_confidence=False
                 )
+        elif deliberation_failed_relevance and not is_question:
+            # This is a declarative statement about an unknown topic
+            # Let declarative learning handle it instead of knowledge augmentation
+            print(f"  💬 Declarative statement about unknown topic - deferring to declarative learning")
+
         
         # 4. RETRIEVE PATTERNS - Choose method based on configuration  
         # MULTI-TURN COHERENCE: Use enriched context (includes history + topics)
@@ -870,6 +1158,13 @@ class ResponseComposer:
         # 2d. Check if best pattern has sufficient relevance
         # If not, provide a graceful fallback instead of hallucinating
         best_pattern, best_score = patterns[0]
+        self._trace(
+            "patterns.best",
+            pattern_id=getattr(best_pattern, "pattern_id", None),
+            fragment_id=getattr(best_pattern, "fragment_id", None),
+            score=float(best_score),
+            usage_count=getattr(best_pattern, "usage_count", None),
+        )
         
         # CONVERSATION HISTORY: Avoid repeating exact same response for repeated queries
         # If user is repeating their question, try a different pattern or add variation
@@ -895,8 +1190,18 @@ class ResponseComposer:
         else:
             # Established pattern - use stricter threshold
             confidence_threshold = 0.80
+
+        self._trace(
+            "patterns.threshold",
+            threshold=float(confidence_threshold),
+        )
         
         if best_score < confidence_threshold:
+            self._trace(
+                "patterns.low_confidence",
+                score=float(best_score),
+                threshold=float(confidence_threshold),
+            )
             # Before falling back, check if world model has relevant information
             # NOTE: Disabled for now - world model matching needs improvement
             # The similarity threshold is too loose and returns unrelated patterns
@@ -2325,7 +2630,7 @@ class ResponseComposer:
                             concept_relevance = float(np.dot(query_norm, concept_norm))
                             
                             # Reject if concept isn't actually relevant to the query
-                            if concept_relevance < 0.5:
+                            if concept_relevance < 0.75:
                                 print(f"  ⚠️ Rejecting concept '{db_concept.term}' - low relevance to query ({concept_relevance:.3f})")
                                 continue
                         
@@ -2410,6 +2715,11 @@ class ResponseComposer:
         # Get appropriate pragmatic template
         if not self.pragmatic_templates:
             return None
+
+        # Language capability requests (generation/rewrite) don't require semantic knowledge.
+        cap = self._compose_language_capability(user_input)
+        if cap is not None:
+            return cap
         
         template = self.pragmatic_templates.match_best_template(category, available_slots)
         if not template:
@@ -2594,8 +2904,13 @@ class ResponseComposer:
         Returns:
             Composed response or None if can't compose
         """
-        if not self.pragmatic_templates or not self.concept_store:
+        if not self.pragmatic_templates:
             return None
+
+        # Language capability requests (generation/rewrite) don't require semantic knowledge.
+        cap = self._compose_language_capability(user_input)
+        if cap is not None:
+            return cap
         
         # Step 1: Detect conversational category from history
         category = self._detect_conversation_category(user_input)

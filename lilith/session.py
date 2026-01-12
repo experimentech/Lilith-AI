@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 import re
+from collections import deque
 
 import torch
 
@@ -67,6 +68,34 @@ class SessionConfig:
 
     # Preference learning (interests/avoid topics)
     enable_preferences: bool = False
+    
+    # World model (spatial/temporal/causal grounding)
+    enable_world_model: bool = True
+
+    # Reasoning stage (deliberative thinking). Can be disabled to prefer direct pattern/template composition.
+    enable_reasoning: bool = True
+
+    # Debugging / observability
+    enable_composition_trace: bool = False
+
+    # Capability integration: optionally write deterministic capability outputs
+    # back into the pattern store so they become retrievable/learnable.
+    enable_capability_writeback: bool = False
+    capability_writeback_min_confidence: float = 0.7
+    capability_writeback_intent: str = "language_capability"
+
+    # Optional DB-backed memory leaf event log (modality-agnostic substrate)
+    enable_memory_leaf_event_log: bool = False
+    memory_leaf_db_name: str = "memory_leaf.db"
+    memory_leaf_store_user_turns: bool = True
+    memory_leaf_store_assistant_turns: bool = True
+
+    # MCP tool stream (remote MCP endpoints as an additional I/O stream)
+    enable_mcp_tool_stream: bool = False
+    mcp_endpoints: Optional[list] = None  # list of {"name": str, "url": str}
+    mcp_max_tools_per_turn: int = 2
+    mcp_timeout_seconds: float = 2.5
+    mcp_cache_ttl_seconds: float = 60.0
 
 
 @dataclass
@@ -82,6 +111,7 @@ class SessionResponse:
     learned_fact: Optional[str] = None  # If declarative learning occurred
     personality: Optional[PersonalityProfile] = None  # Optional personality metadata
     mood: Optional[MoodState] = None  # Optional mood metadata for UI/UX
+    trace: Optional[list] = None  # Optional ResponseComposer decision trace
 
 
 class LilithSession:
@@ -130,6 +160,30 @@ class LilithSession:
         self.display_name = display_name
         self.config = config or SessionConfig()
 
+        # Optional MCP tool stream (remote endpoints)
+        self.mcp_tool_stream = None
+        if self.config.enable_mcp_tool_stream and self.config.mcp_endpoints:
+            try:
+                from lilith.mcp_tool_stream import MCPRemoteEndpoint, MCPToolStream
+
+                endpoints = []
+                for item in list(self.config.mcp_endpoints or []):
+                    if not isinstance(item, dict):
+                        continue
+                    name = str(item.get("name") or "").strip()
+                    url = str(item.get("url") or "").strip()
+                    if name and url:
+                        endpoints.append(MCPRemoteEndpoint(name=name, url=url))
+
+                if endpoints:
+                    self.mcp_tool_stream = MCPToolStream(
+                        endpoints,
+                        timeout_seconds=float(self.config.mcp_timeout_seconds),
+                        cache_ttl_seconds=float(self.config.mcp_cache_ttl_seconds),
+                    )
+            except Exception:
+                self.mcp_tool_stream = None
+
         # Preference learner (optional)
         self.preference_learner = None
         self.user_preferences = None
@@ -141,6 +195,34 @@ class LilithSession:
         
         # Initialize encoder
         self.encoder = PMFlowEmbeddingEncoder()
+
+        # Optional modality-agnostic memory leaf (DB-backed, embedding-addressable)
+        self.memory_leaf_adapter = None
+        self._memory_leaf_store = None
+        self._memory_leaf_scenario = None
+        if self.config.enable_memory_leaf_event_log:
+            try:
+                from lilith.memory import MemoryEvent, MemoryLeaf, MemoryLeafAdapter
+                from lilith.storage.sqlite_memory_store import SQLiteMemoryStore
+
+                user_root = Path(self.config.data_path) / "users" / self.user_id
+                user_root.mkdir(parents=True, exist_ok=True)
+                memory_db_path = user_root / self.config.memory_leaf_db_name
+
+                self._memory_leaf_store = SQLiteMemoryStore(memory_db_path)
+                self._memory_leaf_scenario = self.context_id
+                leaf = MemoryLeaf(
+                    store=self._memory_leaf_store,
+                    encoder=self.encoder,
+                    scenario=self._memory_leaf_scenario,
+                )
+                self.memory_leaf_adapter = MemoryLeafAdapter(leaf)
+                self._MemoryEvent = MemoryEvent
+            except Exception:
+                # Memory leaf is optional and should never block sessions.
+                self.memory_leaf_adapter = None
+                self._memory_leaf_store = None
+                self._memory_leaf_scenario = None
         
         # Use provided store or create default
         self.store = store
@@ -179,10 +261,6 @@ class LilithSession:
         if self.config.enable_preferences and self.personality_profile and self.user_preferences:
             self.personality_profile.interests = list(self.user_preferences.interests)
             self.personality_profile.aversions = list(self.user_preferences.aversions)
-        
-        # Wire personality bias into composer for limbic-style BNN modulation
-        if self.config.enable_personality:
-            self.composer._personality_bias_fn = self._compute_personality_bias
         
         # Initialize pragmatic templates (Layer 4: linguistic patterns)
         pragmatic_templates = None
@@ -233,8 +311,16 @@ class LilithSession:
             concept_store=concept_store,
             pragmatic_templates=pragmatic_templates,
             enable_pragmatic_templates=self.config.enable_pragmatic_templates,
-            composition_mode=self.config.composition_mode
+            composition_mode=self.config.composition_mode,
+            enable_world_model=self.config.enable_world_model,
+            enable_reasoning=self.config.enable_reasoning,
+            enable_trace=self.config.enable_composition_trace,
+            data_path=self.config.data_path
         )
+        
+        # Wire personality bias into composer for limbic-style BNN modulation (after composer exists)
+        if self.config.enable_personality:
+            self.composer._personality_bias_fn = self._compute_personality_bias
         
         # Load contrastive weights if available
         contrastive_path = Path(self.config.data_path) / "contrastive_learner"
@@ -293,6 +379,10 @@ class LilithSession:
         self.last_pattern_id = None
         self.last_user_input = None
         self.last_response_text = None
+
+        # Eligibility trace: retain a small buffer of recent decision contexts so
+        # delayed feedback can reinforce the correct prior associations.
+        self._eligibility_buffer = deque(maxlen=25)
     
     def process_message(self, content: str, passive_mode: bool = False) -> SessionResponse:
         """
@@ -306,6 +396,9 @@ class LilithSession:
             SessionResponse with text and metadata
         """
         learned_fact = None
+
+        # Optional: log incoming observation to the DB-backed memory leaf.
+        self._emit_memory_turn(role="user", text=content)
         
         # Detect and learn from declarative statements
         if self.config.learning_enabled and self.config.enable_declarative_learning:
@@ -313,6 +406,35 @@ class LilithSession:
         
         # Update conversation state for topic tracking and pronoun resolution
         enriched_context = self._update_conversation_context(content)
+
+        # Optional: fetch MCP tool observations as an additional stream.
+        # This is data-driven: tools are discovered via tools/list and selected via metadata.
+        tool_context = ""
+        if self.mcp_tool_stream is not None:
+            try:
+                from lilith.mcp_tool_stream import summarize_tool_results
+
+                results = self.mcp_tool_stream.call_selected(
+                    content,
+                    topk=int(self.config.mcp_max_tools_per_turn),
+                )
+                tool_context = summarize_tool_results(results)
+
+                # Also emit tool observations into the memory leaf (if enabled).
+                if tool_context:
+                    self._emit_memory_turn(
+                        role="assistant",
+                        text=tool_context,
+                        extra={
+                            "source": "mcp_tool_stream",
+                            "tool_count": len([r for r in results if getattr(r, "ok", False)]),
+                        },
+                    )
+            except Exception:
+                tool_context = ""
+
+        if tool_context:
+            enriched_context = f"{enriched_context}\n\n{tool_context}".strip()
 
         # Learn preferences (name, interests, aversions) from the incoming text
         learned_preferences = self._process_preferences(content)
@@ -369,6 +491,24 @@ class LilithSession:
         
         # Generate response using enriched context (includes topic history for pronoun resolution)
         response = self.composer.compose_response(context=enriched_context, user_input=content)
+
+        # Record eligibility context for delayed credit assignment.
+        self._record_eligibility(content, response)
+
+        # Optional: write deterministic capability outputs back into the pattern store.
+        if self.config.learning_enabled:
+            self._maybe_writeback_capability(content, response)
+
+        # Optional: log assistant output to the DB-backed memory leaf.
+        self._emit_memory_turn(
+            role="assistant",
+            text=getattr(response, "text", ""),
+            extra={
+                "pattern_id": (response.fragment_ids[0] if getattr(response, "fragment_ids", None) else None),
+                "confidence": float(getattr(response, "confidence", 0.0) or 0.0),
+                "is_fallback": bool(getattr(response, "is_fallback", False)),
+            },
+        )
 
         # Gentle bias: adjust confidence by learned interests/aversions on primary intent
         if getattr(response, "primary_pattern", None):
@@ -435,15 +575,21 @@ class LilithSession:
             self._apply_plasticity()
 
         if self.config.enable_mood:
-            # Compute sentiment from BNN embedding instead of keywords
+            # Prefer BNN-derived sentiment when it produces a strong signal.
+            # Otherwise fall back to lightweight text heuristics so mood updates
+            # remain intuitive even with deterministic/weak embeddings.
+            sentiment_score = None
             try:
                 from lilith.personality import compute_sentiment_from_embedding
                 content_emb = self.encoder.encode(content)
-                sentiment_score = compute_sentiment_from_embedding(content_emb, self.encoder)
-                self.mood_state = update_mood_state(self.mood_state, sentiment_score)
+                sentiment_score = float(compute_sentiment_from_embedding(content_emb, self.encoder))
             except Exception:
-                # Fallback: just decay mood
-                self.mood_state = update_mood_state(self.mood_state, 0.0)
+                sentiment_score = None
+
+            if sentiment_score is None or (-0.5 < sentiment_score < 0.5):
+                self.mood_state = update_mood_state(self.mood_state, content)
+            else:
+                self.mood_state = update_mood_state(self.mood_state, sentiment_score)
             
             # Limbic-style modulation: adjust confidence with mood
             response.confidence = max(0.0, min(1.0, response.confidence * mood_confidence_scale(self.mood_state)))
@@ -458,7 +604,131 @@ class LilithSession:
             learned_fact=learned_fact,
             personality=self.personality_profile if self.config.enable_personality else None,
             mood=self.mood_state if self.config.enable_mood else None,
+            trace=getattr(response, 'trace', None),
         )
+
+    def _record_eligibility(self, user_input: str, response: Any) -> None:
+        """Record a compact trace of what was used to answer.
+
+        This is used to map later feedback back to the correct decision context.
+        """
+
+        try:
+            # Data-driven label of what won routing for this turn.
+            # This is intentionally an opaque string ("pattern", "pragmatic", "math", etc.)
+            # so adding new routes does not require updating session logic.
+            channel = getattr(self.composer, "last_approach", None)
+            fragment_ids = list(getattr(response, "fragment_ids", []) or [])
+            weights = list(getattr(response, "composition_weights", []) or [])
+            self._eligibility_buffer.append(
+                {
+                    "channel": channel,
+                    "user_input": user_input,
+                    "response_text": getattr(response, "text", ""),
+                    "fragment_ids": fragment_ids,
+                    "weights": weights,
+                }
+            )
+        except Exception:
+            return
+
+    def _find_eligibility_record(self, pattern_id: str) -> Optional[Dict[str, Any]]:
+        """Find the most recent eligibility record containing the given fragment id."""
+
+        if not pattern_id:
+            return None
+
+        for record in reversed(self._eligibility_buffer):
+            try:
+                if pattern_id in (record.get("fragment_ids") or []):
+                    return record
+            except Exception:
+                continue
+
+        # Fallback: if we can't locate by fragment id (e.g., some callers pass
+        # a computed/non-stored id), use the most recent eligibility record.
+        # This keeps delayed feedback usable without encoding modality-specific rules.
+        try:
+            return self._eligibility_buffer[-1] if self._eligibility_buffer else None
+        except Exception:
+            return None
+        return None
+
+    def _is_language_capability_fragment(self, fragment_id: Optional[str]) -> bool:
+        if not fragment_id:
+            return False
+        return fragment_id in {"rewrite", "generated_sentence_about", "generated_sentence_words"} or fragment_id.startswith(
+            "capability_"
+        )
+
+    def _maybe_writeback_capability(self, user_input: str, response: Any) -> None:
+        """Write back deterministic language capability responses into the pattern store.
+
+        This bridges the bootstrap capability path into the same memory substrate used
+        by retrieval/learning, keeping behavior aligned with the BioNN+DB philosophy.
+        """
+
+        if not self.config.enable_capability_writeback:
+            return
+        if not self.config.learning_enabled:
+            return
+
+        fragment_ids = list(getattr(response, "fragment_ids", []) or [])
+        if not fragment_ids or not self._is_language_capability_fragment(fragment_ids[0]):
+            return
+
+        confidence = float(getattr(response, "confidence", 0.0) or 0.0)
+        if confidence < float(self.config.capability_writeback_min_confidence):
+            return
+
+        if not hasattr(self.store, "add_pattern"):
+            return
+
+        # Seed with confidence, then limbic-gate the initial prior.
+        seeded = max(0.0, min(1.0, confidence))
+        seeded = self._limbic_reinforcement_scale(
+            text=user_input,
+            base_strength=seeded,
+            channel="writeback",
+        )
+
+        try:
+            self.store.add_pattern(
+                trigger_context=user_input,
+                response_text=getattr(response, "text", ""),
+                intent=self.config.capability_writeback_intent,
+                success_score=seeded,
+            )
+        except Exception:
+            return
+
+    def _emit_memory_turn(self, *, role: str, text: str, extra: Optional[Dict[str, Any]] = None) -> None:
+        """Best-effort event emission into the modality-agnostic memory leaf."""
+
+        adapter = getattr(self, "memory_leaf_adapter", None)
+        if adapter is None:
+            return
+
+        if role == "user" and not self.config.memory_leaf_store_user_turns:
+            return
+        if role == "assistant" and not self.config.memory_leaf_store_assistant_turns:
+            return
+
+        try:
+            payload: Dict[str, Any] = {
+                "role": role,
+                "user_id": self.user_id,
+                "context_id": self.context_id,
+                "cache_key": self.cache_key,
+            }
+            if extra:
+                payload.update(extra)
+
+            event = self._MemoryEvent(modality="text", text=text, payload=payload)
+            adapter.observe(event)
+        except Exception:
+            # Never let memory logging affect chat/session behavior.
+            return
 
     def _process_preferences(self, content: str) -> Dict[str, Any]:
         """Extract and persist preferences from user text, refreshing in-memory state."""
@@ -750,22 +1020,64 @@ class LilithSession:
         target_id = pattern_id or self.last_pattern_id
         if not target_id:
             return False
+
+        # If feedback arrives later, use the correct historical user_input/response_text
+        # (eligibility trace) rather than the most recent turn.
+        eligibility = self._find_eligibility_record(target_id)
+        reinforcement_text = (eligibility.get("user_input") if eligibility else None) or (self.last_user_input or "")
+        reinforcement_response_text = (eligibility.get("response_text") if eligibility else None) or (self.last_response_text or "")
+
+        # Limbic-style modulation: scale reinforcement strength based on mood/personality/preferences.
+        effective_strength = self._limbic_reinforcement_scale(
+            text=reinforcement_text,
+            base_strength=strength,
+            channel="upvote",
+        )
         
-        # Check if this is external knowledge that should be learned
-        if target_id.startswith('external_') and self.last_user_input and self.last_response_text:
+        # Check if this is external knowledge that should be learned.
+        # Prefer eligibility-trace-mapped (query, response_text) so delayed feedback
+        # reinforces the correct historical turn.
+        if target_id.startswith('external_') and reinforcement_text and reinforcement_response_text:
             # Learn from Wikipedia/external source
             if hasattr(self.store, 'learn_from_wikipedia'):
+                # Use limbic modulation to bias how strongly we seed new knowledge.
+                # (This is not a learning-rate update; it's the initial success prior.)
+                seeded_success = max(0.0, min(1.0, 0.8 * (0.9 + 0.2 * min(effective_strength / max(strength, 1e-6), 2.0))))
                 new_pattern_id = self.store.learn_from_wikipedia(
-                    query=self.last_user_input,
-                    response_text=self.last_response_text,
-                    success_score=0.8,
+                    query=reinforcement_text,
+                    response_text=reinforcement_response_text,
+                    success_score=seeded_success,
                     intent="learned_knowledge"
                 )
                 print(f"📚 Learned from external knowledge: {new_pattern_id}")
                 return True
         
+        # Check if this is world model answer that should be reinforced
+        if target_id.startswith('world_model_') and self.last_user_input:
+            if hasattr(self.composer, 'world_model') and self.composer.world_model:
+                # Re-process the query to find the relevant situation
+                try:
+                    results = self.composer.world_model.retrieve_similar_situations(
+                        reinforcement_text, 
+                        topk=1
+                    )
+                    if results:
+                        # Reinforce the top matching situation
+                        pattern = results[0].pattern
+                        pattern.success_score = min(1.0, pattern.success_score + effective_strength)
+                        pattern.usage_count += 1
+                        self.composer.world_model._update_pattern(pattern)
+                        print(f"🌍 Reinforced world model knowledge")
+                        return True
+                except Exception as e:
+                    print(f"  ⚠️  World model reinforcement failed: {e}")
+        
         # Regular upvote
-        self.store.upvote(target_id, strength=strength)
+        self._apply_weighted_feedback(
+            target_id=target_id,
+            positive=True,
+            total_strength=effective_strength,
+        )
         return True
     
     def downvote(self, pattern_id: Optional[str] = None, strength: float = 0.2) -> bool:
@@ -782,9 +1094,121 @@ class LilithSession:
         target_id = pattern_id or self.last_pattern_id
         if not target_id:
             return False
-        
-        self.store.downvote(target_id, strength=strength)
+
+        eligibility = self._find_eligibility_record(target_id)
+        reinforcement_text = (eligibility.get("user_input") if eligibility else None) or (self.last_user_input or "")
+
+        effective_strength = self._limbic_reinforcement_scale(
+            text=reinforcement_text,
+            base_strength=strength,
+            channel="downvote",
+        )
+        self._apply_weighted_feedback(
+            target_id=target_id,
+            positive=False,
+            total_strength=effective_strength,
+        )
         return True
+
+    def _apply_weighted_feedback(self, *, target_id: str, positive: bool, total_strength: float) -> None:
+        """Apply feedback across all fragments that contributed to a response.
+
+        This is an eligibility-trace style credit assignment: when a response was composed
+        from multiple fragments, distribute reinforcement proportional to their contribution.
+        """
+
+        if total_strength <= 0.0:
+            return
+
+        record = self._find_eligibility_record(target_id)
+        fragment_ids = list((record or {}).get("fragment_ids") or [])
+        weights = list((record or {}).get("weights") or [])
+
+        if not fragment_ids:
+            fragment_ids = [target_id]
+
+        if len(weights) != len(fragment_ids):
+            weights = [1.0 for _ in fragment_ids]
+
+        cleaned_weights = [max(0.0, float(w)) for w in weights]
+        weight_sum = sum(cleaned_weights)
+        if weight_sum <= 0.0:
+            cleaned_weights = [1.0 for _ in fragment_ids]
+            weight_sum = float(len(fragment_ids))
+
+        # Distribute total_strength across fragments.
+        for fid, w in zip(fragment_ids, cleaned_weights):
+            portion = total_strength * (w / weight_sum)
+            if portion <= 0.0:
+                continue
+            portion = max(0.0, min(1.0, portion))
+
+            # Skip non-pattern fragment IDs when possible (avoids noisy warnings).
+            store = None
+            if hasattr(self.store, "_get_pattern_store"):
+                try:
+                    store = self.store._get_pattern_store(fid)  # type: ignore[attr-defined]
+                except Exception:
+                    store = None
+
+            try:
+                if store is not None:
+                    if positive:
+                        store.upvote(fid, portion)
+                    else:
+                        store.downvote(fid, portion)
+                else:
+                    if positive:
+                        self.store.upvote(fid, strength=portion)
+                    else:
+                        self.store.downvote(fid, strength=portion)
+            except Exception:
+                continue
+
+    def _limbic_reinforcement_scale(self, *, text: str, base_strength: float, channel: str) -> float:
+        """Compute a limbic-style scaling factor for reinforcement.
+
+        Goal: let mood/personality/preferences *gate learning intensity*.
+        - Mood influences overall plasticity (already used for syntax plasticity);
+          this extends it to reinforcement learning updates.
+        - Preferences can dampen learning on aversive topics and mildly boost interests.
+        - Personality proactivity provides a small global gain ("engage/learn" vs "conserve").
+
+        Returns the scaled strength clamped to [0.0, 1.0].
+        """
+
+        strength = float(base_strength)
+        if strength <= 0.0:
+            return 0.0
+
+        # Start with mood-based plasticity gain.
+        scale = mood_plasticity_scale(self.mood_state) if self.config.enable_mood else 1.0
+
+        # Small global personality gain.
+        if self.config.enable_personality and self.personality_profile is not None:
+            scale *= 0.9 + 0.2 * float(max(0.0, min(self.personality_profile.proactivity, 1.0)))
+
+        # Preferences gate learning on-topic.
+        if self.config.enable_preferences and (text or "").strip():
+            t = text.lower()
+            interests, aversions = self._preference_terms()
+            if any(a.lower() in t for a in aversions):
+                scale *= 0.75
+            if any(i.lower() in t for i in interests):
+                scale *= 1.10
+
+        # Slight asymmetry: when "concerned", make negative feedback a bit stronger
+        # (helps avoid repeating mistakes) while still damping positive plasticity.
+        if self.config.enable_mood and self.mood_state is not None and self.mood_state.label == "concerned":
+            if channel == "downvote":
+                scale *= 1.10
+            elif channel == "upvote":
+                scale *= 0.90
+
+        # Clamp and apply.
+        scale = max(0.5, min(scale, 1.5))
+        out = strength * scale
+        return max(0.0, min(1.0, out))
     
     def teach(self, question: str, answer: str, intent: str = "user_teaching") -> str:
         """
@@ -940,12 +1364,16 @@ class LilithSession:
                 answer = text  # The full statement is both trigger and answer
                 
                 try:
+                    # Limbic-style modulation: mood can slightly gate how strongly we seed a new fact.
+                    seeded_success = 0.75
+                    if self.config.enable_mood:
+                        seeded_success = max(0.0, min(1.0, seeded_success * mood_plasticity_scale(self.mood_state)))
                     # Store the statement itself as the pattern trigger
                     # BioNN semantic matching will find it when similar questions are asked
                     self.store.add_pattern(
                         text,  # Use statement as trigger (best semantic match)
                         answer, 
-                        success_score=0.75,
+                        success_score=seeded_success,
                         intent='declarative_learning'
                     )
                     
@@ -984,6 +1412,18 @@ class LilithSession:
             except Exception as e:
                 print(f"  ⚠️  Syntax plasticity error: {e}")
         
+        # World model plasticity (learns from stored situations)
+        if self.interaction_count % self.config.syntax_plasticity_interval == 0:
+            try:
+                if hasattr(self.composer, 'world_model') and self.composer.world_model:
+                    if hasattr(self.composer.world_model, 'apply_plasticity'):
+                        # Calculate success rate from recent interactions
+                        success_rate = self._calculate_world_model_success_rate()
+                        self.composer.world_model.apply_plasticity(success_rate=success_rate)
+                        print(f"  🌍 World model plasticity applied (success_rate={success_rate:.2f})")
+            except Exception as e:
+                print(f"  ⚠️  World model plasticity error: {e}")
+        
         # Contrastive learning
         if self.interaction_count % self.config.contrastive_interval == 0:
             try:
@@ -994,6 +1434,16 @@ class LilithSession:
                         self.composer.syntax_stage.apply_contrastive_learning()
             except Exception as e:
                 print(f"  ⚠️  Contrastive learning error: {e}")
+    
+    def _calculate_world_model_success_rate(self) -> float:
+        """Calculate success rate for world model learning."""
+        # Use general success rate as proxy
+        # In future, could track world-model-specific feedback
+        if hasattr(self, 'feedback_tracker') and self.feedback_tracker:
+            if hasattr(self.feedback_tracker, 'get_success_rate'):
+                return self.feedback_tracker.get_success_rate()
+        # Default to moderate success for gradual learning
+        return 0.6
     
     def _determine_source(self, pattern_id: Optional[str]) -> str:
         """Determine the source of a pattern."""

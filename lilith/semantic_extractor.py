@@ -176,20 +176,65 @@ class SemanticExtractor:
             "tell me about Rust programming" → "Rust"
             "what is quantum computing" → "quantum computing"
         """
-        # Remove question words
+        # Keep this intentionally light: we only want a stable *label* for the concept term,
+        # not to re-implement language understanding in hardcoded parsing.
+        #
+        # Steps:
+        # 1) Remove punctuation (so "fog?" -> "fog")
+        # 2) Drop common query scaffolding words (question/command)
+        # 3) Drop ONLY *leading* pronouns/filler (so "you fog" -> "fog")
+        #
+        # NOTE: We avoid deleting tokens globally (e.g., don't remove "IT" in "IT security").
+
+        # 1) Strip punctuation (keep word chars, whitespace, hyphen/underscore).
+        text = re.sub(r"[^\w\s\-]+", " ", query)
+
+        # 2) Remove common question/command words.
         text = re.sub(
-            r'\b(what|who|where|when|why|how|is|are|was|were|do|does|did|'
-            r'can|could|would|should|tell|me|about|know|explain)\b',
-            '',
-            query,
-            flags=re.IGNORECASE
+            r"\b(what|who|where|when|why|how|is|are|was|were|do|does|did|"
+            r"can|could|would|should|tell|me|about|know|explain)\b",
+            " ",
+            text,
+            flags=re.IGNORECASE,
         )
-        
-        # Remove articles
-        text = re.sub(r'\b(a|an|the)\b', '', text, flags=re.IGNORECASE)
-        
-        # Clean up whitespace
-        text = ' '.join(text.split()).strip()
+
+        # Remove articles.
+        text = re.sub(r"\b(a|an|the)\b", " ", text, flags=re.IGNORECASE)
+
+        # Normalize whitespace.
+        text = " ".join(text.split()).strip()
+
+        # 3) Drop only leading filler/pronouns when they're lowercase-ish.
+        # This catches "you fog" but preserves acronyms like "IT".
+        leading_stop = {
+            "i",
+            "you",
+            "we",
+            "they",
+            "he",
+            "she",
+            "it",
+            "my",
+            "your",
+            "our",
+            "their",
+            "me",
+            "him",
+            "her",
+            "them",
+            "us",
+            "please",
+        }
+        words = text.split()
+        while words:
+            w = words[0]
+            wl = w.lower()
+            # Remove only if it looks like a natural-language filler token, not an acronym.
+            if wl in leading_stop and not w.isupper():
+                words.pop(0)
+                continue
+            break
+        text = " ".join(words).strip()
         
         # Capitalize properly (for Wikipedia-style names)
         if text and not text[0].isupper():

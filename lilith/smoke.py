@@ -34,6 +34,10 @@ def main() -> None:
     decoder = TemplateDecoder()
 
     sqlite_path = Path("runs/pipeline_smoke_vectors.db")
+    # Keep the smoke test deterministic across runs by avoiding mixed-dimension
+    # embeddings accumulating in an existing DB.
+    if sqlite_path.exists():
+        sqlite_path.unlink()
     store = SymbolicStore(sqlite_path, scenario="pipeline-smoke")
     store.persist(artefacts)
 

@@ -95,6 +95,7 @@ tmp/
 
 # External reference repos (keep untracked)
 xiaozhi-esp32/
+PMFlow_upstream/
 
 # Documentation builds
 docs/_build/
