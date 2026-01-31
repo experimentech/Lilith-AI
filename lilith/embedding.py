@@ -81,18 +81,7 @@ class PMFlowEmbeddingEncoder:
         """Create a deterministic PMFlow field using bundled implementations."""
         from pmflow.core.pmflow import MultiScalePMField, ParallelPMField
 
-        try:
-            field = MultiScalePMField(
-                d_latent=latent_dim,
-                n_centers_fine=128,
-                n_centers_coarse=32,
-                steps_fine=5,
-                steps_coarse=3,
-                dt=0.15,
-                beta=1.2,
-                clamp=3.0,
-                enable_flow=True,  # Enable agentic frame-dragging
-            )
+        def _seed_multiscale(field):
             generator = torch.Generator().manual_seed(seed)
             with torch.no_grad():
                 centres_fine = torch.randn(
@@ -106,14 +95,15 @@ class PMFlowEmbeddingEncoder:
                     device=field.fine_field.mus.device,
                 )
                 omegas_fine = torch.randn(
-                    field.fine_field.mus.shape, # Matches N centers
+                    field.fine_field.mus.shape,
                     generator=generator,
-                    device=field.fine_field.mus.device
+                    device=field.fine_field.mus.device,
                 ) * 0.01
-                
+
                 field.fine_field.centers.copy_(centres_fine)
                 field.fine_field.mus.copy_(mus_fine)
-                field.fine_field.omegas.copy_(omegas_fine)
+                if hasattr(field.fine_field, "omegas"):
+                    field.fine_field.omegas.copy_(omegas_fine)
 
                 centres_coarse = torch.randn(
                     field.coarse_field.centers.shape,
@@ -128,14 +118,40 @@ class PMFlowEmbeddingEncoder:
                 omegas_coarse = torch.randn(
                     field.coarse_field.mus.shape,
                     generator=generator,
-                    device=field.coarse_field.mus.device
+                    device=field.coarse_field.mus.device,
                 ) * 0.01
 
                 field.coarse_field.centers.copy_(centres_coarse)
                 field.coarse_field.mus.copy_(mus_coarse)
-                field.coarse_field.omegas.copy_(omegas_coarse)
+                if hasattr(field.coarse_field, "omegas"):
+                    field.coarse_field.omegas.copy_(omegas_coarse)
             return field
+
+        # Prefer MultiScale; if a TypeError indicates older pmflow signature, retry without enable_flow.
+        multiscale_kwargs = dict(
+            d_latent=latent_dim,
+            n_centers_fine=128,
+            n_centers_coarse=32,
+            steps_fine=5,
+            steps_coarse=3,
+            dt=0.15,
+            beta=1.2,
+            clamp=3.0,
+            enable_flow=True,  # Enable agentic frame-dragging
+        )
+
+        try:
+            field = MultiScalePMField(**multiscale_kwargs)
+            return _seed_multiscale(field)
+        except TypeError as exc:
+            # Older pmflow versions may not accept enable_flow; retry without it.
+            if "enable_flow" in str(exc):
+                multiscale_kwargs.pop("enable_flow", None)
+                field = MultiScalePMField(**multiscale_kwargs)
+                return _seed_multiscale(field)
+            raise
         except Exception:
+            # As a last resort, fall back to parallel to keep embeddings usable (hierarchical retrieval will be disabled elsewhere).
             field = ParallelPMField(d_latent=latent_dim, steps=5, dt=0.08, beta=0.9, clamp=2.5, enable_flow=True)
             generator = torch.Generator().manual_seed(seed)
             with torch.no_grad():
@@ -146,10 +162,11 @@ class PMFlowEmbeddingEncoder:
                 ) * 0.5
                 mus = torch.full(field.mus.shape, 0.35, device=field.mus.device)
                 omegas = torch.randn(field.mus.shape, generator=generator, device=field.mus.device) * 0.01
-                
+
                 field.centers.copy_(centres)
                 field.mus.copy_(mus)
-                field.omegas.copy_(omegas)
+                if hasattr(field, "omegas"):
+                    field.omegas.copy_(omegas)
             return field
 
     def encode(self, tokens: Iterable[str] | str) -> torch.Tensor:

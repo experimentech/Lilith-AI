@@ -28,6 +28,7 @@ from .concept_sanitizer import sanitize_properties
 # Import PMFlow retrieval extensions
 try:
     from pmflow.core.retrieval import CompositionalRetrievalPMField, SemanticNeighborhoodPMField
+    from pmflow.core.pmflow import MultiScalePMField
     PMFLOW_EXTENSIONS_AVAILABLE = True
 except ImportError:
     PMFLOW_EXTENSIONS_AVAILABLE = False
@@ -101,13 +102,15 @@ class ProductionConceptStore:
         
         # Initialize PMFlow retrieval extensions if available
         if PMFLOW_EXTENSIONS_AVAILABLE and hasattr(semantic_encoder, 'pm_field'):
-            self.compositional_retrieval = CompositionalRetrievalPMField(
-                semantic_encoder.pm_field
-            )
-            self.neighborhood = SemanticNeighborhoodPMField(
-                semantic_encoder.pm_field
-            )
-            _log("  ✨ PMFlow retrieval extensions enabled (query expansion + hierarchical + attention)")
+            pm_field = semantic_encoder.pm_field
+            if isinstance(pm_field, MultiScalePMField):
+                self.compositional_retrieval = CompositionalRetrievalPMField(pm_field)
+                self.neighborhood = SemanticNeighborhoodPMField(pm_field)
+                _log("  ✨ PMFlow retrieval extensions enabled (query expansion + hierarchical + attention)")
+            else:
+                _log("  ⚠️ PMFlow field is not MultiScale; skipping hierarchical retrieval")
+                self.compositional_retrieval = None
+                self.neighborhood = None
         else:
             self.compositional_retrieval = None
             self.neighborhood = None
