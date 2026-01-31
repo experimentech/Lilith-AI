@@ -36,6 +36,12 @@ class TeachRequest(ClientContext):
     intent: str = "general"
 
 
+class CorrectionRequest(ClientContext):
+    correct: str
+    incorrect: Optional[str] = None
+    use_last_response: bool = True
+
+
 class FeedbackRequest(ClientContext):
     pattern_id: str
     strength: float = 1.0
@@ -227,6 +233,19 @@ async def teach(req: TeachRequest):
         req.context_id,
     )
     return {"pattern_id": pattern_id}
+
+
+@app.post("/correct")
+async def correct(req: CorrectionRequest):
+    ok = await anyio.to_thread.run_sync(
+        adapter.handle_syntax_correction,
+        req.client_id,
+        req.correct,
+        req.incorrect,
+        req.context_id,
+        req.use_last_response,
+    )
+    return {"ok": bool(ok)}
 
 
 @app.post("/feedback/upvote")

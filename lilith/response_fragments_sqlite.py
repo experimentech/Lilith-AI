@@ -133,6 +133,7 @@ class ResponseFragmentStoreSQLite:
                     success_score REAL DEFAULT 0.5,
                     intent TEXT DEFAULT 'general',
                     usage_count INTEGER DEFAULT 0,
+                    decay_score REAL DEFAULT 0.0,
                     embedding_cache TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -857,6 +858,46 @@ class ResponseFragmentStoreSQLite:
         # Sort by final score (descending) and return top-k
         scored_patterns.sort(key=lambda x: x[1], reverse=True)
         return scored_patterns[:topk]
+
+    def decay_and_prune(
+        self,
+        max_age_days: float = 120.0,
+        min_success: float = 0.35,
+        min_usage: int = 0,
+        max_prune: int = 200,
+    ) -> int:
+        """Decay/prune stale, low-success patterns. Returns deleted count."""
+        try:
+            conn = self._get_connection()
+            cur = conn.cursor()
+
+            cur.execute(
+                """
+                UPDATE response_patterns
+                SET success_score = success_score * 0.98,
+                    decay_score = decay_score + 0.02
+                WHERE (julianday('now') - julianday(updated_at)) > ?
+                """,
+                (max_age_days / 2.0,),
+            )
+
+            cur.execute(
+                """
+                DELETE FROM response_patterns
+                WHERE (julianday('now') - julianday(updated_at)) >= ?
+                  AND success_score <= ?
+                  AND usage_count <= ?
+                LIMIT ?
+                """,
+                (max_age_days, min_success, min_usage, max_prune),
+            )
+            deleted = cur.rowcount if cur.rowcount is not None else 0
+            conn.commit()
+            if self._persistent_conn is None:
+                self._close_connection(conn)
+            return deleted
+        except Exception:
+            return 0
     
     def update_success(
         self,

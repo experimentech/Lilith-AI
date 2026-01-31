@@ -896,6 +896,38 @@ class LilithDiscordBot:
                     ephemeral=True
                 )
                 print(f"  ⚠️ Teaching error: {e}")
+
+        @self.bot.tree.command(name="correct", description="Teach Lilith a correction for grammar/wording")
+        @app_commands.describe(
+            correct="What Lilith should have said",
+            incorrect="Optional: what Lilith said (defaults to last reply in this context)",
+        )
+        async def correct_command(interaction, correct: str, incorrect: str = None):
+            """Teach Lilith a text-level correction for its syntax refinement."""
+
+            user_id = self._get_user_id(interaction.user)
+            guild_id = str(interaction.guild.id) if interaction.guild else None
+            guild_name = interaction.guild.name if interaction.guild else ""
+
+            session = self._get_or_create_session(interaction.user, guild_id=guild_id, guild_name=guild_name)
+
+            # Require explicit corrected text; use last response as default incorrect.
+            ok = session.learn_syntax_correction(
+                incorrect=incorrect,
+                correct=correct,
+                use_last_response=(incorrect is None or not incorrect.strip()),
+            )
+
+            if ok:
+                await interaction.response.send_message(
+                    "✅ Learned correction. I’ll apply it in future responses.",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.response.send_message(
+                    "⚠️ I couldn’t learn that correction (no prior reply to correct, or syntax stage disabled).",
+                    ephemeral=True,
+                )
         
         @self.bot.tree.command(name="settings", description="View or change server settings (admin only)")
         @app_commands.describe(

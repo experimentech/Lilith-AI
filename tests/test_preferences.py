@@ -19,7 +19,7 @@ class DummyComposer:
         self.contrastive_learner = None
         self.syntax_stage = None
 
-    def compose_response(self, context, user_input):
+    def compose_response(self, context, user_input, tool_artifact=None, **kwargs):
         intent = user_input.strip().lower()
         return DummyResponse(text="ok", confidence=0.5, intent=intent)
 

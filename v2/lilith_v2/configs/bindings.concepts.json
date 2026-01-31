@@ -1,0 +1,11 @@
+{
+  "bindings": [
+    {"node_id": "branch.concepts", "modalities": ["text"], "stage": "concepts", "store_path": "./tmp/branch.concepts.json"},
+    {"node_id": "trunk.vscode", "modalities": ["text"], "tenants": ["tenant_demo"]}
+  ],
+  "policy": {
+    "timeout_ms": 300,
+    "concurrency_limit": 2,
+    "error_policy": {"retry": true, "backoff_ms": 100}
+  }
+}

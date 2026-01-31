@@ -173,9 +173,11 @@ def test_session_mcp_tool_stream_enriches_context_with_xiaozhi_envelope(tmp_path
     session = LilithSession(user_id="pytest", config=cfg)
 
     captured = {"context": None}
+    captured_tool = {"artifact": None}
 
-    def fake_compose_response(*, context: str, user_input: str):
+    def fake_compose_response(*, context: str, user_input: str, tool_artifact=None):
         captured["context"] = context
+        captured_tool["artifact"] = tool_artifact
         # Provide minimal attributes session expects.
         session.composer.last_approach = "test"
         return SimpleNamespace(
@@ -193,9 +195,9 @@ def test_session_mcp_tool_stream_enriches_context_with_xiaozhi_envelope(tmp_path
     resp = session.process_message("weather London")
     assert resp.text == "ok"
 
-    # Verify the MCP observation made it into the enriched context.
-    assert captured["context"] is not None
-    assert "MCP[stub:weather.tool]: stub weather: sunny in London" in captured["context"]
+    # Verify the MCP observation is passed as a structured stage artifact.
+    assert captured_tool["artifact"] is not None
+    assert "MCP[stub:weather.tool]: stub weather: sunny in London" in (captured_tool["artifact"].get("summary") or "")
 
     # Verify the stub server actually saw the JSON-RPC calls.
     assert stub_xiaozhi_mcp_server.tools_list_calls >= 1

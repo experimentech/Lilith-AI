@@ -21,7 +21,7 @@ Lilith is a **cognitive conversational system with adaptive memory**, not a trad
 | **Memory** | ✅ Episodic patterns + concepts | ⚠️ Limited/implicit | Lilith superior here |
 | **Reasoning** | ✅ Multi-stage deliberation | ⚠️ Varies | Lilith has explicit reasoning stage |
 | **Context** | ✅ Working memory + history | ⚠️ Usually limited | Lilith maintains rich context |
-| **Tool Use** | 🔧 MCP framework (emerging) | ✅ Standard feature | Gap, but infrastructure exists |
+| **Tool Use** | ✅ MCP tool stage (optional/gated) | ✅ Standard feature | Implemented; still policy- and tooling-limited |
 | **Planning** | ❌ None | ✅ Core feature | Major weakness |
 | **World Model** | ❌ None | ✅ State tracking | Critical missing piece |
 | **Goal Setting** | ❌ Implicit (conversation) | ✅ Explicit objectives | No formal goal representation |
@@ -126,16 +126,24 @@ while True:
 
 #### Current State
 ```
-Lilith Core (linguistic)
+Incoming (serve Lilith over MCP-style API):
+
+LilithSession
+    ↑
+MCP Adapter / FastAPI server
+
+Outgoing (use tools as a modality-like stage):
+
+LilithSession
     ↓
-MCP Adapter (protocol)
+MCP Tool Stage (policy-gated)
     ↓
-External Services (tools, knowledge)
+External MCP endpoints (tools/list + tools/call)
 ```
 
 **What's Already There:**
 - MCP server capability (expose Lilith as a service)
-- MCP client framework (consume external services)
+- MCP tool stage (discover/call tools and return a structured artifact)
 - Resource/tool protocol support
 - Extensible integration layer
 
@@ -145,7 +153,7 @@ External Services (tools, knowledge)
 - Service composition
 - Multi-system orchestration
 
-**Assessment**: Foundation for agency exists but underutilized. MCP is literally designed for agent-like behavior.
+**Assessment**: Foundation for proto-agency exists and is now directly integrated as a tool stage; it remains intentionally gated and limited to configured endpoints.
 
 ---
 

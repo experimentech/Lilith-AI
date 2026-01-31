@@ -19,6 +19,12 @@
 | **nltk** | ≥3.8.1 | Natural Language Toolkit for WordNet (offline synonyms/antonyms) |
 | **discord.py** | ≥2.3.0 | Discord bot integration |
 | **python-dotenv** | ≥1.0.0 | Environment variable management |
+| **fastapi** | ≥0.110.0 | MCP adapter HTTP API + Xiaozhi-compatible WebSocket server |
+| **uvicorn** | ≥0.27.0 | Run the FastAPI server locally |
+| **pydantic** | ≥2.0.0 | FastAPI request/response models |
+| **anyio** | ≥4.0.0 | Async runtime used by the server layer |
+| **starlette** | ≥0.37.0 | WebSocket primitives underneath FastAPI |
+| **httpx** | ≥0.27.0 | TestClient + HTTP client support (dev/test) |
 
 ### Built-in (No Installation Required)
 

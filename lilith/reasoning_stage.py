@@ -28,10 +28,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple, Set
+from typing import List, Dict, Optional, Tuple, Set, Any
 import torch
 import torch.nn.functional as F
 import numpy as np
+
+# Import Agentic Learner
+from .general_purpose_learner import AgenticReasoningLearner, PatternStore
+from .embedding import PMFlowEmbeddingEncoder
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +49,7 @@ class ActivatedConcept:
     activation: float                # How strongly activated (0-1)
     source: str                      # "query", "retrieved", "inferred"
     properties: List[str] = field(default_factory=list)
+    relations: List[Any] = field(default_factory=list)
     
     
 @dataclass
@@ -121,7 +126,17 @@ class ReasoningStage:
         # Attention weights for focus
         self.attention_weights: Dict[str, float] = {}
         
+        # Initialize Agentic Reasoning Learner (Physics-based Thinking)
+        # We need a dummy PatternStore if one isn't available
+        class DummyPatternStore:
+            def add_pattern(self, *args, **kwargs): return "dummy"
+            def update_success(self, *args, **kwargs): pass
+            
+        store = concept_store if isinstance(concept_store, PatternStore) else DummyPatternStore()
+        self.learner = AgenticReasoningLearner(pattern_store=store, encoder=self.encoder)
+        
         print("  🧠 Reasoning stage enabled (deliberative thinking)!")
+        print("    ↳ Agentic Physics online (willpower + frame-dragging)")
     
     def clear_working_memory(self):
         """Clear working memory for new reasoning session."""
@@ -134,7 +149,8 @@ class ReasoningStage:
         embedding: torch.Tensor,
         activation: float = 1.0,
         source: str = "retrieved",
-        properties: Optional[List[str]] = None
+        properties: Optional[List[str]] = None,
+        relations: Optional[List[Any]] = None
     ) -> ActivatedConcept:
         """
         Activate a concept in working memory.
@@ -161,7 +177,8 @@ class ReasoningStage:
             embedding=embedding,
             activation=activation,
             source=source,
-            properties=properties or []
+            properties=properties or [],
+            relations=relations or []
         )
         
         # Add to working memory (with capacity limit)
@@ -239,12 +256,39 @@ class ReasoningStage:
                         ).item()
                         
                         if similarity > 0.5:  # Higher threshold for term matching
-                            # Activate concept by ID (symbolic) - no text retrieval here
+                            # Activate concept by ID (symbolic)
+                            # CRITICAL: Retrieve properties/relations from store so reasoning has content
+                            properties: List[str] = []
+                            relations: List[Any] = []
+
+                            if hasattr(self.concept_store, 'get_concept_by_id'):
+                                concept_obj = self.concept_store.get_concept_by_id(concept_id)
+                                if concept_obj:
+                                    if hasattr(concept_obj, 'properties') and concept_obj.properties:
+                                        properties = concept_obj.properties
+                                    if hasattr(concept_obj, 'relations') and concept_obj.relations:
+                                        relations = concept_obj.relations
+                            elif hasattr(self.concept_store, 'get_concept'):
+                                # Fallback for old/simple stores
+                                c_dict = self.concept_store.get_concept(concept_id)
+                                if c_dict:
+                                    if 'properties' in c_dict and c_dict['properties']:
+                                        properties = c_dict['properties']
+                                    if 'relations' in c_dict and c_dict['relations']:
+                                        relations = c_dict['relations']
+                                    elif hasattr(self.concept_store, 'get_relations_from'):
+                                        try:
+                                            relations = self.concept_store.get_relations_from(concept_id)
+                                        except Exception:
+                                            relations = relations
+
                             act = self.activate_concept(
                                 term=concept_id,  # Just the ID, not the content
                                 embedding=cached_emb,
                                 activation=similarity,
-                                source="semantic_similarity"
+                                source="semantic_similarity",
+                                properties=properties,  # Pass extracted properties
+                                relations=relations
                             )
                             activated.append(act)
                             logger.debug(f"Activated {concept_id} with similarity {similarity:.3f} to '{term}'")
@@ -375,6 +419,37 @@ class ReasoningStage:
         # Step 4: Resolve intent from reasoning
         resolved_intent = self._resolve_intent(query, inferences)
         
+        # Step 4.5: Agentic Physics Thinking (Trajectory Analysis)
+        # Using the physics engine to trace a thought path
+        try:
+            # Inject Active Will (Intent)
+            intent_to_use = resolved_intent if resolved_intent else query
+            self.learner.set_active_will(intent_to_use, strength=0.6)
+            
+            # Trace Thought Trajectory
+            thought_trajectory = self.learner.think(query, steps=steps)
+            
+            # Use physics metrics to refine confidence
+            signals = self.learner.observe_interaction(None, thought_trajectory)
+            
+            # Add physics-based inference
+            eff = signals.layer_signals.get("cognitive_efficiency", 0.0)
+            effort = signals.layer_signals.get("mental_effort", 0.0)
+            
+            physics_inference = Inference(
+                inference_type="structural",
+                source_concepts=["physics_engine"],
+                conclusion=f"Thought trajectory efficiency: {eff:.2f} (Effort: {effort:.2f})",
+                confidence=signals.confidence,
+                reasoning_path=["agentic_physics", "least_action_principle"]
+            )
+            inferences.append(physics_inference)
+            
+            logger.debug(f"Physics thought: efficiency={eff:.2f}, effort={effort:.2f}")
+            
+        except Exception as e:
+            logger.warning(f"Agentic physics thinking failed: {e}")
+
         # Calculate overall confidence
         confidence = self._calculate_confidence(inferences)
         
@@ -764,6 +839,10 @@ class ReasoningStage:
             implications = [i for i in result.inferences if i.inference_type == "implication"]
             if implications:
                 lines.append(f"  ➡️  Found {len(implications)} implications")
+            
+            structural = [i for i in result.inferences if i.inference_type == "structural"]
+            if structural:
+                lines.append(f"  ⚛️  Physics: {structural[0].conclusion}")
                 
         if result.focus_concept:
             lines.append(f"  🎯 Focus: {result.focus_concept}")

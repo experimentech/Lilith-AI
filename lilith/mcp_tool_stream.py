@@ -294,8 +294,8 @@ class MCPToolStream:
         scored.sort(key=lambda x: x[1], reverse=True)
         return [t for t, _ in scored[: max(0, int(topk))]]
 
-    def call_selected(self, user_input: str, *, topk: int = 2) -> List[MCPToolCallResult]:
-        selected = self.select_tools(user_input, topk=topk)
+    def call_selected(self, user_input: str, *, topk: int = 2, min_score: float = 0.34) -> List[MCPToolCallResult]:
+        selected = self.select_tools(user_input, topk=topk, min_score=min_score)
         if not selected:
             return []
 

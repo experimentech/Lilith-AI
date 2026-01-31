@@ -51,6 +51,7 @@ class FakeSession:
         self.store = store
         self.upvotes = []
         self.downvotes = []
+        self.corrections = []
 
     def process_message(self, message: str) -> SessionResponse:
         return SessionResponse(text=f"echo: {message}", pattern_id="p0", confidence=0.9)
@@ -60,6 +61,10 @@ class FakeSession:
 
     def downvote(self, pattern_id: str, strength: float = 1.0):
         self.downvotes.append((pattern_id, strength))
+
+    def learn_syntax_correction(self, incorrect: str, correct: str, *, use_last_response: bool = False) -> bool:
+        self.corrections.append((incorrect, correct, bool(use_last_response)))
+        return True
 
 
 class ClientContext(BaseModel):
@@ -75,6 +80,12 @@ class TeachRequest(ClientContext):
     trigger: str
     response: str
     intent: str = "general"
+
+
+class CorrectionRequest(ClientContext):
+    correct: str
+    incorrect: str | None = None
+    use_last_response: bool = True
 
 
 class FeedbackRequest(ClientContext):
@@ -122,6 +133,18 @@ def build_app(adapter: MCPAdapter) -> FastAPI:
             req.context_id,
         )
         return {"pattern_id": pattern_id}
+
+    @app.post("/correct")
+    async def correct(req: CorrectionRequest):
+        ok = await anyio.to_thread.run_sync(
+            adapter.handle_syntax_correction,
+            req.client_id,
+            req.correct,
+            req.incorrect,
+            req.context_id,
+            req.use_last_response,
+        )
+        return {"ok": bool(ok)}
 
     @app.post("/feedback/upvote")
     async def upvote(req: FeedbackRequest):
@@ -201,6 +224,11 @@ def test_mcp_server_endpoints_with_stub_session():
     client.post("/feedback/downvote", json={"client_id": "alice", "pattern_id": "pattern-1", "strength": 0.4})
     assert session.upvotes == [("pattern-1", 0.7)]
     assert session.downvotes == [("pattern-1", 0.4)]
+
+    # Syntax correction routing
+    corr = client.post("/correct", json={"client_id": "alice", "correct": "Fixed text"}).json()
+    assert corr["ok"] is True
+    assert session.corrections
 
     # Weather/news are transient
     before_add = len(store.add_calls)

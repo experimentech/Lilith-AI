@@ -23,6 +23,8 @@ Lilith is a neuro-symbolic conversational AI system that learns through interact
 - **[Knowledge Sources](KNOWLEDGE_SOURCES.md)** - Wikipedia, Wiktionary, WordNet integration
 - **[Knowledge Augmentation](knowledge_augmentation.md)** - External knowledge system
 - **[I/O Modularity](io_modularity.md)** - Interface architecture (CLI, Discord, API)
+- **[MCP Adapter + Tool Stage](MCP_ADAPTER.md)** - Incoming MCP-style API + outgoing MCP tool stage
+- **[MCP Integration Plan](MCP_INTEGRATION_PLAN.md)** - Design notes and current behavior
 
 ## Training & Development
 

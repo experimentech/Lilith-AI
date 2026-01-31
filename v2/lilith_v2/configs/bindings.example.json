@@ -1,0 +1,11 @@
+{
+  "bindings": [
+    {"node_id": "trunk.vscode", "modalities": ["text"], "tenants": ["tenant_demo"]},
+    {"node_id": "branch.vision", "modalities": ["image"]}
+  ],
+  "policy": {
+    "timeout_ms": 300,
+    "concurrency_limit": 2,
+    "error_policy": {"retry": true, "backoff_ms": 100}
+  }
+}

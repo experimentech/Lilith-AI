@@ -269,6 +269,25 @@ class MCPAdapter:
         # Fallback for stub sessions in tests
         return session.store.add_pattern(trigger_context=trigger, response_text=response, intent=intent)
 
+    def handle_syntax_correction(
+        self,
+        client_id: str,
+        correct: str,
+        incorrect: Optional[str] = None,
+        context_id: Optional[str] = None,
+        use_last_response: bool = True,
+    ) -> bool:
+        session = self._get_session(client_id, context_id)
+        if hasattr(session, "learn_syntax_correction"):
+            return bool(
+                session.learn_syntax_correction(
+                    incorrect=incorrect,
+                    correct=correct,
+                    use_last_response=bool(use_last_response),
+                )
+            )
+        return False
+
     # Feedback wiring
     def handle_upvote(self, client_id: str, pattern_id: str, strength: float = 1.0, context_id: Optional[str] = None) -> None:
         session = self._get_session(client_id, context_id)

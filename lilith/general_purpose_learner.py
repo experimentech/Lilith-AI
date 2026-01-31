@@ -16,9 +16,14 @@ at all levels (synaptic, neural assembly, cortical column).
 """
 
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, List, Tuple, Protocol
+from typing import Optional, Dict, Any, List, Tuple, Protocol, runtime_checkable
 from abc import ABC, abstractmethod
 import numpy as np
+import torch
+# Avoid circular import at runtime if possible, or use TYPE_CHECKING
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .embedding import PMFlowEmbeddingEncoder
 
 
 @dataclass
@@ -40,7 +45,7 @@ class OutcomeSignals:
         if self.layer_signals is None:
             self.layer_signals = {}
 
-
+@runtime_checkable
 class PatternStore(Protocol):
     """
     Interface for pattern storage.
@@ -333,5 +338,150 @@ class LayerSpecificExtractor(ABC):
         
         Returns:
             (trigger, response, intent, initial_success)
+        """
+        pass
+
+class AgenticReasoningLearner(GeneralPurposeLearner):
+    """
+    Cognitive layer that uses Agentic Physics (PMFlow) for reasoning.
+    
+    This layer implements 'Thinking' as a physical process:
+    1. Intent Injection: Modifying the 'spin' (omegas) of concepts to drag the frame of reference.
+    2. Reasoning Chain: A temporal trajectory (geodesic) through the concept manifold.
+    3. Mental Effort: The specific action (path length/energy) required to reach a conclusion.
+    """
+    
+    def __init__(self, 
+                 pattern_store: PatternStore,
+                 encoder, # PMFlowEmbeddingEncoder 
+                 learning_rate: float = 0.1):
+        super().__init__("reasoning", pattern_store, learning_rate, "moderate")
+        self.encoder = encoder
+        
+    def set_active_will(self, intent_text: str, strength: float = 0.5):
+        """
+        Inject active will (Intent) into the cognitive field.
+        
+        This mechanically alters the 'spin' (omegas) of the concepts associated with
+        the intent, causing them to create a frame-dragging vortex that biases 
+        future reasoning trajectories.
+        """
+        if not hasattr(self.encoder, 'pm_field'):
+            return
+
+        with torch.no_grad():
+             # Get activation profile of intent text against field centers
+             # We look at the latent representation
+             _, latent, _ = self.encoder.encode_with_components(intent_text)
+             latent = latent.to(self.encoder.device)
+             
+             # Access underlying field
+             pm_field = self.encoder.pm_field
+             
+             # Handle MultiScale vs Standard
+             if hasattr(pm_field, 'fine_field'):
+                 target_field = pm_field.fine_field
+             else:
+                 target_field = pm_field
+             
+             # Calculate distance to all centers
+             dists = torch.cdist(latent, target_field.centers)
+             
+             # Activate spin for nearby centers (Gaussian falloff)
+             # Use a wider standard deviation (2.0) to ensure interaction in high-D space
+             proximity = torch.exp(-dists[0]**2 / (2 * 2.0**2))
+             
+             # Ensure omegas exist (they should if initialized correctly)
+             if hasattr(target_field, 'omegas'):
+                 # We add magnitude to the spin, effectively "energizing" these concepts
+                 # to act as active agents in the flow field.
+                 # Current direction of spin preserves existing bias or random init.
+                 current_spin = target_field.omegas.data
+                 
+                 # If spin is zero, give it a random direction
+                 zero_mask = (current_spin == 0)
+                 if zero_mask.any():
+                     current_spin[zero_mask] = torch.randn_like(current_spin[zero_mask])
+                 
+                 # Strengthen the spin
+                 # We normalize proximity to distribute 'strength' amount of energy
+                 prox_norm = proximity / (proximity.sum() + 1e-6)
+                 target_field.omegas.data += strength * prox_norm * torch.sign(current_spin)
+
+    def think(self, prompt: str, steps: int = 10) -> Dict[str, Any]:
+        """
+        Perform a reasoning step (Thinking) using physics.
+        Returns the trajectory and the final conclusion stats.
+        """
+        with torch.no_grad():
+            _, latent, _ = self.encoder.encode_with_components(prompt)
+            latent = latent.to(self.encoder.device)
+            
+            # Trace trajectory
+            pm_field = self.encoder.pm_field
+            if hasattr(pm_field, 'fine_field'):
+                # For multiscale, we currently trace the fine field for detailed reasoning
+                # Ideally we'd trace both, but fine field captures specific concept dynamics
+                trajectory = pm_field.fine_field(latent, return_trajectory=True)
+            else:
+                trajectory = pm_field(latent, return_trajectory=True)
+                
+            # Trajectory shape: (1, Steps+1, D)
+            
+            # Analyze Result
+            start_point = trajectory[0, 0]
+            end_point = trajectory[0, -1]
+            
+            # Calculate path length (Mental Effort)
+            diffs = trajectory[0, 1:] - trajectory[0, :-1]
+            segment_lengths = torch.norm(diffs, dim=1)
+            path_length = segment_lengths.sum().item()
+            
+            # Did we move?
+            displacement = torch.norm(end_point - start_point).item()
+            
+            return {
+                "trajectory": trajectory.cpu(),
+                "path_length": path_length,
+                "displacement": displacement,
+                "steps": steps,
+                "final_latent": end_point.cpu()
+            }
+
+    def _evaluate_outcome(self, layer_input, layer_output, context) -> OutcomeSignals:
+        """
+        Evaluate the quality of the thought process using physics metrics.
+        """
+        stats = layer_output
+        path_length = stats['path_length']
+        displacement = stats['displacement']
+        
+        # Efficiency Ratio (0.0 to 1.0)
+        # 1.0 = Straight line (High confidence/Clarity)
+        # <0.5 = Meandering/Struggling
+        efficiency = displacement / (path_length + 1e-6)
+        
+        # Confidence derived from physical efficiency
+        confidence = min(1.0, efficiency)
+        
+        # Success: Did we arrive somewhere useful?
+        # A very short path (displacement ~ 0) means we didn't think or got stuck.
+        # A very long path might be good if efficiency is decent.
+        success = 1.0 if displacement > 0.1 else 0.0
+        
+        return OutcomeSignals(
+            layer_name="reasoning",
+            overall_success=success,
+            confidence=confidence,
+            layer_signals={
+                "mental_effort": path_length,
+                "cognitive_efficiency": efficiency
+            }
+        )
+
+    def _extract_and_store_pattern(self, layer_input, layer_output, signals, context):
+        """
+        For now, we don't store explicit reasoning patterns as text.
+        Future work: Store successful (start -> end) vector pairs.
         """
         pass

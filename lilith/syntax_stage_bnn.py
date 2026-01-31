@@ -150,6 +150,11 @@ class SyntaxStage:
         # Pattern stores
         self.patterns: Dict[str, SyntacticPattern] = {}
         self.templates: Dict[str, CompositionTemplate] = {}
+
+        # Learned text-level corrections for the grammar refinement pass.
+        # Stored alongside patterns in the same JSON file for persistence.
+        # Keyed by a normalized form of the incorrect string.
+        self.corrections: Dict[str, Dict[str, Any]] = {}
         
         # Plasticity tracking
         self.plasticity_reports: List[SyntaxPlasticityReport] = []
@@ -969,6 +974,15 @@ class SyntaxStage:
         """
         # Simple grammar fixes for common errors
         refined = text
+
+        # Apply learned corrections first (if any). This keeps the rule-based
+        # cleanup as a backstop while allowing user-taught fixes to take effect.
+        key = self._normalize_correction_key(refined)
+        learned = self.corrections.get(key)
+        if learned and isinstance(learned, dict):
+            replacement = learned.get("correct")
+            if isinstance(replacement, str) and replacement.strip():
+                refined = replacement
         
         # Fix common word order issues
         # "discuss think" → "think about", "discuss you?" → "discuss that?"
@@ -1020,9 +1034,37 @@ class SyntaxStage:
             incorrect: The incorrect text
             correct: The corrected version
         """
-        # Future: Store correction patterns and learn via BioNN
-        # For now, this is a placeholder for the learning mechanism
-        pass
+        incorrect = (incorrect or "").strip()
+        correct = (correct or "").strip()
+        if not incorrect or not correct:
+            return
+
+        incorrect_key = self._normalize_correction_key(incorrect)
+        correct_key = self._normalize_correction_key(correct)
+        if incorrect_key == correct_key:
+            return
+
+        existing = self.corrections.get(incorrect_key)
+        if isinstance(existing, dict) and existing.get("correct") == correct:
+            existing["count"] = int(existing.get("count", 0)) + 1
+        else:
+            self.corrections[incorrect_key] = {
+                "correct": correct,
+                "count": int(existing.get("count", 0)) + 1 if isinstance(existing, dict) else 1,
+            }
+
+        # Persist corrections together with patterns.
+        try:
+            self._save_patterns()
+        except Exception:
+            # Corrections are helpful but should never crash a session.
+            pass
+
+    @staticmethod
+    def _normalize_correction_key(text: str) -> str:
+        # Keep this intentionally light: whitespace normalization + lowercasing.
+        # Avoid regex-heavy parsing to preserve the spirit of the BioNN approach.
+        return " ".join((text or "").strip().split()).lower()
     
     def _generalize_template(self, tokens: List[str], pos_tags: List[str]) -> str:
         """Create generalized template from example."""
@@ -1077,7 +1119,8 @@ class SyntaxStage:
                     "intent": p.intent,
                 }
                 for p in self.patterns.values()
-            ]
+            ],
+            "corrections": self.corrections,
         }
         
         with open(self.storage_path, 'w') as f:
@@ -1087,6 +1130,15 @@ class SyntaxStage:
         """Load patterns from storage."""
         with open(self.storage_path, 'r') as f:
             data = json.load(f)
+
+        raw_corrections = data.get("corrections", {})
+        if isinstance(raw_corrections, dict):
+            # Shallow validation to protect against corrupted JSON.
+            self.corrections = {
+                str(k): v
+                for k, v in raw_corrections.items()
+                if isinstance(k, str) and isinstance(v, dict)
+            }
         
         for p_data in data.get("patterns", []):
             pattern = SyntacticPattern(

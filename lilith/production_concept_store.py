@@ -8,6 +8,7 @@ This is the production version of poc_compositional/concept_store.py
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple
 import os
+import difflib
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -21,6 +22,8 @@ def _log(msg: str) -> None:
         print(msg)
 
 from .concept_database import ConceptDatabase
+from .relational_concept_store import RelationalConceptStore
+from .concept_sanitizer import sanitize_properties
 
 # Import PMFlow retrieval extensions
 try:
@@ -67,7 +70,10 @@ class ProductionConceptStore:
         semantic_encoder,
         db_path: str,
         consolidation_threshold: float = 0.85,
-        vocabulary_tracker=None
+        vocabulary_tracker=None,
+        enable_relational: bool = True,
+        property_max_len: int = 200,
+        property_require_term: bool = True,
     ):
         """
         Initialize production concept store.
@@ -82,9 +88,16 @@ class ProductionConceptStore:
         self.db = ConceptDatabase(db_path)
         self.consolidation_threshold = consolidation_threshold
         self.vocabulary_tracker = vocabulary_tracker
+        self.property_max_len = property_max_len
+        self.property_require_term = property_require_term
         
         # Cache for concept embeddings (not persisted)
         self._embedding_cache: Dict[str, np.ndarray] = {}
+
+        # Track decay configuration (optional external control)
+        self.decay_max_age_days = 180.0
+        self.decay_min_usage = 0
+        self.decay_min_confidence = 0.35
         
         # Initialize PMFlow retrieval extensions if available
         if PMFLOW_EXTENSIONS_AVAILABLE and hasattr(semantic_encoder, 'pm_field'):
@@ -98,6 +111,9 @@ class ProductionConceptStore:
         else:
             self.compositional_retrieval = None
             self.neighborhood = None
+
+        # Optional relational lookup helper (SQL joins)
+        self.relational_store = RelationalConceptStore(db_path) if enable_relational else None
         
         # Pre-load embeddings for all existing concepts (for symbolic reasoning)
         self._preload_embeddings()
@@ -142,6 +158,20 @@ class ProductionConceptStore:
             concept_id of created or merged concept
         """
         relations = relations or []
+
+        # Sanitize properties to avoid slabs/duplicates
+        properties, stats = sanitize_properties(
+            term,
+            properties,
+            max_len=self.property_max_len,
+            require_term=self.property_require_term,
+            dedupe=True,
+        )
+        if any(stats.values()):
+            _log(
+                f"  🧹 Sanitized properties for '{term}': "
+                f"removed_long={stats['removed_long']}, removed_term={stats['removed_term']}, removed_dupe={stats['removed_dupe']}"
+            )
         
         # Generate embedding
         tokens = term.lower().split()
@@ -191,6 +221,61 @@ class ProductionConceptStore:
         
         _log(f"  ➕ Created new concept: {term} ({concept_id})")
         return concept_id
+
+    def retrieve_relational(
+        self,
+        query_text: str,
+        property_like: Optional[str] = None,
+        relation_type: Optional[str] = None,
+        limit: int = 5,
+        include_chains: bool = True,
+    ) -> List[Dict]:
+        """Relation-aware lookup (SQL joins) for term/relations/properties."""
+        if not self.relational_store:
+            return []
+        results = self.relational_store.query_concepts(query_text, limit=limit)
+        payload: List[Dict] = []
+        for row in results:
+            item = dict(row)
+            # Attach filtered relations and properties from helper calls for consistency
+            item["properties"] = self.relational_store.query_properties(query_text, limit=limit)
+            item["relations"] = self.relational_store.query_relations(query_text, relation_type, limit=limit)
+            if property_like:
+                item["reverse_properties"] = self.relational_store.reverse_property_lookup(property_like, limit=limit)
+            if include_chains:
+                item["chains"] = self.relational_store.two_hop_chains(query_text, limit=limit)
+            payload.append(item)
+        return payload
+
+    def decay_and_prune(
+        self,
+        max_age_days: Optional[float] = None,
+        min_confidence: Optional[float] = None,
+        min_usage: Optional[int] = None,
+        max_prune: int = 200,
+    ) -> int:
+        """Prune stale/low-confidence concepts and properties. Returns deleted count."""
+        max_age_days = max_age_days or self.decay_max_age_days
+        min_confidence = min_confidence or self.decay_min_confidence
+        min_usage = min_usage if min_usage is not None else self.decay_min_usage
+        try:
+            cur = self.db.conn.cursor()
+            # Delete concepts that are old + low usage + low confidence
+            cur.execute(
+                """
+                DELETE FROM concepts
+                WHERE (julianday('now') - julianday(updated_at)) >= ?
+                  AND confidence <= ?
+                  AND usage_count <= ?
+                LIMIT ?
+                """,
+                (max_age_days, min_confidence, min_usage, max_prune),
+            )
+            deleted = cur.rowcount if cur.rowcount is not None else 0
+            self.db.conn.commit()
+            return deleted
+        except Exception:
+            return 0
     
     def retrieve_by_text(
         self,
@@ -451,6 +536,12 @@ class ProductionConceptStore:
     def _find_similar_concept(self, term: str, embedding: np.ndarray, threshold: float) -> Optional[Dict]:
         """Find if a similar concept already exists."""
         concepts = self.db.get_all_concepts()
+
+        # Lexical guardrail: embeddings can occasionally yield overly-high
+        # similarity for unrelated terms early in training. Keep consolidation
+        # strict unless the strings are also lexically close.
+        norm_term = " ".join((term or "").strip().lower().split())
+        term_tokens = set(norm_term.split())
         
         for concept_dict in concepts:
             cid = concept_dict['concept_id']
@@ -465,8 +556,19 @@ class ProductionConceptStore:
             
             concept_emb = self._embedding_cache[cid]
             sim = self._cosine_similarity(embedding, concept_emb)
-            
-            if sim >= threshold:
+
+            existing_norm = " ".join((concept_dict.get('term') or "").strip().lower().split())
+            existing_tokens = set(existing_norm.split())
+            token_overlap = bool(term_tokens & existing_tokens)
+            seq_ratio = (
+                difflib.SequenceMatcher(a=norm_term, b=existing_norm).ratio()
+                if norm_term and existing_norm
+                else 0.0
+            )
+            lexically_similar = token_overlap or (seq_ratio >= 0.80)
+            required = threshold if lexically_similar else max(0.99, threshold + 0.10)
+
+            if sim >= required:
                 return concept_dict
         
         return None
@@ -619,3 +721,8 @@ class ProductionConceptStore:
     def close(self):
         """Close database connection."""
         self.db.close()
+        if self.relational_store:
+            try:
+                self.relational_store.close()
+            except Exception:
+                pass

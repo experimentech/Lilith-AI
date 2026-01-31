@@ -500,9 +500,20 @@ class DatabaseBackedFragmentStore:
             pattern_vec = pattern_embedding.cpu().detach().numpy().flatten()
             
             # Cosine similarity between query and pattern embeddings
-            dot_product = np.dot(query_vec, pattern_vec)
-            query_norm = np.linalg.norm(query_vec)
-            pattern_norm = np.linalg.norm(pattern_vec)
+            # Some stored patterns may have been embedded with an older encoder
+            # dimension/config. Align safely to avoid shape crashes.
+            qv = query_vec
+            pv = pattern_vec
+            if qv.shape != pv.shape:
+                min_len = min(int(qv.shape[0]), int(pv.shape[0]))
+                if min_len <= 0:
+                    continue
+                qv = qv[:min_len]
+                pv = pv[:min_len]
+
+            dot_product = np.dot(qv, pv)
+            query_norm = np.linalg.norm(qv)
+            pattern_norm = np.linalg.norm(pv)
             
             if query_norm > 0 and pattern_norm > 0:
                 semantic_sim = dot_product / (query_norm * pattern_norm)

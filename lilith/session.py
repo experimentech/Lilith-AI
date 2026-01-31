@@ -39,6 +39,9 @@ class SessionConfig:
     
     # Compositional response settings (Layer 4 restructured)
     enable_compositional: bool = True  # Enable concept store for compositional responses
+    enable_relational_concepts: bool = False  # Enable SQL relational concept lookup
+    concept_property_max_len: int = 200
+    concept_property_require_term: bool = True
     enable_pragmatic_templates: bool = True  # Enable pragmatic template-based composition
     composition_mode: str = "pragmatic"  # "pattern", "concept", "parallel", or "pragmatic"
     
@@ -96,6 +99,25 @@ class SessionConfig:
     mcp_max_tools_per_turn: int = 2
     mcp_timeout_seconds: float = 2.5
     mcp_cache_ttl_seconds: float = 60.0
+
+    # MCP stage policy (gating / routing)
+    # - off: never sense/call
+    # - gated: call only when request likely benefits from tools
+    # - always_sense: rank tools but do not call
+    # - always_call: call whenever a viable tool matches
+    mcp_stage_mode: str = "gated"
+    mcp_min_tool_score: float = 0.34
+    mcp_direct_answer_enabled: bool = True
+    mcp_direct_answer_max_chars: int = 600
+
+    # Ranker / decay controls
+    enable_ranking: bool = True
+    decay_patterns: bool = True
+    decay_concepts: bool = True
+    decay_pattern_max_age_days: float = 120.0
+    decay_pattern_min_success: float = 0.35
+    decay_concept_max_age_days: float = 180.0
+    decay_concept_min_confidence: float = 0.35
 
 
 @dataclass
@@ -162,6 +184,8 @@ class LilithSession:
 
         # Optional MCP tool stream (remote endpoints)
         self.mcp_tool_stream = None
+        self.mcp_stage = None
+        self._last_mcp_artifact = None
         if self.config.enable_mcp_tool_stream and self.config.mcp_endpoints:
             try:
                 from lilith.mcp_tool_stream import MCPRemoteEndpoint, MCPToolStream
@@ -181,8 +205,23 @@ class LilithSession:
                         timeout_seconds=float(self.config.mcp_timeout_seconds),
                         cache_ttl_seconds=float(self.config.mcp_cache_ttl_seconds),
                     )
+
+                    try:
+                        from lilith.mcp_stage import MCPStage
+
+                        self.mcp_stage = MCPStage(
+                            self.mcp_tool_stream,
+                            mode=str(self.config.mcp_stage_mode),
+                            topk=int(self.config.mcp_max_tools_per_turn),
+                            min_score=float(self.config.mcp_min_tool_score),
+                            direct_answer_enabled=bool(self.config.mcp_direct_answer_enabled),
+                            direct_answer_max_chars=int(self.config.mcp_direct_answer_max_chars),
+                        )
+                    except Exception:
+                        self.mcp_stage = None
             except Exception:
                 self.mcp_tool_stream = None
+                self.mcp_stage = None
 
         # Preference learner (optional)
         self.preference_learner = None
@@ -241,7 +280,10 @@ class LilithSession:
             self.store = MultiTenantFragmentStore(
                 encoder=self.encoder,
                 user_identity=identity,
-                base_data_path=self.config.data_path
+                base_data_path=self.config.data_path,
+                enable_relational_concepts=self.config.enable_relational_concepts,
+                concept_property_max_len=self.config.concept_property_max_len,
+                concept_property_require_term=self.config.concept_property_require_term,
             )
         
         # Create conversation state (working memory - active topics with decay)
@@ -296,7 +338,10 @@ class LilithSession:
                     concept_db_path = Path(self.config.data_path) / "concept_store.db"
                     concept_store = ProductionConceptStore(
                         semantic_encoder=self.encoder,
-                        db_path=str(concept_db_path)
+                        db_path=str(concept_db_path),
+                        enable_relational=self.config.enable_relational_concepts,
+                        property_max_len=self.config.concept_property_max_len,
+                        property_require_term=self.config.concept_property_require_term,
                     )
                 except ImportError:
                     pass
@@ -314,10 +359,12 @@ class LilithSession:
             pragmatic_templates=pragmatic_templates,
             enable_pragmatic_templates=self.config.enable_pragmatic_templates,
             composition_mode=self.config.composition_mode,
+            enable_relational_concepts=self.config.enable_relational_concepts,
             enable_world_model=self.config.enable_world_model,
             enable_reasoning=self.config.enable_reasoning,
             enable_trace=self.config.enable_composition_trace,
-            data_path=self.config.data_path
+            data_path=self.config.data_path,
+            syntax_storage_path=(user_root / "syntax_patterns.json"),
         )
         
         # Wire personality bias into composer for limbic-style BNN modulation (after composer exists)
@@ -409,34 +456,31 @@ class LilithSession:
         # Update conversation state for topic tracking and pronoun resolution
         enriched_context = self._update_conversation_context(content)
 
-        # Optional: fetch MCP tool observations as an additional stream.
-        # This is data-driven: tools are discovered via tools/list and selected via metadata.
-        tool_context = ""
-        if self.mcp_tool_stream is not None:
+        # Optional: MCP tool stage (structured artifact, not just string injection).
+        mcp_artifact_dict = None
+        self._last_mcp_artifact = None
+        if self.mcp_stage is not None:
             try:
-                from lilith.mcp_tool_stream import summarize_tool_results
+                art = self.mcp_stage.process(content)
+                self._last_mcp_artifact = art
+                mcp_artifact_dict = art.to_dict()
 
-                results = self.mcp_tool_stream.call_selected(
-                    content,
-                    topk=int(self.config.mcp_max_tools_per_turn),
-                )
-                tool_context = summarize_tool_results(results)
-
-                # Also emit tool observations into the memory leaf (if enabled).
-                if tool_context:
+                # Emit tool observations into the memory leaf (if enabled).
+                # Keep the text small and provenance-carrying.
+                if getattr(art, "summary", ""):
                     self._emit_memory_turn(
                         role="assistant",
-                        text=tool_context,
+                        text=art.summary,
                         extra={
-                            "source": "mcp_tool_stream",
-                            "tool_count": len([r for r in results if getattr(r, "ok", False)]),
+                            "source": "mcp_stage",
+                            "decision": getattr(art, "decision", None),
+                            "reason": getattr(art, "reason", None),
+                            "confidence": float(getattr(art, "confidence", 0.0) or 0.0),
+                            "tool_ok_count": len([r for r in (getattr(art, "results", []) or []) if getattr(r, "ok", False)]),
                         },
                     )
             except Exception:
-                tool_context = ""
-
-        if tool_context:
-            enriched_context = f"{enriched_context}\n\n{tool_context}".strip()
+                mcp_artifact_dict = None
 
         # Learn preferences (name, interests, aversions) from the incoming text
         learned_preferences = self._process_preferences(content)
@@ -492,7 +536,7 @@ class LilithSession:
             )
         
         # Generate response using enriched context (includes topic history for pronoun resolution)
-        response = self.composer.compose_response(context=enriched_context, user_input=content)
+        response = self.composer.compose_response(context=enriched_context, user_input=content, tool_artifact=mcp_artifact_dict)
 
         # Record eligibility context for delayed credit assignment.
         self._record_eligibility(content, response)
@@ -629,6 +673,7 @@ class LilithSession:
                     "response_text": getattr(response, "text", ""),
                     "fragment_ids": fragment_ids,
                     "weights": weights,
+                    "mcp": (self._last_mcp_artifact.to_dict() if getattr(self, "_last_mcp_artifact", None) is not None else None),
                 }
             )
         except Exception:
@@ -1231,6 +1276,34 @@ class LilithSession:
             intent=intent
         )
         return pattern_id
+
+    def learn_syntax_correction(self, incorrect: Optional[str], correct: str, *, use_last_response: bool = False) -> bool:
+        """Teach the syntax stage a text-level correction.
+
+        This is intentionally explicit (caller must provide a correction), to avoid
+        over-learning from ambiguous feedback.
+        """
+
+        correct = (correct or "").strip()
+        if not correct:
+            return False
+
+        if use_last_response and not (incorrect or "").strip():
+            incorrect = self.last_response_text
+
+        incorrect = (incorrect or "").strip()
+        if not incorrect:
+            return False
+
+        stage = getattr(self.composer, "syntax_stage", None)
+        if stage is None or not hasattr(stage, "learn_correction"):
+            return False
+
+        try:
+            stage.learn_correction(incorrect, correct)
+            return True
+        except Exception:
+            return False
     
     def get_stats(self) -> Dict[str, Any]:
         """

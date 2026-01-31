@@ -83,7 +83,10 @@ class MultiTenantFragmentStore:
         user_identity: UserIdentity,
         base_data_path: str = "data",
         enable_fuzzy_matching: bool = True,
-        enable_concept_store: bool = True
+        enable_concept_store: bool = True,
+        enable_relational_concepts: bool = False,
+        concept_property_max_len: int = 200,
+        concept_property_require_term: bool = True,
     ):
         """
         Initialize multi-tenant fragment store.
@@ -158,7 +161,10 @@ class MultiTenantFragmentStore:
             self.concept_store = ProductionConceptStore(
                 semantic_encoder=encoder,
                 db_path=concept_db_path,
-                vocabulary_tracker=self.vocabulary  # ← Now with vocabulary expansion!
+                vocabulary_tracker=self.vocabulary,
+                enable_relational=enable_relational_concepts,
+                property_max_len=concept_property_max_len,
+                property_require_term=concept_property_require_term,
             )
             _log(f"  🧠 Concept store enabled: {concept_db_path}")
             if self.vocabulary:
@@ -243,6 +249,21 @@ class MultiTenantFragmentStore:
         
         # Return without source marker
         return [(pattern, conf) for pattern, conf, _ in top_matches]
+
+    def decay_and_prune_patterns(
+        self,
+        max_age_days: float = 120.0,
+        min_success: float = 0.35,
+        min_usage: int = 0,
+        max_prune: int = 200,
+    ) -> int:
+        """Run decay/prune on user/base stores; returns total pruned."""
+        total = 0
+        if self.user_store and hasattr(self.user_store, "decay_and_prune"):
+            total += self.user_store.decay_and_prune(max_age_days, min_success, min_usage, max_prune)
+        if hasattr(self.base_store, "decay_and_prune"):
+            total += self.base_store.decay_and_prune(max_age_days, min_success, min_usage, max_prune)
+        return total
     
     def retrieve_patterns_hybrid(
         self,

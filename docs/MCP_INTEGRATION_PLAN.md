@@ -11,7 +11,7 @@
 ## Current MCP State
 - MCP is optional and decoupled: adapter and FastAPI shim live in lilith/mcp_adapter.py and lilith/mcp_server.py. They map MCP-style calls to `LilithSession` (chat/teach/feedback/stats/weather/news) but do not alter core flows by default.
 - Tests cover adapter routing and transient tool non-persistence: tests/test_mcp_adapter.py.
-- CLI and composer no longer auto-attach MCP sources (to avoid unintended behavior). Topic extractor retains a guard to prevent embedding shape crashes (lilith/topic_extractor.py).
+- MCP tool stream can be enabled per session as a first-class stage ("MCP tool stage"). It produces a structured artifact (decision/candidates/results/summary/confidence) that is passed into the composer as an explicit input. Default behavior is gated and fail-closed.
 
 ## Principles for MCP as a Modality (no hacks)
 - Separation: keep MCP transport/adapters outside core; integrate through explicit, intent-gated augmentation hooks.
@@ -21,9 +21,9 @@
 - Symmetry: treat MCP sources like other augmentation modalities (not new storage) unless explicitly promoted to stores.
 
 ## Proposed API-Safe Path (incremental)
-1) Add an explicit MCP augmentation hook in the composer that is opt-in and intent-gated (weather/news initially). No automatic writes; only returns transient snippets.
-2) Provide a small configuration surface (enable_mcp_aug, allowed_tools, ttl_ms, rate_limit) to avoid hidden behavior. Defaults off.
-3) Keep adapter/server thin; expose MCP endpoints via FastAPI (already present) or other runtimes. Do not auto-wire in CLI by default; offer a flag to enable MCP augmentation.
+1) Keep the adapter/server thin; expose MCP endpoints via FastAPI (already present) or other runtimes.
+2) Integrate MCP through a stage artifact (not string concatenation): pass the artifact to the composer, and keep persistence explicit (teach/upvote only).
+3) Provide a small, explicit configuration surface so behavior is not hidden.
 4) Add observability: log caller/tool, latency, success/failure, and user feedback links so promotion decisions can be manual/explicit.
 5) Extend tests: intent-gated MCP augmentation, transient-only behavior, and fallback to legacy augmentation when MCP unavailable.
 
@@ -37,4 +37,6 @@
 - lilith/multi_tenant_store.py
 - lilith/mcp_adapter.py
 - lilith/mcp_server.py
+- lilith/mcp_tool_stream.py
+- lilith/mcp_stage.py
 - tests/test_mcp_adapter.py

@@ -22,6 +22,48 @@ def _truthy(name: str) -> bool:
     return os.getenv(name, "").lower() in {"1", "true", "yes", "on"}
 
 
+def _parse_mcp_endpoints(raw: str):
+    """Parse MCP endpoints from either JSON or a simple name=url list."""
+
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+
+    # Preferred: JSON list of {name,url}
+    if raw.startswith("["):
+        try:
+            import json
+
+            data = json.loads(raw)
+            if isinstance(data, list):
+                out = []
+                for item in data:
+                    if not isinstance(item, dict):
+                        continue
+                    name = str(item.get("name") or "").strip()
+                    url = str(item.get("url") or "").strip()
+                    if name and url:
+                        out.append({"name": name, "url": url})
+                return out or None
+        except Exception:
+            return None
+
+    # Fallback: comma-separated name=url pairs
+    out = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part:
+            continue
+        name, url = part.split("=", 1)
+        name = name.strip()
+        url = url.strip()
+        if name and url:
+            out.append({"name": name, "url": url})
+    return out or None
+
+
 def main():
     """Run multi-tenant Lilith CLI"""
     
@@ -91,6 +133,31 @@ def main():
     if _truthy("LILITH_DISABLE_PRAGMATIC"):
         config.enable_pragmatic_templates = False
     
+    # Reasoning stage configuration
+    if _truthy("LILITH_DISABLE_REASONING"):
+        config.enable_reasoning = False
+    elif os.getenv("LILITH_REASONING_ENABLE"):
+        # Explicit enable if var exists and not falsy (or truthy check)
+        config.enable_reasoning = _truthy("LILITH_REASONING_ENABLE")
+
+    # Optional MCP Tool Stage configuration.
+    # Enable by providing endpoints via env var.
+    endpoints = _parse_mcp_endpoints(os.getenv("LILITH_MCP_ENDPOINTS", ""))
+    if endpoints:
+        config.enable_mcp_tool_stream = True
+        config.mcp_endpoints = endpoints
+        config.mcp_stage_mode = (os.getenv("LILITH_MCP_MODE", "") or config.mcp_stage_mode).strip() or config.mcp_stage_mode
+        try:
+            if os.getenv("LILITH_MCP_MIN_SCORE"):
+                config.mcp_min_tool_score = float(os.getenv("LILITH_MCP_MIN_SCORE"))
+        except Exception:
+            pass
+        try:
+            if os.getenv("LILITH_MCP_TOPK"):
+                config.mcp_max_tools_per_turn = int(os.getenv("LILITH_MCP_TOPK"))
+        except Exception:
+            pass
+    
     session = LilithSession(
         user_id=user_identity.user_id,
         context_id="cli",
@@ -117,7 +184,7 @@ def main():
     
     print()
     print("Type '/quit' or '/exit' to exit")
-    print("Commands: '/teach', '/stats', '/reset', '/help'")
+    print("Commands: '/teach', '/think', '/correct', '/weather', '/mcp', '/stats', '/reset', '/help'")
     print("Feedback: '/+' (upvote), '/-' (downvote), '/?' (show last pattern ID)")
     print("=" * 60)
     print()
@@ -139,8 +206,21 @@ def main():
             continue
         
         # Commands must start with '/'
+        # Be forgiving about accidental double-slashes (e.g. "//+").
+        if user_input.startswith('//') and not user_input.startswith('///'):
+            candidate = user_input[1:]
+            # Only normalize if it looks like a known command/feedback.
+            head = candidate[1:].strip().split(maxsplit=1)[0].lower() if candidate.startswith('/') else ""
+            if head in {"quit", "exit", "stats", "help", "teach", "feedback", "reset", "+", "-", "?", "correct", "weather", "mcp"}:
+                user_input = candidate
+
         if user_input.startswith('/'):
-            command = user_input[1:].lower()
+            raw = user_input[1:].strip()
+            if not raw:
+                continue
+            parts = raw.split(maxsplit=1)
+            command = parts[0].lower()
+            arg = parts[1].strip() if len(parts) > 1 else ""
             
             if command in ['quit', 'exit']:
                 # Save session state before exit
@@ -200,12 +280,143 @@ def main():
                 print("   /quit    - Exit the program")
                 print("   /exit    - Exit the program")
                 print("   /teach   - Teach a new question/answer pair")
+                print("   /think   - Submit a query with visible reasoning trace")
+                print("   /correct - Teach a correction for my last reply")
+                print("   /weather - Get current weather for a location")
+                print("   /mcp     - Show/toggle MCP tool stage")
                 print("   /stats   - Show pattern statistics")
                 print("   /feedback- Show auto-feedback stats")
                 print("   /reset   - Reset your data (with backup)")
                 print("   /+       - Upvote last response")
                 print("   /-       - Downvote last response")
                 print("   /?       - Show last pattern ID")
+                print()
+                continue
+            
+            elif command == 'think':
+                # Explicit thinking command
+                query = arg.strip()
+                if not query:
+                    query = input("Think about: ").strip()
+                
+                if not query:
+                    print("❌ cancelled - no query provided")
+                    print()
+                    continue
+                
+                print(f"\n🧠 Thinking about: '{query}'")
+                print("=" * 40)
+                
+                # Process normally - reasoning stage prints to stdout
+                # We mainly provide the visual framing here
+                turn += 1
+                response = session.process_message(query)
+                
+                print("=" * 40)
+                print(f"Lilith: {response.text}")
+                print()
+                continue
+
+            elif command == 'mcp':
+                # Runtime toggle/config for the MCP tool stage.
+                # Usage:
+                #   /mcp
+                #   /mcp status
+                #   /mcp mode <off|gated|always_sense|always_call>
+                #   /mcp on|off
+                #   /mcp score <float>
+                #   /mcp topk <int>
+
+                sub = (arg or "").strip()
+                parts2 = sub.split(maxsplit=1) if sub else []
+                subcmd = (parts2[0].lower() if parts2 else "status")
+                subarg = (parts2[1].strip() if len(parts2) > 1 else "")
+
+                stage = getattr(session, "mcp_stage", None)
+
+                if subcmd in {"status", "show"}:
+                    enabled = bool(getattr(session.config, "enable_mcp_tool_stream", False))
+                    eps = list(getattr(session.config, "mcp_endpoints", []) or [])
+                    print("\n🔌 MCP Tool Stage")
+                    print(f"   Enabled: {enabled}")
+                    print(f"   Endpoints: {len(eps)}")
+                    for e in eps[:5]:
+                        try:
+                            print(f"     - {e.get('name')}: {e.get('url')}")
+                        except Exception:
+                            continue
+                    if stage is None:
+                        print("   Stage: not initialized")
+                        print("\n   To enable, set LILITH_MCP_ENDPOINTS and restart the CLI.")
+                        print("   Example:")
+                        print("     export LILITH_MCP_ENDPOINTS='[{\"name\":\"stub\",\"url\":\"ws://127.0.0.1:8765\"}]'")
+                    else:
+                        print(f"   Mode: {getattr(stage, 'mode', 'unknown')}")
+                        print(f"   Min score: {getattr(stage, 'min_score', None)}")
+                        print(f"   TopK: {getattr(stage, 'topk', None)}")
+                    print()
+                    continue
+
+                if stage is None:
+                    print("\n⚠️  MCP stage is not initialized.")
+                    print("   Set LILITH_MCP_ENDPOINTS and restart the CLI.")
+                    print()
+                    continue
+
+                if subcmd in {"on", "enable"}:
+                    stage.mode = "gated"
+                    session.config.mcp_stage_mode = "gated"
+                    print("\n✅ MCP stage enabled (mode=gated)")
+                    print()
+                    continue
+
+                if subcmd in {"off", "disable"}:
+                    stage.mode = "off"
+                    session.config.mcp_stage_mode = "off"
+                    print("\n✅ MCP stage disabled (mode=off)")
+                    print()
+                    continue
+
+                if subcmd == "mode":
+                    mode = (subarg or "").strip().lower()
+                    if mode not in {"off", "gated", "always_sense", "always_call"}:
+                        print("\n❌ Invalid mode. Use one of: off, gated, always_sense, always_call")
+                        print()
+                        continue
+                    stage.mode = mode
+                    session.config.mcp_stage_mode = mode
+                    print(f"\n✅ MCP stage mode set to: {mode}")
+                    print()
+                    continue
+
+                if subcmd == "score":
+                    try:
+                        v = float(subarg)
+                        if v < 0.0 or v > 1.0:
+                            raise ValueError("score out of range")
+                        stage.min_score = v
+                        session.config.mcp_min_tool_score = v
+                        print(f"\n✅ MCP min tool score set to: {v:.3f}")
+                    except Exception:
+                        print("\n❌ Usage: /mcp score <float between 0 and 1>")
+                    print()
+                    continue
+
+                if subcmd == "topk":
+                    try:
+                        v = int(subarg)
+                        if v < 0:
+                            raise ValueError("topk must be >= 0")
+                        stage.topk = v
+                        session.config.mcp_max_tools_per_turn = v
+                        print(f"\n✅ MCP topk set to: {v}")
+                    except Exception:
+                        print("\n❌ Usage: /mcp topk <int>")
+                    print()
+                    continue
+
+                print(f"\n⚠️  Unknown /mcp subcommand: {subcmd}")
+                print("   Try: /mcp, /mcp mode gated, /mcp off")
                 print()
                 continue
             
@@ -244,6 +455,63 @@ def main():
                 except Exception as e:
                     print(f"\n❌ Failed to learn pattern: {e}")
                 
+                print()
+                continue
+
+            elif command == 'correct':
+                # Two forms:
+                #  1) /correct <corrected text>   (uses last bot reply as the incorrect source)
+                #  2) /correct                    (prompts for corrected text; uses last bot reply)
+                # If we have no last reply, prompt for the incorrect text.
+
+                print("\n📝 Correction Mode")
+                print("=" * 50)
+
+                incorrect = (session.last_response_text or "").strip()
+                if not incorrect:
+                    incorrect = input("Incorrect text (what I said): ").strip()
+                    if not incorrect:
+                        print("❌ Correction cancelled - no incorrect text provided")
+                        print()
+                        continue
+
+                if arg:
+                    correct = arg
+                else:
+                    correct = input("Corrected text (what I should say): ").strip()
+
+                if not correct:
+                    print("❌ Correction cancelled - no corrected text provided")
+                    print()
+                    continue
+
+                ok = session.learn_syntax_correction(incorrect=None, correct=correct, use_last_response=True)
+                if ok:
+                    print("\n✅ Learned correction for future responses.")
+                else:
+                    print("\n⚠️  Could not learn correction (syntax stage may be disabled).")
+
+                print()
+                continue
+
+            elif command == 'weather':
+                location = arg.strip()
+                if not location:
+                    location = input("Location (e.g., Sydney, NSW): ").strip()
+                if not location:
+                    print("❌ Weather cancelled - no location provided")
+                    print()
+                    continue
+
+                try:
+                    from lilith.mcp_adapter import WeatherClient
+
+                    client = WeatherClient()
+                    report = client.get_weather(location)
+                    print(f"\n🌦️  Weather for {report.location}: {report.summary}, {report.temperature_c:.1f}°C")
+                except Exception as e:
+                    print(f"\n⚠️  Weather lookup failed: {e}")
+
                 print()
                 continue
             

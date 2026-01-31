@@ -76,6 +76,7 @@ python tests/test_conversation.py
 - ✅ **Multi-Tenant Architecture**: Isolated user databases with shared base knowledge
 - ✅ **SQLite Backend**: Thread-safe concurrent access with ACID guarantees
 - ✅ **Scalable Storage**: Handles concurrent users without data corruption
+- ✅ **MCP Tool Stage (optional)**: Remote MCP tools as a first-class stage (gated tool calling + structured artifacts)
 
 ## Architecture
 
@@ -102,6 +103,35 @@ python lilith_cli.py --mode user --user alice
 ```
 
 See [docs/SQLITE_MIGRATION.md](docs/SQLITE_MIGRATION.md) for details on the SQLite backend and concurrency support.
+
+### MCP Tool Stage (optional)
+
+Lilith can optionally treat MCP tools as a first-class “tool perception” stage.
+
+- Discovers tools via MCP `tools/list` and calls tools via `tools/call`.
+- Produces a structured stage artifact (decision, candidates, results, summary, confidence) that is passed into the response composer.
+- Default behavior is conservative: it is **gated** and fails closed.
+
+Enable it in the CLI by setting `LILITH_MCP_ENDPOINTS` before launching:
+
+```bash
+export LILITH_MCP_ENDPOINTS='[{"name":"stub","url":"ws://127.0.0.1:8765"}]'
+
+# Optional tuning
+export LILITH_MCP_MODE=gated          # off | gated | always_sense | always_call
+export LILITH_MCP_MIN_SCORE=0.34      # 0..1
+export LILITH_MCP_TOPK=2              # max tools per turn
+
+python lilith_cli.py
+```
+
+Runtime controls (inside the CLI):
+
+- `/mcp` or `/mcp status` shows current MCP stage configuration.
+- `/mcp mode gated|always_sense|always_call|off` changes behavior live.
+- `/mcp score <0..1>` and `/mcp topk <int>` tune selection sensitivity.
+
+More details: see [docs/MCP_INTEGRATION_PLAN.md](docs/MCP_INTEGRATION_PLAN.md).
 
 ### Testing
 

@@ -1,11 +1,25 @@
 # MCP Adapter Skeleton
 
-This note captures a minimal plan for exposing Lilith through MCP-style endpoints without changing core behavior.
+This note describes the MCP integration surfaces in this repo.
 
 ## Goals
-- Keep Lilith core untouched (`LilithSession`, retrieval, learning, stores).
-- Provide a thin adapter that maps MCP tool calls to existing session methods.
+- Keep the MCP adapter surface thin and boring (request/response mapping).
 - Support transient tools (e.g., weather/news) without polluting persistent knowledge.
+- Enable optional **outgoing** MCP tool use as a first-class “tool stage” (policy-gated).
+
+## Two MCP Concepts in This Repo
+
+This repository contains **two related but distinct** MCP integration surfaces:
+
+1) **MCP Adapter/Server (incoming MCP-style calls)**
+	- A thin adapter that maps requests to session methods.
+	- Implemented in `lilith/mcp_adapter.py` + `lilith/mcp_server.py`.
+
+2) **MCP Tool Stage (outgoing MCP tool calls)**
+	- Treats remote MCP endpoints as a “tool perception” stage.
+	- Discovers tools via `tools/list` and (optionally) calls them via `tools/call`.
+	- Produces a structured artifact (decision/candidates/results/summary/confidence) passed into the response composer.
+	- Implemented in `lilith/mcp_tool_stream.py` + `lilith/mcp_stage.py` and wired through `lilith/session.py` → `lilith/response_composer.py`.
 
 ## Files
 - `lilith/mcp_adapter.py`: In-process adapter with handlers for chat, teach, feedback, stats, reset, and transient weather/news with TTL caching and optional live fetches.
@@ -32,6 +46,31 @@ adapter.handle_upvote("alice", pattern_id)
 # Transient weather (no DB writes)
 report = adapter.handle_weather("alice", location="London")
 print(report.summary)
+```
+
+## Enabling the MCP Tool Stage
+
+Enable via `SessionConfig`:
+
+- `enable_mcp_tool_stream=True`
+- `mcp_endpoints=[{"name": "stub", "url": "ws://127.0.0.1:8765"}]`
+- `mcp_stage_mode`: `off | gated | always_sense | always_call`
+- `mcp_min_tool_score`: selection sensitivity (0..1)
+- `mcp_max_tools_per_turn`: top-k tool calls per turn
+
+The tool stage is designed to be safe to disable at runtime (mode `off`) and conservative by default (mode `gated`).
+
+In the CLI, you can enable endpoints via env var and then toggle at runtime:
+
+```bash
+export LILITH_MCP_ENDPOINTS='[{"name":"stub","url":"ws://127.0.0.1:8765"}]'
+python lilith_cli.py
+
+# Inside the CLI:
+/mcp
+/mcp mode always_sense
+/mcp mode gated
+/mcp off
 ```
 
 # Transient vs. Persistent Data

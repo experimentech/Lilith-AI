@@ -25,6 +25,9 @@ import torch
 from .base import PipelineArtifact, Utterance
 from .embedding import PMFlowEmbeddingEncoder
 
+# Import Reasoning Stage from main package
+from lilith.reasoning_stage import ReasoningStage
+
 
 class StageType(Enum):
     """Cognitive processing stages in the pipeline."""
@@ -342,6 +345,68 @@ class SemanticStage(CognitiveStage):
         return artifact
 
 
+class ReasoningStageWrapper(CognitiveStage):
+    """Refined reasoning stage that uses Agentic Physics to deliberate."""
+    
+    def __init__(self, config: StageConfig):
+        super().__init__(config)
+        
+        # Ensure encoder has flow enabled if supported
+        pm_field = None
+        if hasattr(self.encoder, 'pm_field'):
+            pm_field = self.encoder.pm_field
+            
+        # Instantiate the actual reasoning engine
+        # We pass self.encoder which wraps the BNN
+        self.engine = ReasoningStage(
+            encoder=self.encoder,
+            deliberation_steps=5
+        )
+        
+        self._log.info("Initialized Agentic Reasoning engine")
+        
+    def process(
+        self,
+        input_data: Any,
+        upstream_artifacts: Optional[List[StageArtifact]] = None,
+    ) -> StageArtifact:
+        """Run physics-based deliberation on the input."""
+        
+        # Extract text to reason about
+        text = str(input_data)
+        if isinstance(input_data, Utterance):
+            text = input_data.text
+            
+        # Look for semantic context
+        context_str = None
+        if upstream_artifacts:
+            for art in upstream_artifacts:
+                if art.stage == StageType.SEMANTIC and "normalised" in art.metadata:
+                    context_str = art.metadata["normalised"]
+                    
+        # Run Agentic Reasoning (Intent -> Think -> Evaluate)
+        result = self.engine.deliberate(text, context=context_str)
+        
+        # Convert result to artifact
+        # We use the encoder to produce an embedding of the 'focus concept' or 'resolved intent'
+        # representing the conclusion of the thought process.
+        
+        conclusion_text = result.resolved_intent or result.focus_concept or "thought_process"
+        
+        # We use the internal encoder to create an artifact
+        artifact = self.encode_with_context([conclusion_text])
+        
+        # Add rich metadata from reasoning
+        artifact.metadata["reasoning_result"] = result
+        artifact.metadata["deliberation_steps"] = result.deliberation_steps
+        artifact.metadata["inferences"] = len(result.inferences)
+        artifact.metadata["focus"] = result.focus_concept
+        artifact.metadata["intent"] = result.resolved_intent
+        artifact.confidence = result.confidence
+        
+        return artifact
+
+
 class StageCoordinator:
     """Coordinates multi-stage PMFlow BNN pipeline.
     
@@ -369,7 +434,7 @@ class StageCoordinator:
         self._log.info("StageCoordinator initialized with %d stages", len(self.stages))
     
     def _default_configs(self) -> List[StageConfig]:
-        """Create default 2-stage configuration (intake + semantic)."""
+        """Create default 3-stage configuration (intake + semantic + reasoning)."""
         return [
             StageConfig(
                 stage_type=StageType.INTAKE,
@@ -383,6 +448,12 @@ class StageCoordinator:
                 state_path=self.base_state_dir / "semantic_pmflow.pt",
                 encoder_config={"latent_dim": 32, "dimension": 64},
             ),
+            StageConfig(
+                stage_type=StageType.REASONING,
+                db_namespace="reasoning_memory",
+                state_path=self.base_state_dir / "reasoning_pmflow.pt",
+                encoder_config={"latent_dim": 48, "dimension": 64}, # Deeper latent space for reasoning
+            ),
         ]
     
     def _add_stage(self, config: StageConfig) -> None:
@@ -391,6 +462,8 @@ class StageCoordinator:
             stage = IntakeStage(config)
         elif config.stage_type == StageType.SEMANTIC:
             stage = SemanticStage(config)
+        elif config.stage_type == StageType.REASONING:
+            stage = ReasoningStageWrapper(config)
         else:
             # Generic stage for future extensions
             stage = CognitiveStage(config)

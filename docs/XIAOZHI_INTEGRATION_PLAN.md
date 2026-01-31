@@ -19,7 +19,7 @@
   - Exposes optional IoT state hooks (descriptors/states) for future device control, stored transiently unless explicitly promoted.
 
 ## Minimum viable server surface (WebSocket-first)
-- File: `xiaozhi_server.py` (or a FastAPI router) that:
+- Implemented as a FastAPI WebSocket endpoint in `lilith/mcp_server.py` that:
   - Accepts WebSocket with auth headers; validates token (configurable noop for dev); sends server hello `{type: "hello", transport: "websocket", session_id, features:{mcp:true}}`.
   - Generates session IDs and instantiates a LilithSession per connection with timeouts and cache limits consistent with mcp_server.
   - Handles JSON messages: `listen start/stop/detect` toggles capture; `abort` maps to cancellation; `mcp` forwards payload into existing MCP adapter; `iot` optionally echoed/logged for now.

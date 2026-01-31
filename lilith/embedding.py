@@ -91,6 +91,7 @@ class PMFlowEmbeddingEncoder:
                 dt=0.15,
                 beta=1.2,
                 clamp=3.0,
+                enable_flow=True,  # Enable agentic frame-dragging
             )
             generator = torch.Generator().manual_seed(seed)
             with torch.no_grad():
@@ -104,8 +105,15 @@ class PMFlowEmbeddingEncoder:
                     0.35,
                     device=field.fine_field.mus.device,
                 )
+                omegas_fine = torch.randn(
+                    field.fine_field.mus.shape, # Matches N centers
+                    generator=generator,
+                    device=field.fine_field.mus.device
+                ) * 0.01
+                
                 field.fine_field.centers.copy_(centres_fine)
                 field.fine_field.mus.copy_(mus_fine)
+                field.fine_field.omegas.copy_(omegas_fine)
 
                 centres_coarse = torch.randn(
                     field.coarse_field.centers.shape,
@@ -117,11 +125,18 @@ class PMFlowEmbeddingEncoder:
                     0.35,
                     device=field.coarse_field.mus.device,
                 )
+                omegas_coarse = torch.randn(
+                    field.coarse_field.mus.shape,
+                    generator=generator,
+                    device=field.coarse_field.mus.device
+                ) * 0.01
+
                 field.coarse_field.centers.copy_(centres_coarse)
                 field.coarse_field.mus.copy_(mus_coarse)
+                field.coarse_field.omegas.copy_(omegas_coarse)
             return field
         except Exception:
-            field = ParallelPMField(d_latent=latent_dim, steps=5, dt=0.08, beta=0.9, clamp=2.5)
+            field = ParallelPMField(d_latent=latent_dim, steps=5, dt=0.08, beta=0.9, clamp=2.5, enable_flow=True)
             generator = torch.Generator().manual_seed(seed)
             with torch.no_grad():
                 centres = torch.randn(
@@ -130,8 +145,11 @@ class PMFlowEmbeddingEncoder:
                     device=field.centers.device,
                 ) * 0.5
                 mus = torch.full(field.mus.shape, 0.35, device=field.mus.device)
+                omegas = torch.randn(field.mus.shape, generator=generator, device=field.mus.device) * 0.01
+                
                 field.centers.copy_(centres)
                 field.mus.copy_(mus)
+                field.omegas.copy_(omegas)
             return field
 
     def encode(self, tokens: Iterable[str] | str) -> torch.Tensor:
@@ -167,8 +185,10 @@ class PMFlowEmbeddingEncoder:
                 "type": "multiscale",
                 "fine_centers": self.pm_field.fine_field.centers.detach().cpu(),
                 "fine_mus": self.pm_field.fine_field.mus.detach().cpu(),
+                "fine_omegas": getattr(self.pm_field.fine_field, 'omegas', torch.tensor([])).detach().cpu(),
                 "coarse_centers": self.pm_field.coarse_field.centers.detach().cpu(),
                 "coarse_mus": self.pm_field.coarse_field.mus.detach().cpu(),
+                "coarse_omegas": getattr(self.pm_field.coarse_field, 'omegas', torch.tensor([])).detach().cpu(),
                 "coarse_projection": self.pm_field.coarse_projection.weight.detach().cpu(),
             }
         else:
@@ -177,6 +197,7 @@ class PMFlowEmbeddingEncoder:
                 "type": "standard",
                 "centers": self.pm_field.centers.detach().cpu(),
                 "mus": self.pm_field.mus.detach().cpu(),
+                "omegas": getattr(self.pm_field, 'omegas', torch.tensor([])).detach().cpu(),
             }
         
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -195,8 +216,14 @@ class PMFlowEmbeddingEncoder:
                 if hasattr(self.pm_field, 'fine_field') and hasattr(self.pm_field, 'coarse_field'):
                     self.pm_field.fine_field.centers.copy_(payload["fine_centers"].to(self.device))
                     self.pm_field.fine_field.mus.copy_(payload["fine_mus"].to(self.device))
+                    if "fine_omegas" in payload and hasattr(self.pm_field.fine_field, 'omegas'):
+                         self.pm_field.fine_field.omegas.copy_(payload["fine_omegas"].to(self.device))
+                    
                     self.pm_field.coarse_field.centers.copy_(payload["coarse_centers"].to(self.device))
                     self.pm_field.coarse_field.mus.copy_(payload["coarse_mus"].to(self.device))
+                    if "coarse_omegas" in payload and hasattr(self.pm_field.coarse_field, 'omegas'):
+                        self.pm_field.coarse_field.omegas.copy_(payload["coarse_omegas"].to(self.device))
+                    
                     self.pm_field.coarse_projection.weight.copy_(payload["coarse_projection"].to(self.device))
             # Handle standard PMField (backward compatibility)
             elif "centers" in payload:
@@ -204,6 +231,8 @@ class PMFlowEmbeddingEncoder:
                     self.pm_field.centers.copy_(payload["centers"].to(self.device))
                 if "mus" in payload and hasattr(self.pm_field, 'mus'):
                     self.pm_field.mus.copy_(payload["mus"].to(self.device))
+                if "omegas" in payload and hasattr(self.pm_field, 'omegas'):
+                    self.pm_field.omegas.copy_(payload["omegas"].to(self.device))
 
     def _encode_internal(self, tokens: Iterable[str] | str) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         if isinstance(tokens, str):

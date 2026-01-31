@@ -20,7 +20,7 @@ class DummyComposer:
         self.contrastive_learner = None
         self.syntax_stage = None
 
-    def compose_response(self, context, user_input):
+    def compose_response(self, context, user_input, tool_artifact=None, **kwargs):
         return DummyResponse(text="Sure thing", confidence=0.9)
 
 

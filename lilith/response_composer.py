@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from typing import List, Optional, Dict, Tuple, Union, Any, TYPE_CHECKING
 import numpy as np
 import re
+import time
+import os
 
 from .response_fragments import ResponseFragmentStore, ResponsePattern
 from .conversation_state import ConversationState
@@ -71,6 +73,13 @@ except ImportError:
     MODAL_ROUTING_AVAILABLE = False
     Modality = None  # type: ignore
 
+# Optional: Weather MCP client for capability-aware routing
+try:
+    from .mcp_adapter import WeatherClient
+    WEATHER_CLIENT_AVAILABLE = True
+except ImportError:
+    WEATHER_CLIENT_AVAILABLE = False
+
 # Optional: Import reasoning stage for deliberative thinking
 try:
     from .reasoning_stage import ReasoningStage, DeliberationResult
@@ -92,6 +101,13 @@ try:
 except ImportError:
     WORLD_MODEL_AVAILABLE = False
 
+    # Lightweight ranker for cross-source selection
+    try:
+        from .ranker import LinearScorer, RankingFeatures
+        RANKER_AVAILABLE = True
+    except ImportError:
+        RANKER_AVAILABLE = False
+
 
 @dataclass
 class ComposedResponse:
@@ -107,6 +123,36 @@ class ComposedResponse:
     modality: Optional['Modality'] = None  # Query modality (LINGUISTIC, MATH, CODE, etc.)
     trace: Optional[List[Dict[str, Any]]] = None  # Optional decision trace for debugging
     
+
+class AdaptiveHeuristicPolicy:
+    """Small learned policy to replace fixed heuristics (EMA-based)."""
+
+    def __init__(self, alpha: float = 0.2, init_conf: float = 0.65, init_success: float = 0.7):
+        self.alpha = alpha
+        self.conf_ema = init_conf
+        self.success_ema = init_success
+
+    def register_observation(self, confidence: float) -> None:
+        try:
+            conf = float(confidence)
+        except Exception:
+            return
+        self.conf_ema = (1 - self.alpha) * self.conf_ema + self.alpha * conf
+
+    def register_success(self, success: bool) -> None:
+        target = 1.0 if success else 0.0
+        self.success_ema = (1 - self.alpha) * self.success_ema + self.alpha * target
+
+    def ka_min_confidence(self) -> float:
+        # Lower threshold when success rises; clamp to avoid extremes.
+        adjusted = self.conf_ema - 0.05 * (1.0 - self.success_ema)
+        return max(0.50, min(0.80, adjusted))
+
+    def ka_ttl_seconds(self) -> float:
+        # Longer TTL when success is high; shorter when low.
+        ttl = 60.0 + 240.0 * self.success_ema
+        return max(60.0, min(300.0, ttl))
+
 
 class ResponseComposer:
     """
@@ -129,6 +175,7 @@ class ResponseComposer:
         enable_knowledge_augmentation: bool = True,
         concept_store: Optional['ProductionConceptStore'] = None,
         enable_compositional: bool = True,
+        enable_relational_concepts: bool = True,
         enable_modal_routing: bool = True,
         pragmatic_templates: Optional['PragmaticTemplateStore'] = None,
         enable_pragmatic_templates: bool = True,
@@ -136,7 +183,8 @@ class ResponseComposer:
         enable_world_model: bool = False,
         enable_reasoning: bool = True,
         enable_trace: bool = False,
-        data_path: str = "data"
+        data_path: str = "data",
+        syntax_storage_path=None,
     ):
         """
         Initialize response composer.
@@ -165,16 +213,35 @@ class ResponseComposer:
         self.state = conversation_state
         self.conversation_history = conversation_history
         self.composition_mode = composition_mode
+        self.enable_relational_concepts = enable_relational_concepts
 
         # Optional per-call decision trace (debugging / observability)
         self.enable_trace = enable_trace
         self._trace_log: List[Dict[str, Any]] = []
+
+        # Adaptive policy for replacing fixed heuristics (KA thresholds, TTLs)
+        self._adaptive = AdaptiveHeuristicPolicy()
+
+        # Unified ranker for cross-source selection
+        self.ranker = LinearScorer() if 'RANKER_AVAILABLE' in globals() and RANKER_AVAILABLE else None
         
         # Store semantic encoder for later use (relevance validation, etc.)
         self.semantic_encoder = semantic_encoder
+
+        # Optional source tracing (dev/CLI observability)
+        self.enable_source_trace = os.getenv("LILITH_TRACE_SOURCES", "").lower() in {"1", "true", "yes", "on"}
+
+        # Capability manifest (soft state, recomputed on request)
+        self._capability_cache: Dict[str, Any] = {}
+
+        # Recent weather memory for follow-up reasoning
+        self._last_weather_report: Optional[Dict[str, Any]] = None
         
         # Initialize normalizer for query cleaning (INTAKE layer)
         self.normalizer = NoiseNormalizer()
+
+        # Short-term cache to suppress immediate re-lookups (concept -> (confidence, timestamp))
+        self._ka_recent: Dict[str, Tuple[float, float]] = {}
         
         # Initialize BioNN intent classifier if encoder provided
         self.intent_classifier = None
@@ -185,7 +252,16 @@ class ResponseComposer:
         # Initialize syntax stage if available and requested
         self.syntax_stage = None
         if use_grammar and GRAMMAR_AVAILABLE:
-            self.syntax_stage = SyntaxStage()
+            # Import locally to keep optional dependency wiring friendly to type checkers.
+            from lilith.syntax_stage_bnn import SyntaxStage as _SyntaxStage
+            if syntax_storage_path is not None:
+                try:
+                    from pathlib import Path
+                    self.syntax_stage = _SyntaxStage(storage_path=Path(syntax_storage_path))
+                except Exception:
+                    self.syntax_stage = _SyntaxStage()
+            else:
+                self.syntax_stage = _SyntaxStage()
             print("  📝 BioNN-based syntax stage enabled!")
         elif use_grammar and not GRAMMAR_AVAILABLE:
             print("  ⚠️  Syntax stage not available, falling back to standard composition")
@@ -496,6 +572,269 @@ class ResponseComposer:
                 print(f"  ⚠️  Knowledge augmentation unavailable: {exc}")
                 self.enable_knowledge_augmentation = False
         return self.knowledge_augmenter
+
+    def _normalize_concept_key(self, text: str) -> str:
+        return (text or "").strip().lower()
+
+    def _trace_source(self, source: str, confidence: float, note: str = "") -> None:
+        if not self.enable_source_trace:
+            return
+        note_part = f" | {note}" if note else ""
+        print(f"  🛰️ source={source} conf={confidence:.2f}{note_part}")
+
+    def _capability_manifest(self) -> Dict[str, Any]:
+        """Summarize available 'limbs/senses' for self-report and routing."""
+        manifest = {
+            "knowledge_augmentation": bool(self.enable_knowledge_augmentation and KNOWLEDGE_AUGMENTATION_AVAILABLE),
+            "concept_store": bool(self.concept_store is not None),
+            "reasoning": bool(self.reasoning_stage is not None),
+            "world_model": bool(self.world_model is not None),
+            "math": bool(self.math_backend is not None),
+            "modal_routing": bool(self.modal_classifier is not None),
+            "patterns": True,  # fragment store is required
+            "pragmatic_templates": bool(self.pragmatic_templates is not None),
+            "syntax": bool(self.syntax_stage is not None),
+            "weather_tool": bool(WEATHER_CLIENT_AVAILABLE),
+        }
+        return manifest
+
+    def _is_phatic_ack(self, user_input: str) -> bool:
+        """Detect low-information phatic/acknowledgement utterances to avoid KA."""
+        if not user_input:
+            return False
+        text = user_input.lower().strip()
+        if not text:
+            return False
+        # Short, non-question statements that are conversational fillers
+        phatic_starts = (
+            "that's alright", "thats alright", "that is alright", "alright",
+            "ok", "okay", "sure", "fine", "no worries", "never mind",
+            "it's fine", "its fine", "all good", "keep talking", "go on",
+            "carry on", "just keep talking"
+        )
+        if text.endswith("?"):
+            return False
+        if any(text.startswith(p) for p in phatic_starts):
+            return True
+        # Very short non-questions are likely phatic
+        return len(text) <= 24 and '?' not in text
+
+    def _is_capability_query(self, user_input: str) -> bool:
+        q = (user_input or "").lower().strip()
+        if not q:
+            return False
+        capability_triggers = ["what can you do", "what are your capabilities", "what tools", "what abilities", "how can you help", "what senses"]
+        return any(trigger in q for trigger in capability_triggers)
+
+    def _answer_capability_query(self) -> ComposedResponse:
+        manifest = self._capability_manifest()
+        parts = []
+        if manifest["weather_tool"]:
+            parts.append("Weather via MCP endpoint")
+        if manifest["math"]:
+            parts.append("Math backend (symbolic)")
+        if manifest["knowledge_augmentation"]:
+            parts.append("External knowledge (Wikipedia/Wiktionary/Dictionary)")
+        if manifest["concept_store"]:
+            parts.append("Learned concepts + properties")
+        if manifest["reasoning"]:
+            parts.append("Deliberative reasoning")
+        if manifest["world_model"]:
+            parts.append("World model (spatial/temporal)")
+        if manifest["pragmatic_templates"]:
+            parts.append("Pragmatic conversation templates")
+        if manifest["syntax"]:
+            parts.append("Syntax-guided composition")
+
+        text = "I can use: " + "; ".join(parts) if parts else "I have basic pattern responses active."
+        return ComposedResponse(
+            text=text,
+            fragment_ids=["capabilities"],
+            composition_weights=[0.9],
+            coherence_score=0.9,
+            primary_pattern=None,
+            confidence=0.9,
+            is_fallback=False,
+            is_low_confidence=False
+        )
+
+    def _store_weather_report(self, report) -> None:
+        try:
+            self._last_weather_report = {
+                "location": getattr(report, "location", ""),
+                "summary": getattr(report, "summary", ""),
+                "temperature_c": getattr(report, "temperature_c", None)
+            }
+        except Exception:
+            self._last_weather_report = None
+
+    def _answer_weather_followup(self, user_input: str) -> Optional[ComposedResponse]:
+        if not self._last_weather_report or not user_input:
+            return None
+        text = user_input.lower()
+        temp = self._last_weather_report.get("temperature_c")
+        if temp is None:
+            return None
+
+        qualifiers = {
+            "hot": temp >= 27.0,
+            "warm": temp >= 22.0,
+            "cold": temp <= 10.0,
+            "cool": 10.0 < temp <= 16.0,
+            "freezing": temp <= 2.0,
+            "chilly": temp <= 12.0,
+        }
+        intents = [k for k in qualifiers.keys() if k in text]
+        if not intents:
+            return None
+
+        # Answer using the strongest matched qualifier
+        matched = intents[0]
+        is_true = qualifiers[matched]
+        location = self._last_weather_report.get("location", "the location")
+        summary = self._last_weather_report.get("summary", "")
+        resp_text = f"For {location}: currently {summary}, {temp:.1f}°C. "
+        if matched in ["hot", "warm"]:
+            resp_text += "Yes" if is_true else "No"
+        elif matched in ["cold", "cool", "freezing", "chilly"]:
+            resp_text += "Yes" if is_true else "No"
+        else:
+            resp_text += "Conditions noted."
+
+        resp = ComposedResponse(
+            text=resp_text,
+            fragment_ids=["weather_followup"],
+            composition_weights=[0.85],
+            coherence_score=0.85,
+            primary_pattern=None,
+            confidence=0.85,
+            is_fallback=False,
+            is_low_confidence=False,
+        )
+        self._trace_source("capability_weather_followup", resp.confidence)
+        return resp
+
+    def _record_lookup(self, term: str, confidence: float) -> None:
+        key = self._normalize_concept_key(term)
+        if not key:
+            return
+        self._ka_recent[key] = (confidence, time.time())
+        if hasattr(self, "_adaptive") and self._adaptive:
+            self._adaptive.register_observation(confidence)
+
+    def _should_skip_lookup(self, term: str, min_confidence: Optional[float] = None, ttl_seconds: Optional[float] = None) -> bool:
+        key = self._normalize_concept_key(term)
+        if not key:
+            return False
+        if key not in self._ka_recent:
+            return False
+        cached_conf, cached_ts = self._ka_recent[key]
+        if min_confidence is None and hasattr(self, "_adaptive") and self._adaptive:
+            min_confidence = self._adaptive.ka_min_confidence()
+        if ttl_seconds is None and hasattr(self, "_adaptive") and self._adaptive:
+            ttl_seconds = self._adaptive.ka_ttl_seconds()
+        min_confidence = min_confidence if min_confidence is not None else 0.65
+        ttl_seconds = ttl_seconds if ttl_seconds is not None else 180.0
+        return cached_conf >= min_confidence and (time.time() - cached_ts) <= ttl_seconds
+
+    def _concept_coverage(self, user_input: str, min_similarity: float = 0.80):
+        """Check if ConceptStore already has high-confidence, on-topic coverage for this query."""
+        if not self.concept_store or not hasattr(self.concept_store, 'retrieve_by_text'):
+            return None
+        query_text = (user_input or "").strip()
+        if not query_text:
+            return None
+
+        # Relational fast-path (SQL joins) if enabled
+        if self.enable_relational_concepts and hasattr(self.concept_store, 'retrieve_relational'):
+            try:
+                rel_results = self.concept_store.retrieve_relational(
+                    query_text=query_text,
+                    property_like=None,
+                    relation_type=None,
+                    limit=1,
+                    include_chains=False,
+                )
+            except Exception as exc:
+                print(f"  ⚠️  Relational concept lookup failed: {exc}")
+                rel_results = []
+            if rel_results:
+                first = rel_results[0]
+                props = first.get('properties') or []
+                if props:
+                    similarity = 0.9  # direct term match heuristic
+                    if similarity < min_similarity:
+                        return None
+                    concept_stub = type("ConceptStub", (), first)
+                    return {
+                        'concept': concept_stub,
+                        'similarity': similarity,
+                        'property': props[0],
+                    }
+
+        # Token overlap guardrail to avoid cross-topic matches
+        def _tokens(text: str) -> set:
+            return {t for t in re.split(r"\W+", text.lower()) if t and len(t) > 2}
+
+        query_tokens = _tokens(query_text)
+        if not query_tokens:
+            return None
+
+        try:
+            results = self.concept_store.retrieve_by_text(
+                query_text=query_text,
+                top_k=1,
+                min_similarity=min_similarity
+            )
+        except Exception as exc:
+            print(f"  ⚠️  Concept coverage check failed: {exc}")
+            return None
+        if not results:
+            return None
+
+        concept, similarity = results[0]
+        if similarity < min_similarity:
+            return None
+
+        properties = getattr(concept, 'properties', None) or []
+        if not properties:
+            return None
+
+        # On-topic check: require overlap between query tokens and concept term or first property
+        term_tokens = _tokens(getattr(concept, 'term', ''))
+        prop_tokens = _tokens(properties[0])
+        overlap = query_tokens & (term_tokens | prop_tokens)
+        if not overlap:
+            return None
+
+        return {
+            'concept': concept,
+            'similarity': similarity,
+            'property': properties[0]
+        }
+
+    def _maybe_answer_from_concepts(self, user_input: str, min_similarity: float = 0.72) -> Optional[ComposedResponse]:
+        """Return a response from learned concepts if coverage is sufficient."""
+        coverage = self._concept_coverage(user_input, min_similarity=min_similarity)
+        if not coverage:
+            return None
+        concept = coverage['concept']
+        prop_text = coverage['property']
+        response_text = self._clean_composed_response(self._first_sentence(prop_text))
+        concept_id = getattr(concept, 'concept_id', 'concept_store')
+
+        resp = ComposedResponse(
+            text=response_text,
+            fragment_ids=[concept_id],
+            composition_weights=[coverage['similarity']],
+            coherence_score=coverage['similarity'],
+            primary_pattern=None,
+            confidence=coverage['similarity'],
+            is_fallback=False,
+            is_low_confidence=False
+        )
+        self._trace_source("concept_store", coverage['similarity'], note=f"concept={getattr(concept, 'term', concept_id)}")
+        return resp
     
     def load_contrastive_weights(self, path: str) -> bool:
         """
@@ -590,6 +929,9 @@ class ResponseComposer:
             self.metrics['pattern_success'] += 1 if success else 0
         elif self.last_approach == 'concept':
             self.metrics['concept_success'] += 1 if success else 0
+        elif self.last_approach == 'knowledge_augmentation':
+            if hasattr(self, "_adaptive") and self._adaptive:
+                self._adaptive.register_success(bool(success))
         
         # Record pattern-based learning if applicable
         if self.last_query and self.last_response and hasattr(self.fragments, 'record_conversation_outcome'):
@@ -622,6 +964,7 @@ class ResponseComposer:
         self, 
         context: str = "",
         user_input: str = "",
+        tool_artifact: Optional[Dict[str, Any]] = None,
         topk: int = 5,
         use_intent_filtering: bool = False,  # Disabled: BioNN intent classification unreliable on user inputs
         use_semantic_retrieval: bool = True,  # ENABLED: BioNN + success-based learning (OPEN BOOK EXAM)
@@ -651,12 +994,71 @@ class ResponseComposer:
             composition_mode=self.composition_mode,
             user_input=user_input,
         )
+
+        # MCP / tool stage artifact (first-class, structured).
+        if tool_artifact:
+            try:
+                self._trace(
+                    "compose.tool_stage",
+                    enabled=tool_artifact.get("enabled"),
+                    mode=tool_artifact.get("mode"),
+                    decision=tool_artifact.get("decision"),
+                    reason=tool_artifact.get("reason"),
+                    confidence=tool_artifact.get("confidence"),
+                    ok_count=len([r for r in (tool_artifact.get("results") or []) if r.get("ok")]),
+                    candidate_count=len(tool_artifact.get("candidates") or []),
+                )
+            except Exception:
+                pass
+
+        # Optional: direct tool answer path.
+        # This is conservative: only when the stage produced a summary and had successful results.
+        if tool_artifact and (tool_artifact.get("summary") or "").strip():
+            try:
+                ok_count = len([r for r in (tool_artifact.get("results") or []) if r.get("ok") and (r.get("text") or "").strip()])
+                conf = float(tool_artifact.get("confidence") or 0.0)
+                decision = str(tool_artifact.get("decision") or "")
+                if decision == "called" and ok_count > 0 and conf >= 0.65:
+                    # Heuristic: if the tool output looks like a compact, user-facing answer, return it.
+                    summary = (tool_artifact.get("summary") or "").strip()
+                    if 0 < len(summary) <= 600:
+                        resp = ComposedResponse(
+                            text=summary,
+                            fragment_ids=["mcp_direct_answer"],
+                            composition_weights=[conf],
+                            coherence_score=conf,
+                            primary_pattern=None,
+                            confidence=conf,
+                            is_fallback=False,
+                            is_low_confidence=False,
+                        )
+                        self.last_response = resp
+                        self.last_approach = 'mcp'
+                        return self._return(resp)
+            except Exception:
+                pass
+
+        # If tool stage produced observations, incorporate them into context for downstream retrieval.
+        # This keeps the integration explicit and bounded, rather than hidden in Session-level strings.
+        if tool_artifact and (tool_artifact.get("summary") or "").strip():
+            summary = (tool_artifact.get("summary") or "").strip()
+            if summary and summary not in (context or ""):
+                context = f"{context}\n\n{summary}".strip()
+
+        # Handle explicit capability queries before heavy processing
+        if self._is_capability_query(user_input):
+            resp = self._answer_capability_query()
+            self._trace_source("capability_manifest", resp.confidence)
+            self.last_response = resp
+            self.last_approach = 'capabilities'
+            return self._return(resp)
         
-        # FAST-TRACK: Handle simple greetings immediately without heavy processing
+        # FAST-TRACK: Handle simple greetings and phatic acks without heavy processing
         if user_input:
             user_lower = user_input.lower().strip()
             simple_greetings = ["hello", "hi", "hey", "greetings", "good morning", "good afternoon", "good evening"]
-            if user_lower in simple_greetings or (len(user_lower.split()) == 1 and user_lower in ["hello", "hi", "hey"]):
+            is_greeting = user_lower in simple_greetings or (len(user_lower.split()) == 1 and user_lower in ["hello", "hi", "hey"])
+            if is_greeting or self._is_phatic_ack(user_input):
                 # Use pragmatic template for greeting if available
                 if self.pragmatic_templates:
                     greeting_response = self._compose_with_pragmatic_templates(context, user_input)
@@ -664,8 +1066,13 @@ class ResponseComposer:
                         self.last_response = greeting_response
                         self.last_approach = 'pragmatic'
                         return self._return(greeting_response)
-                # Fallback to simple greeting response
-                greeting_texts = ["Hello! How can I help you?", "Hi! What would you like to talk about?", "Hey! What's up?"]
+                # Fallback to simple acknowledgement response
+                greeting_texts = [
+                    "Hi! I'm here.",
+                    "Got it—I'm listening.",
+                    "I'm here, go ahead.",
+                    "All good, I'm here if you want to chat."
+                ]
                 import random
                 return self._return(ComposedResponse(
                     text=random.choice(greeting_texts),
@@ -678,6 +1085,45 @@ class ResponseComposer:
                     is_low_confidence=False
                 ))
         
+        # CAPABILITY-AWARE ROUTING (weather)
+        if user_input and WEATHER_CLIENT_AVAILABLE:
+            lower_q = user_input.lower()
+
+            # Use cached weather for subjective follow-ups ("is it hot?", etc.).
+            followup_weather = self._answer_weather_followup(user_input)
+            if followup_weather:
+                self.last_response = followup_weather
+                self.last_approach = 'weather_followup'
+                return self._return(followup_weather)
+
+            if any(term in lower_q for term in ["weather", "forecast", "temperature"]):
+                location = user_input
+                # Heuristic: if "in" present, take substring after "in"
+                if " in " in lower_q:
+                    location = user_input.split(" in ", 1)[1].strip()
+                if location:
+                    try:
+                        client = WeatherClient()
+                        report = client.get_weather(location)
+                        self._store_weather_report(report)
+                        resp_text = f"Weather for {report.location}: {report.summary}, {report.temperature_c:.1f}°C"
+                        resp = ComposedResponse(
+                            text=resp_text,
+                            fragment_ids=["weather_tool"],
+                            composition_weights=[0.9],
+                            coherence_score=0.9,
+                            primary_pattern=None,
+                            confidence=0.9,
+                            is_fallback=False,
+                            is_low_confidence=False,
+                        )
+                        self.last_response = resp
+                        self.last_approach = 'weather_tool'
+                        self._trace_source("capability_weather", 0.9)
+                        return self._return(resp)
+                    except Exception:
+                        pass  # fallback to standard flow if weather tool fails
+
         # MODAL ROUTING: Check if query is mathematical/code/etc.
         if self.modal_classifier and user_input:
             modality, confidence = self.modal_classifier.classify(user_input)
@@ -747,37 +1193,73 @@ class ResponseComposer:
             fragment_ids=getattr(pattern_response, "fragment_ids", None),
         )
         
-        # PRAGMATIC MODE: Compare pragmatic vs pattern-based
+        # Unified selection via ranker when available
+        if self.ranker:
+            candidates = []
+            activation_sig = self._get_activation_signature()
+            max_activation = max(activation_sig.values()) if activation_sig else 0.0
+
+            if pattern_response:
+                feats = RankingFeatures(
+                    source="pattern",
+                    retrieval_confidence=pattern_response.confidence,
+                    pmflow_activation=max_activation,
+                    recency=1.0,
+                    feedback_score=self.metrics.get('pattern_success', 0) / ((self.metrics.get('pattern_count', 0) or 1)),
+                    length_penalty=len(pattern_response.text) / 200.0,
+                    syntax_score=0.5,
+                    concept_overlap=0.0,
+                    is_fallback=pattern_response.is_fallback,
+                    approach_success_rate=self.metrics.get('pattern_success', 0) / ((self.metrics.get('pattern_count', 0) or 1)),
+                )
+                candidates.append((pattern_response, feats))
+
+            if pragmatic_response and pragmatic_response.confidence >= 0.60:
+                feats = RankingFeatures(
+                    source="pragmatic",
+                    retrieval_confidence=pragmatic_response.confidence,
+                    pmflow_activation=max_activation,
+                    recency=1.0,
+                    feedback_score=self.metrics.get('pragmatic_count', 0) / ((self.metrics.get('pragmatic_count', 0) or 1)),
+                    length_penalty=len(pragmatic_response.text) / 200.0,
+                    syntax_score=0.6,
+                    concept_overlap=0.0,
+                    is_fallback=pragmatic_response.is_fallback,
+                    approach_success_rate=self.metrics.get('pragmatic_count', 0) / ((self.metrics.get('pragmatic_count', 0) or 1)),
+                )
+                candidates.append((pragmatic_response, feats))
+
+            best = None
+            best_score = -1e9
+            for resp, feats in candidates:
+                s = self.ranker.score(feats)
+                if s > best_score:
+                    best_score = s
+                    best = (resp, feats)
+            if best:
+                resp, feats = best
+                for resp_i, feats_i in candidates:
+                    self.ranker.log(feats_i, self.ranker.score(feats_i), resp_i is resp)
+                self.last_response = resp
+                self.last_approach = feats.source if hasattr(feats, "source") else 'pattern'
+                return self._return(resp)
+
+        # Fallback heuristic selection
         if pragmatic_response and pragmatic_response.confidence >= 0.70:
-            # Debug logging
-            print(f"  🔍 Template vs Pattern comparison:")
-            print(f"     Template confidence: {pragmatic_response.confidence:.3f}")
-            print(f"     Pattern confidence: {pattern_response.confidence:.3f}")
-            print(f"     Pattern is_fallback: {pattern_response.is_fallback}")
-            print(f"     Pattern is_low_confidence: {pattern_response.is_low_confidence}")
-            
-            # Pragmatic template has good confidence
             if pattern_response.is_fallback or pattern_response.is_low_confidence:
-                # Pattern-based failed or low confidence, use pragmatic
-                print(f"  → Using template (pattern failed/low confidence)")
                 self.last_response = pragmatic_response
                 self.last_approach = 'pragmatic'
                 self.metrics['pragmatic_count'] = self.metrics.get('pragmatic_count', 0) + 1
                 return self._return(pragmatic_response)
-            elif pattern_response.confidence > 0.85:
-                # Pattern has very high confidence (exact/near-exact match) - prefer it
-                print(f"  → Using pattern (very high confidence: {pattern_response.confidence:.3f})")
+            if pattern_response.confidence > 0.85:
                 return self._return(pattern_response)
-            elif pragmatic_response.confidence > pattern_response.confidence + 0.15:
-                # Pragmatic is significantly better - use it
-                print(f"  → Using template (significantly better)")
+            if pragmatic_response.confidence > pattern_response.confidence + 0.15:
                 self.last_response = pragmatic_response
                 self.last_approach = 'pragmatic'
                 self.metrics['pragmatic_count'] = self.metrics.get('pragmatic_count', 0) + 1
                 return self._return(pragmatic_response)
-            # Otherwise use pattern-based (comparable confidence)
-            print(f"  → Using pattern (comparable/better confidence)")
-        
+        self.last_response = pattern_response
+        self.last_approach = 'pattern'
         return self._return(pattern_response)
 
     def _try_high_confidence_retrieval(self, *, user_input: str) -> Optional[ComposedResponse]:
@@ -895,9 +1377,12 @@ class ResponseComposer:
         deliberation_result = None
         if self.reasoning_stage and cleaned_user_input:
             try:
+                cap_manifest = self._capability_manifest()
+                cap_list = [name for name, enabled in cap_manifest.items() if enabled]
+                cap_context = f"{context}\ncapabilities: {', '.join(cap_list)}" if cap_list else context
                 deliberation_result = self.reasoning_stage.deliberate(
                     query=cleaned_user_input,
-                    context=context,
+                    context=cap_context,
                     max_steps=3  # Quick deliberation
                 )
                 
@@ -1014,42 +1499,73 @@ class ResponseComposer:
         # BEFORE falling back to pattern matching (which might hallucinate)
         # BUT: Only for questions, not declarative statements (which go to declarative learning)
         aug_for_unknowns = self._ensure_knowledge_augmenter()
-        
+
         # Check if this is actually a question or a declarative statement
         cleaned_user_input = user_input.strip() if user_input else ""
         is_question = any(q in cleaned_user_input.lower() for q in ['?', 'what', 'where', 'when', 'who', 'how', 'why', 'which', 'whose', 'whom'])
-        
-        # Only trigger knowledge augmentation for questions about unknown topics
-        if deliberation_failed_relevance and aug_for_unknowns and user_input and is_question:
-            print(f"  🔍 Attempting proactive knowledge lookup for unknown topic...")
-            filled_response = self._fill_gaps_and_retry(user_input)
-            if filled_response and filled_response.confidence >= 0.6:
-                print(f"  ✨ Learned about topic on-the-fly!")
-                return filled_response
-            
-            # Also try direct lookup
-            conv_context = self._get_conversation_context(max_turns=3)
-            external_result = aug_for_unknowns.lookup(user_input, conversation_history=conv_context, min_confidence=0.6)
-            if external_result:
-                response_text, confidence, source = external_result
 
-                # Ingest the snippet into vocab/concepts/patterns before replying
-                self._ingest_external_knowledge(user_input, response_text, confidence, source)
+        # Check if this is likely a conversational greeting/phatic expression
+        # "How are you?" contains 'how' but shouldn't trigger Wikipedia lookup
+        user_lower = cleaned_user_input.lower()
+        is_conversational_greeting = any(phrase in user_lower for phrase in [
+            "how are you", "how are things", "how's it going", "how is it going",
+            "what's up", "what is up", "what's new", "how do you do",
+            "are you okay", "are you there", "can you hear me", "who are you",
+            "what are you", "can you help"
+        ])
 
-                # Respond with a concise, cleaned snippet
-                response_text = self._clean_composed_response(self._first_sentence(response_text))
-                print(f"  💡 Found external knowledge from {source} (confidence: {confidence:.2f})")
+        # Prefer existing learned knowledge before hitting external sources
+        concept_based_response = self._maybe_answer_from_concepts(user_input) if user_input else None
+        concept_key = self._extract_concept_from_query(cleaned_user_input) if cleaned_user_input else ""
+        skip_lookup = self._should_skip_lookup(concept_key or cleaned_user_input) if cleaned_user_input else False
+
+        if concept_based_response:
+            self._trace_source("concept_store", concept_based_response.confidence, note="proactive")
+            return concept_based_response
+
+        # Only trigger knowledge augmentation for questions about unknown topics (not phatic acks)
+        if deliberation_failed_relevance and aug_for_unknowns and user_input and is_question and not is_conversational_greeting and not self._is_phatic_ack(user_input):
+            if skip_lookup:
+                print("  ⏸️ Skipping external lookup (recently learned this topic)")
+            else:
+                print(f"  🔍 Attempting proactive knowledge lookup for unknown topic...")
+                filled_response = self._fill_gaps_and_retry(user_input)
+                if filled_response and filled_response.confidence >= 0.6:
+                    print(f"  ✨ Learned about topic on-the-fly!")
+                    self.last_response = filled_response
+                    self.last_approach = 'knowledge_augmentation'
+                    return filled_response
                 
-                return ComposedResponse(
-                    text=response_text,
-                    fragment_ids=[f"external_{source}"],
-                    composition_weights=[confidence],
-                    coherence_score=confidence,
-                    primary_pattern=None,
-                    confidence=confidence,
-                    is_fallback=True,
-                    is_low_confidence=False
-                )
+                # Also try direct lookup
+                conv_context = self._get_conversation_context(max_turns=3)
+                external_result = aug_for_unknowns.lookup(user_input, conversation_history=conv_context, min_confidence=0.6)
+                if external_result:
+                    response_text, confidence, source = external_result
+
+                    if hasattr(self, "_adaptive") and self._adaptive:
+                        self._adaptive.register_observation(confidence)
+
+                    # Ingest the snippet into vocab/concepts/patterns before replying
+                    self._ingest_external_knowledge(user_input, response_text, confidence, source)
+                    self._record_lookup(concept_key or cleaned_user_input, confidence)
+
+                    # Respond with a concise, cleaned snippet
+                    response_text = self._clean_composed_response(self._first_sentence(response_text))
+                    self._trace_source("knowledge_augmentation", confidence, note=source)
+                    
+                    resp = ComposedResponse(
+                        text=response_text,
+                        fragment_ids=[f"external_{source}"],
+                        composition_weights=[confidence],
+                        coherence_score=confidence,
+                        primary_pattern=None,
+                        confidence=confidence,
+                        is_fallback=True,
+                        is_low_confidence=False
+                    )
+                    self.last_response = resp
+                    self.last_approach = 'knowledge_augmentation'
+                    return resp
         elif deliberation_failed_relevance and not is_question:
             # This is a declarative statement about an unknown topic
             # Let declarative learning handle it instead of knowledge augmentation
@@ -3527,33 +4043,46 @@ class ResponseComposer:
         Args:
             user_input: User's query (for knowledge lookup and gap analysis)
         """
+        coverage_response = self._maybe_answer_from_concepts(user_input) if user_input else None
+        if coverage_response:
+            self._trace_source("concept_store", coverage_response.confidence, note="fallback")
+            return coverage_response
+
+        concept_key = self._extract_concept_from_query(user_input) if user_input else ""
+        skip_lookup = self._should_skip_lookup(concept_key or user_input) if user_input else False
+
         # STEP 1: Try to fill knowledge gaps and re-attempt matching
         aug_for_fallbacks = self._ensure_knowledge_augmenter()
-        if aug_for_fallbacks and user_input:
+        if aug_for_fallbacks and user_input and not skip_lookup:
             filled_response = self._fill_gaps_and_retry(user_input)
             if filled_response:
+                self._trace_source("knowledge_augmentation", filled_response.confidence, note="gap_fill")
+                self.last_response = filled_response
+                self.last_approach = 'knowledge_augmentation'
                 return filled_response
         
         # If gap-filling didn't help, try direct external knowledge lookup
-        if aug_for_fallbacks and user_input:
+        if aug_for_fallbacks and user_input and not skip_lookup:
             # Get conversation context for disambiguation
             conv_context = self._get_conversation_context(max_turns=3)
             external_result = aug_for_fallbacks.lookup(user_input, conversation_history=conv_context, min_confidence=0.6)
             
             if external_result:
                 response_text, confidence, source = external_result
+                self._record_lookup(concept_key or user_input, confidence)
+                if hasattr(self, "_adaptive") and self._adaptive:
+                    self._adaptive.register_observation(confidence)
                 
                 # Ingest the snippet into vocab/concepts/patterns before replying
                 self._ingest_external_knowledge(user_input, response_text, confidence, source)
 
                 # Clean up grammar issues (plural agreement, etc.) and keep concise
                 response_text = self._clean_composed_response(self._first_sentence(response_text))
-                
-                print(f"  💡 Filled knowledge gap from {source} (confidence: {confidence:.2f})")
+                self._trace_source("knowledge_augmentation", confidence, note=source)
                 
                 # Return external knowledge as response
                 # The teaching mechanism will learn this pattern automatically
-                return ComposedResponse(
+                resp = ComposedResponse(
                     text=response_text,
                     fragment_ids=[f"external_{source}"],
                     composition_weights=[confidence],
@@ -3563,6 +4092,9 @@ class ResponseComposer:
                     is_fallback=True,  # Triggered by fallback
                     is_low_confidence=False  # But knowledge was found
                 )
+                self.last_response = resp
+                self.last_approach = 'knowledge_augmentation'
+                return resp
         
         # Try a lightweight reasoning pass before giving up
         if self.reasoning_stage and user_input:
@@ -3658,12 +4190,28 @@ class ResponseComposer:
         learned_count = 0
         
         for term in unknown_terms:
+            # Reuse learned concepts before external lookup
+            coverage = self._concept_coverage(term, min_similarity=0.70)
+            if coverage:
+                term_definitions[term] = {
+                    'definition': coverage['property'],
+                    'confidence': coverage['similarity'],
+                    'source': 'concept_store'
+                }
+                self._trace_source("concept_store", coverage['similarity'], note=f"gap_fill_term={term}")
+                continue
+
+            if self._should_skip_lookup(term):
+                continue
+
             # Try to get definition/explanation
             # Get conversation context for disambiguation
             conv_context = self._get_conversation_context(max_turns=3)
             result = aug_for_terms.lookup(f"What is {term}?", conversation_history=conv_context, min_confidence=0.6)
             if result:
                 definition, confidence, source = result
+                self._record_lookup(term, confidence)
+                self._trace_source("knowledge_augmentation", confidence, note=f"gap_fill_term={term}:{source}")
                 
                 term_definitions[term] = {
                     'definition': definition,
@@ -3925,6 +4473,38 @@ class ResponseComposer:
             return sentence
         return text[:240].strip()
 
+    def _extract_learning_content(self, text: str) -> Tuple[str, List[str]]:
+        """
+        Extract meaningful content for learning from a larger text.
+        Returns (primary_definition, all_properties).
+        """
+        if not text:
+            return "", []
+            
+        # Split into sentences but keep punctuation? Simple split on . is okay for now
+        sentences = [s.strip() for s in text.split('.') if s.strip()]
+        if not sentences:
+            return text[:250], []
+            
+        # Primary definition is usually the first sentence
+        primary_def = sentences[0]
+        
+        # Collect property-rich sentences (up to 5 sentences total)
+        properties = []
+        # Keywords that suggest property definitions
+        prop_keywords = ['has', 'have', 'contain', 'consist', 'made of', 'characterize', 'feature']
+        
+        for s in sentences[1:6]:  # Check next 5 sentences
+            s_lower = s.lower()
+            # If it contains a property keyword, it's valuable
+            if any(kw in s_lower for kw in prop_keywords):
+                properties.append(s)
+            # Or if it's short and descriptive (< 150 chars)
+            elif len(s) < 150:
+                properties.append(s)
+                
+        return primary_def, properties
+
     def _ingest_external_knowledge(self, term_hint: str, definition: str, confidence: float, source: str) -> None:
         """Feed external snippets into vocabulary/concepts/patterns without verbatim dumping."""
 
@@ -3935,33 +4515,39 @@ class ResponseComposer:
         if not term:
             return
 
-        snippet = self._first_sentence(definition)
+        # Use richer extraction logic
+        primary_def, extra_props = self._extract_learning_content(definition)
+        
+        # Combine for tracking/patterns, but keep separate for ConceptStore structure if needed
+        # For now, we'll combine them into a list of properties for the ConceptStore
+        all_knowledge = [primary_def] + extra_props
+        full_learning_text = ". ".join(all_knowledge)
 
-        # Vocabulary tracking
+        # Vocabulary tracking (track the primary definition)
         if hasattr(self.fragments, 'vocabulary') and self.fragments.vocabulary:
             try:
-                self.fragments.vocabulary.track_text(text=f"{term}: {snippet}", source=source)
+                self.fragments.vocabulary.track_text(text=f"{term}: {primary_def}", source=source)
                 print(f"     📖 Vocabulary: tracked '{term}' from {source}")
             except Exception as exc:
                 print(f"     ⚠️  Vocabulary tracking failed: {exc}")
 
-        # Concept store
+        # Concept store - Store ALL extracted knowledge
         if hasattr(self.fragments, 'concept_store') and self.fragments.concept_store:
             try:
                 self.fragments.concept_store.add_concept(
                     term=term.lower(),
-                    properties=[snippet],
+                    properties=all_knowledge,  # Pass the list of strings
                     source=source,
                     confidence=confidence
                 )
-                print(f"     🧠 Concepts: added '{term}' from {source}")
+                print(f"     🧠 Concepts: added '{term}' with {len(all_knowledge)} props from {source}")
             except Exception as exc:
                 print(f"     ⚠️  Concept learning failed: {exc}")
 
-        # Syntax patterns
+        # Syntax patterns - extract from full learning text
         if hasattr(self.fragments, 'pattern_extractor') and self.fragments.pattern_extractor:
             try:
-                patterns = self.fragments.pattern_extractor.extract_patterns(text=snippet, source=source)
+                patterns = self.fragments.pattern_extractor.extract_patterns(text=full_learning_text, source=source)
                 if patterns:
                     print(f"     📝 Syntax: extracted {len(patterns)} patterns from {source}")
             except Exception as exc:
@@ -3972,7 +4558,9 @@ class ResponseComposer:
             try:
                 import re
                 pairs_added = 0
-                type_match = re.search(r"is\s+(?:a\s+)?(?:type|kind|form|sort)\s+of\s+(\w+)", snippet.lower())
+                
+                # Check primary definition for "is a" relations
+                type_match = re.search(r"is\s+(?:a\s+)?(?:type|kind|form|sort)\s+of\s+(\w+)", primary_def.lower())
                 if type_match:
                     related = type_match.group(1)
                     self.contrastive_learner.add_pair(
@@ -3984,18 +4572,27 @@ class ResponseComposer:
                     )
                     pairs_added += 1
 
-                proper_nouns = re.findall(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b", snippet)
-                for related in proper_nouns[:2]:
-                    related_lower = related.lower()
-                    if related_lower != term.lower():
-                        self.contrastive_learner.add_pair(
-                            anchor=term.lower(),
-                            other=related_lower,
-                            relationship="positive",
-                            weight=confidence * 0.7,
-                            source=f"external_cooccur_{source}"
-                        )
-                        pairs_added += 1
+                # Check ALL text for proper nouns (co-occurrence)
+                proper_nouns = re.findall(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b", full_learning_text)
+                # Take top 5 unique proper nouns
+                unique_nouns = []
+                seen = {term.lower()}
+                for pn in proper_nouns:
+                    if pn.lower() not in seen:
+                        unique_nouns.append(pn)
+                        seen.add(pn.lower())
+                        if len(unique_nouns) >= 3:
+                            break
+                            
+                for related in unique_nouns:
+                    self.contrastive_learner.add_pair(
+                        anchor=term.lower(),
+                        other=related.lower(),
+                        relationship="positive",
+                        weight=confidence * 0.7,
+                        source=f"external_cooccur_{source}"
+                    )
+                    pairs_added += 1
 
                 if pairs_added:
                     print(f"     🧠 BioNN: added {pairs_added} semantic pairs from {source}")
@@ -4337,7 +4934,7 @@ class ResponseComposer:
                 if word_clean not in terms:
                     terms.append(word_clean)
         
-        # Remove common words and PRONOUNS (pronouns should be resolved from context, not Wikipedia)
+        # Remove common words, pronouns, and short/fragment tokens
         common_words = {
             'something', 'anything', 'everything', 'nothing',
             'someone', 'anyone', 'everyone',
@@ -4346,10 +4943,23 @@ class ResponseComposer:
             'it', 'its', 'they', 'them', 'their', 'theirs',
             'he', 'him', 'his', 'she', 'her', 'hers',
             'this', 'that', 'these', 'those',
-            'who', 'whom', 'which', 'what', 'whose'
+            'who', 'whom', 'which', 'what', 'whose',
+            # Short fillers/acknowledgements
+            'ok', 'okay', 'alright', 'fine', 'sure'
         }
-        
-        terms = [t for t in terms if t.lower() not in common_words]
+
+        def _valid_term(t: str) -> bool:
+            tl = t.lower().strip()
+            if not tl or tl in common_words:
+                return False
+            if len(tl) < 4:
+                return False
+            # Avoid fragments like "ill" from "I'll" or "alright" splits
+            if tl in {"ill", "alright", "thats", "just", "keep"}:
+                return False
+            return True
+
+        terms = [t for t in terms if _valid_term(t)]
         
         # Prioritize multi-word terms (titles) over single words
         # Sort by word count (descending), then alphabetically
@@ -4532,22 +5142,32 @@ class ResponseComposer:
         Returns:
             Enhanced response if gaps filled, external knowledge if found, or graceful fallback
         """
+        coverage_response = self._maybe_answer_from_concepts(user_input) if user_input else None
+        if coverage_response:
+            self._trace_source("concept_store", coverage_response.confidence, note="low_conf")
+            return coverage_response
+
+        concept_key = self._extract_concept_from_query(user_input) if user_input else ""
+        skip_lookup = self._should_skip_lookup(concept_key or user_input) if user_input else False
+
         # STEP 1: Try to fill gaps and improve the match
         aug_for_low_conf = self._ensure_knowledge_augmenter()
-        if aug_for_low_conf:
+        if aug_for_low_conf and not skip_lookup:
             filled_response = self._fill_gaps_and_retry(user_input)
             if filled_response:
                 print(f"  ✨ Low confidence improved by gap-filling!")
+                self._trace_source("knowledge_augmentation", filled_response.confidence, note="gap_fill")
                 return filled_response
         
         # Try direct external knowledge lookup as fallback
-        if aug_for_low_conf:
+        if aug_for_low_conf and not skip_lookup:
             # Get conversation context for disambiguation
             conv_context = self._get_conversation_context(max_turns=3)
             external_result = aug_for_low_conf.lookup(user_input, conversation_history=conv_context, min_confidence=0.6)
             
             if external_result:
                 response_text, confidence, source = external_result
+                self._record_lookup(concept_key or user_input, confidence)
                 
                 # Ingest the snippet into vocab/concepts/patterns before replying
                 self._ingest_external_knowledge(user_input, response_text, confidence, source)
@@ -4555,7 +5175,7 @@ class ResponseComposer:
                 # Clean up grammar issues (plural agreement, etc.) and keep concise
                 response_text = self._clean_composed_response(self._first_sentence(response_text))
                 
-                print(f"  💡 Low confidence resolved by {source} (confidence: {confidence:.2f})")
+                self._trace_source("knowledge_augmentation", confidence, note=source)
                 
                 # Return external knowledge as response
                 return ComposedResponse(
