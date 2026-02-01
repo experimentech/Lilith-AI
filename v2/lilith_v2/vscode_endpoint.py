@@ -46,4 +46,11 @@ def make_vscode_binding(
 ) -> NodeBindings:
     desc = descriptor or make_descriptor()
     adapter = VSCodeMCPAdapter(desc, transport=transport)
-    return NodeBindings(node_id=node_id, ports=[adapter], modalities=modalities, tenants=tenants)
+    endpoint_types = {getattr(desc.type, "value", str(desc.type))}
+    return NodeBindings(
+        node_id=node_id,
+        ports=[adapter],
+        modalities=modalities,
+        tenants=tenants,
+        endpoint_types=endpoint_types,
+    )

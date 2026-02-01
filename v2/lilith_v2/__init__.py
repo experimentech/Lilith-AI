@@ -26,4 +26,9 @@ __all__ = [
 	"mcp_transport_demo",
 	"cli",
 	"relational_store",
+	"pmflow_sqlite",
+	"relational_event_store",
+	"persistence_sqlite",
+	"response_composer",
+	"reasoning_stage",
 ]

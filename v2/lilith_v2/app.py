@@ -13,7 +13,24 @@ from .concepts_stage import ConceptStage
 from .gpl_concept_stage import GPLConceptStage
 from .json_file_store import JsonFileStore
 from .relational_store import RelationalStore
+from .pmflow_sqlite import SQLitePMFlowStateStore
+from .relational_event_store import RelationalEventStore
+from .relational_graph_store import RelationalGraphStore
+from .multi_tenant_store import MultiTenantPMFlowManager, MultiTenantGraphManager
+from .cognitive_stage import CognitiveStage
+from .math_stage import MathStage
+if False: # Try import full v1 encoder if present, else fallback
+     try:
+         from lilith.embedding import PMFlowEmbeddingEncoder
+     except ImportError:
+         PMFlowEmbeddingEncoder = None
 
+
+from .mcp_transport_tools import LocalToolsTransport
+from .fs_tools import FileSystemTools
+from .terminal_tools import TerminalTools
+from .weather_tools import get_weather
+import os
 
 class V2Runtime:
     """Minimal runtime wiring router, bindings, stages, and observability."""
@@ -26,6 +43,8 @@ class V2Runtime:
         stages: Dict[str, Stage],
         observability: Observability,
         branch_policy: Optional[Dict[str, Any]] = None,
+        pmflow_state_store: Optional[SQLitePMFlowStateStore] = None,
+        event_store: Optional[RelationalEventStore] = None,
     ) -> None:
         self.bindings = bindings
         self.resolver = resolver
@@ -33,14 +52,39 @@ class V2Runtime:
         self.stages = stages
         self.observability = observability
         self.branch_policy = branch_policy or {}
+        self.pmflow_state_store = pmflow_state_store
+        self.event_store = event_store
 
     @classmethod
     def default(cls) -> "V2Runtime":
+        # Setup Limb Capabilities based on Env Vars (Safeguards)
+        enable_fs = os.getenv("LILITH_ENABLE_FS", "true").lower() == "true"
+        enable_terminal = os.getenv("LILITH_ENABLE_TERMINAL", "false").lower() == "true"
+        workspace_root = os.getcwd()
+
+        tools_transport = LocalToolsTransport()
+        
+        # 1. File System Limb
+        if enable_fs:
+            fs = FileSystemTools(workspace_root)
+            tools_transport.register_tool("read_file", fs.read_file)
+            tools_transport.register_tool("write_file", fs.write_file)
+            tools_transport.register_tool("list_dir", fs.list_dir)
+            
+        # 2. Terminal Limb
+        term = TerminalTools(workspace_root, enabled=enable_terminal)
+        if enable_terminal:
+            tools_transport.register_tool("run_command", term.run_command)
+            
+        # 3. Weather Limb
+        tools_transport.register_tool("get_weather", get_weather)
+
         bindings: BindingMap = {
-            "trunk.tools": make_vscode_binding("trunk.tools", modalities={"text"}),
+            "trunk.tools": make_vscode_binding("trunk.tools", modalities={"text"}, transport=tools_transport),
             "trunk.vscode": make_vscode_binding("trunk.vscode", modalities={"text"}),
             "branch.vision": make_vscode_binding("branch.vision", modalities={"image"}),
             "branch.audio": make_vscode_binding("branch.audio", modalities={"audio"}),
+            "branch.math": make_vscode_binding("branch.math", modalities={"math", "text"}), # Text fallback
         }
         resolver = InMemoryBindingResolver(bindings)
         router = SimpleMCPRouter(binding_resolver=resolver)
@@ -84,6 +128,16 @@ class V2Runtime:
 
         resolver = InMemoryBindingResolver(binding_map)
         router = SimpleMCPRouter(binding_resolver=resolver)
+
+        pmflow_cfg = config.get("pmflow", {}) or {}
+        pmflow_enabled = bool(pmflow_cfg)
+        pmflow_state_store = None
+        event_store = None
+        if pmflow_enabled:
+            state_path = pmflow_cfg.get("state_path") or "/tmp/pmflow_state.sqlite"
+            event_path = pmflow_cfg.get("event_path") or "/tmp/pmflow_events.sqlite"
+            pmflow_state_store = SQLitePMFlowStateStore(state_path)
+            event_store = RelationalEventStore(event_path)
         def build_store(store_type: str, path: str):
             if store_type == "sqlite":
                 return RelationalStore(path)
@@ -115,6 +169,42 @@ class V2Runtime:
                     pmflow_config=pmflow_cfg,
                     retrieval_config=retrieval_cfg,
                 )
+            if stage_type == "cognitive":
+                data_root = binding_cfg.get("data_root")
+                
+                if data_root:
+                    base_root = os.path.join(data_root, "base")
+                    users_root = os.path.join(data_root, "users")
+                    pmflow_s = MultiTenantPMFlowManager(base_root, users_root)
+                    graph_s = MultiTenantGraphManager(base_root, users_root)
+                elif not pmflow_state_store:
+                    # Fallback or error - simplistic fallback for now
+                    store_p = f"/tmp/{nid}.pmflow.sqlite"
+                    pmflow_s = SQLitePMFlowStateStore(store_p)
+                    graph_p = store_path or f"/tmp/{nid}.graph.sqlite"
+                    graph_s = RelationalGraphStore(graph_p)
+                else:
+                    pmflow_s = pmflow_state_store
+                    graph_p = store_path or f"/tmp/{nid}.graph.sqlite"
+                    graph_s = RelationalGraphStore(graph_p)
+                
+                # Encoder factory - simplistic mock if not configured
+                class MockEncoder:
+                    def encode(self, x):
+                        import torch 
+                        return torch.zeros(128)
+                
+                encoder = MockEncoder() 
+                # In real scenario, load encoder config from binding_cfg.get("encoder")
+                
+                return CognitiveStage(
+                    nid,
+                    pmflow_store=pmflow_s,
+                    graph_store=graph_s,
+                    encoder=encoder
+                )
+            if stage_type == "math":
+                return MathStage(nid)
             return NoopStage(nid)
 
         stages: Dict[str, Stage] = {node_id: _make_stage(node_id) for node_id in binding_map}
@@ -127,7 +217,16 @@ class V2Runtime:
         policy.setdefault("timeout_ms", 0)
         policy.setdefault("concurrency_limit", 1)
         policy.setdefault("error_policy", {"retry": True, "backoff_ms": 100})
-        return cls(binding_map, resolver, router, stages, obs, branch_policy=policy)
+        return cls(
+            binding_map,
+            resolver,
+            router,
+            stages,
+            obs,
+            branch_policy=policy,
+            pmflow_state_store=pmflow_state_store,
+            event_store=event_store,
+        )
 
     @classmethod
     def from_file(
@@ -144,6 +243,7 @@ class V2Runtime:
         descriptor: MCPDescriptor,
         context: Dict[str, Any],
         branch_policy: Optional[Dict[str, Any]] = None,
+        payload: Optional[Any] = None,
     ) -> RouteDecision:
         resolved_policy = dict(self.branch_policy)
         if branch_policy:
@@ -154,13 +254,43 @@ class V2Runtime:
         decision = self.router.route(descriptor, context=context, branch_policy=resolved_policy)
         self.observability.on_event("route_decision", "router", decision.metadata, trace_id=context.get("tenant", ""))
 
-        # Optionally push a synthetic payload through the first port for sanity
+        # Optionally push a synthetic payload through the ports for sanity
         for node_id, port in decision.ports.items():
-            port.send({"descriptor": descriptor.name, "node_id": node_id}, meta={"trace_id": context.get("tenant", "")})
+            meta = {"trace_id": context.get("tenant", ""), "tenant": context.get("tenant"), "modality": context.get("modality")}
+            body = payload if payload is not None else {"descriptor": descriptor.name, "node_id": node_id}
+            port.send(body, meta=meta)
             # Touch stage as part of the flow
             stage = self.stages.get(node_id)
             if stage:
-                stage.learn({"descriptor": descriptor.name, "node_id": node_id}, ctx=context)
+                stage.learn(body, ctx=context)
+                
+                # Efferent Flow (Somatic Bridge)
+                # If the stage produced a response/impulse, send it back through the ports
+                # Note: In a real SomaticLayer loop, this would be decoupled (tick),
+                # but for V2Runtime dispatch we mimic the immediate reflex.
+                if hasattr(stage, "last_interaction") and stage.last_interaction:
+                    response = stage.last_interaction
+                    
+                    # Determine where to send. Generally to the port that handled the input.
+                    # Or broadcast to all ports in the decision? 
+                    # Simpler is to use the specific port for this node.
+                    if port:
+                         # Ensure payload is serializable/expected format
+                         # VSCodeAdapter wraps logic but raw port expects dict/msg
+                         # We wrap in standard Lilith envelope if not already
+                         if isinstance(response, dict) and "response" in response:
+                             out_payload = response["response"]
+                             out_meta = response.get("meta", {})
+                         else:
+                             out_payload = response
+                             out_meta = {}
+                             
+                         out_meta.update({"source": node_id, "ref": context.get("trace_id")})
+                         port.send(out_payload, meta=out_meta)
+                    
+                    # Clear impulse
+                    stage.last_interaction = None
+
         return decision
 
     def health_check(

@@ -66,15 +66,45 @@ class SimpleMCPRouter:
     ) -> RouteDecision:
         modality = context.get("modality")
         tenant = context.get("tenant")
+        endpoint_type = getattr(descriptor.type, "value", str(descriptor.type))
+
+        allow_modalities = set(branch_policy.get("allow_modalities", []) or []) or None
+        deny_modalities = set(branch_policy.get("deny_modalities", []) or []) or None
+        allow_tenants = set(branch_policy.get("allow_tenants", []) or []) or None
+        deny_tenants = set(branch_policy.get("deny_tenants", []) or []) or None
+        allow_endpoint_types = set(branch_policy.get("allow_endpoint_types", []) or []) or None
+        deny_endpoint_types = set(branch_policy.get("deny_endpoint_types", []) or []) or None
+
+        # Early modality/tenant/endpoint filtering
+        modality_blocked = (allow_modalities and modality and modality not in allow_modalities) or (
+            deny_modalities and modality in deny_modalities
+        )
+        tenant_blocked = (allow_tenants and tenant and tenant not in allow_tenants) or (
+            deny_tenants and tenant in deny_tenants
+        )
+        endpoint_blocked = (allow_endpoint_types and endpoint_type not in allow_endpoint_types) or (
+            deny_endpoint_types and endpoint_type in deny_endpoint_types
+        )
 
         allowed_nodes: List[str] = branch_policy.get("allow", [])
         denied_nodes: List[str] = branch_policy.get("deny", [])
         target_nodes = [n for n in allowed_nodes if n not in denied_nodes]
 
+        if modality_blocked or tenant_blocked or endpoint_blocked:
+            target_nodes = []
+
+        # Ensure deterministic ordering and uniqueness
+        seen = set()
+        target_nodes = [n for n in target_nodes if not (n in seen or seen.add(n))]
+
         ports: Dict[str, IOPort] = {}
         for node in target_nodes:
-            resolved = self.binding_resolver.for_node(node, modality=modality, tenant=tenant)
-            # last write wins if duplicate ids; realistic impl could merge by priority
+            resolved = self.binding_resolver.for_node(
+                node,
+                modality=modality,
+                tenant=tenant,
+                endpoint_type=endpoint_type,
+            )
             if resolved:
                 ports[node] = resolved[0]
 
@@ -83,6 +113,13 @@ class SimpleMCPRouter:
         per_tenant_limit = branch_policy.get("per_tenant_limit")
         error_policy = branch_policy.get("error_policy", {"retry": True, "backoff_ms": 100})
 
+        metadata: Dict[str, Any] = {
+            "modality": modality,
+            "tenant": tenant,
+            "endpoint_type": endpoint_type,
+            "filtered_nodes": [n for n in target_nodes if n not in ports],
+        }
+
         return RouteDecision(
             target_nodes=target_nodes,
             ports=ports,
@@ -90,5 +127,5 @@ class SimpleMCPRouter:
             concurrency_limit=concurrency_limit,
             per_tenant_limit=per_tenant_limit,
             error_policy=error_policy,
-            metadata={"modality": modality, "tenant": tenant},
+            metadata=metadata,
         )

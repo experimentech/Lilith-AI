@@ -6,6 +6,14 @@
   "policy": {
     "timeout_ms": 300,
     "concurrency_limit": 2,
-    "error_policy": {"retry": true, "backoff_ms": 100}
+    "error_policy": {"retry": true, "backoff_ms": 100},
+    "allow_modalities": ["text", "image"],
+    "allow_endpoint_types": ["action", "retrieval"],
+    "allow_tenants": ["tenant_demo"],
+    "deny": []
+  },
+  "pmflow": {
+    "state_path": "./tmp/pmflow_state.sqlite",
+    "event_path": "./tmp/pmflow_events.sqlite"
   }
 }

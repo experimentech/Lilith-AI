@@ -12,6 +12,7 @@ class NodeBindings:
     ports: List[IOPort] = field(default_factory=list)
     modalities: Optional[Set[str]] = None  # allowed modalities, None = all
     tenants: Optional[Set[str]] = None  # allowed tenants, None = all
+    endpoint_types: Optional[Set[str]] = None  # allowed endpoint types (EndpointType values), None = all
 
 
 BindingMap = Dict[str, NodeBindings]
@@ -25,6 +26,7 @@ class BindingResolver(Protocol):
         node_id: str,
         modality: Optional[str] = None,
         tenant: Optional[str] = None,
+        endpoint_type: Optional[str] = None,
     ) -> List[IOPort]:
         ...
 
@@ -40,6 +42,7 @@ class InMemoryBindingResolver:
         node_id: str,
         modality: Optional[str] = None,
         tenant: Optional[str] = None,
+        endpoint_type: Optional[str] = None,
     ) -> List[IOPort]:
         binding = self.bindings.get(node_id)
         if not binding:
@@ -49,6 +52,9 @@ class InMemoryBindingResolver:
             return []
 
         if binding.tenants and tenant and tenant not in binding.tenants:
+            return []
+
+        if binding.endpoint_types and endpoint_type and endpoint_type not in binding.endpoint_types:
             return []
 
         return list(binding.ports)
