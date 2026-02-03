@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 
@@ -67,6 +67,38 @@ class ExecutionPlan:
     trajectory_efficiency: float  # How direct the path is (1.0 = optimal)
     total_confidence: float  # Product of step confidences
     estimated_success: float  # Overall likelihood of success
+
+
+@dataclass
+class GoalCompletion:
+    """
+    Result of checking whether a goal was achieved after execution.
+    
+    Uses embedding similarity between final state and goal to determine
+    completion, combined with execution success indicators.
+    """
+    goal: str
+    completed: bool  # High-level: was the goal achieved?
+    confidence: float  # How confident (0.0-1.0) in the completion status
+    
+    # Detailed breakdown
+    semantic_similarity: float  # Cosine sim between final state and goal
+    execution_success_rate: float  # Fraction of steps that succeeded
+    steps_executed: int
+    steps_failed: int
+    steps_skipped: int
+    
+    # For learning
+    final_state_description: str  # Natural language description of final state
+    failure_reasons: List[str] = field(default_factory=list)
+    
+    def __repr__(self) -> str:
+        status = "COMPLETED" if self.completed else "NOT COMPLETED"
+        return (
+            f"GoalCompletion({status}, confidence={self.confidence:.2f}, "
+            f"semantic_sim={self.semantic_similarity:.2f}, "
+            f"steps={self.steps_executed}/{self.steps_executed + self.steps_failed + self.steps_skipped})"
+        )
 
 
 class ActionPlanner:
@@ -880,6 +912,207 @@ class ActionPlanner:
         
         return results
     
+    def check_goal_completion(
+        self,
+        goal: str,
+        execution_results: List[Dict[str, Any]],
+        final_state: Optional[str] = None,
+        completion_threshold: float = 0.7,
+    ) -> GoalCompletion:
+        """
+        Check whether a goal was achieved after plan execution.
+        
+        Uses embedding similarity between the final state and goal,
+        combined with execution success indicators.
+        
+        Args:
+            goal: The original goal string
+            execution_results: Results from execute_plan, execute_native, etc.
+            final_state: Optional explicit final state description. 
+                        If None, inferred from execution results.
+            completion_threshold: Minimum semantic similarity for completion
+        
+        Returns:
+            GoalCompletion with detailed status
+        """
+        # Count execution outcomes
+        steps_executed = 0
+        steps_failed = 0
+        steps_skipped = 0
+        failure_reasons = []
+        
+        for result in execution_results:
+            status = result.get("status", "")
+            if status == "skipped":
+                steps_skipped += 1
+            elif status == "error":
+                steps_failed += 1
+                msg = result.get("message", result.get("reason", "unknown error"))
+                failure_reasons.append(f"Step {result.get('step', '?')}: {msg}")
+            elif "result" in result:
+                # Check if the result itself indicates error
+                inner_result = result.get("result", {})
+                if isinstance(inner_result, dict) and inner_result.get("status") == "error":
+                    steps_failed += 1
+                    failure_reasons.append(f"Step {result.get('step', '?')}: {inner_result.get('message', 'error')}")
+                else:
+                    steps_executed += 1
+            else:
+                steps_executed += 1
+        
+        total_steps = steps_executed + steps_failed + steps_skipped
+        execution_success_rate = steps_executed / max(total_steps, 1)
+        
+        # Infer final state from results if not provided
+        if final_state is None:
+            final_state = self._infer_final_state(goal, execution_results)
+        
+        # Compute semantic similarity between final state and goal
+        semantic_similarity = self._compute_goal_similarity(goal, final_state)
+        
+        # Determine completion based on both semantic similarity and execution success
+        # High similarity + good execution = completed
+        # Low similarity or many failures = not completed
+        completion_score = (semantic_similarity * 0.6) + (execution_success_rate * 0.4)
+        completed = (
+            semantic_similarity >= completion_threshold 
+            and execution_success_rate >= 0.5
+            and steps_failed < steps_executed
+        )
+        
+        # Confidence is how certain we are about the completion status
+        confidence = completion_score if completed else (1.0 - completion_score)
+        confidence = max(0.0, min(1.0, confidence))  # Clamp to [0, 1]
+        
+        return GoalCompletion(
+            goal=goal,
+            completed=completed,
+            confidence=confidence,
+            semantic_similarity=semantic_similarity,
+            execution_success_rate=execution_success_rate,
+            steps_executed=steps_executed,
+            steps_failed=steps_failed,
+            steps_skipped=steps_skipped,
+            final_state_description=final_state,
+            failure_reasons=failure_reasons,
+        )
+    
+    def _infer_final_state(
+        self,
+        goal: str,
+        execution_results: List[Dict[str, Any]],
+    ) -> str:
+        """
+        Infer a natural language description of the final state from results.
+        
+        Used when no explicit final_state is provided.
+        """
+        if not execution_results:
+            return "no actions were executed"
+        
+        # Build description from successful actions
+        successful_actions = []
+        last_result = None
+        
+        for result in execution_results:
+            if result.get("status") == "error":
+                continue
+            if result.get("status") == "skipped":
+                continue
+            
+            action_name = result.get("action", "unknown")
+            successful_actions.append(action_name)
+            
+            # Capture the last result content
+            inner = result.get("result", {})
+            if isinstance(inner, dict):
+                if "output" in inner:
+                    last_result = inner["output"]
+                elif "message" in inner:
+                    last_result = inner["message"]
+            elif isinstance(inner, str):
+                last_result = inner
+        
+        if not successful_actions:
+            return f"failed to make progress toward {goal}"
+        
+        actions_desc = ", ".join(successful_actions[-3:])  # Last 3 actions
+        
+        if last_result:
+            return f"completed actions [{actions_desc}], last result: {str(last_result)[:100]}"
+        else:
+            return f"completed actions [{actions_desc}] toward goal: {goal}"
+    
+    def _compute_goal_similarity(self, goal: str, final_state: str) -> float:
+        """
+        Compute semantic similarity between goal and final state.
+        
+        Uses PMFlow embeddings for comparison.
+        """
+        try:
+            # Encode both
+            goal_emb = self.encoder.encode([goal])
+            state_emb = self.encoder.encode([final_state])
+            
+            # Ensure tensors (handle numpy arrays or existing tensors)
+            if not isinstance(goal_emb, torch.Tensor):
+                goal_emb = torch.as_tensor(goal_emb)
+            if not isinstance(state_emb, torch.Tensor):
+                state_emb = torch.as_tensor(state_emb)
+            
+            # Normalize and compute cosine similarity
+            goal_norm = F.normalize(goal_emb.float(), p=2, dim=-1)
+            state_norm = F.normalize(state_emb.float(), p=2, dim=-1)
+            
+            similarity = F.cosine_similarity(goal_norm, state_norm, dim=-1)
+            return float(similarity.mean().item())
+            
+        except Exception as e:
+            logger.warning(f"Could not compute goal similarity: {e}")
+            return 0.5  # Default to uncertain
+    
+    def execute_and_check(
+        self,
+        plan: ExecutionPlan,
+        transport,
+        stop_on_error: bool = True,
+        reactive: bool = False,
+        max_replans: int = 5,
+        completion_threshold: float = 0.7,
+    ) -> Tuple[List[Dict[str, Any]], GoalCompletion]:
+        """
+        Execute a plan and check if the goal was completed.
+        
+        Convenience method that combines execute_plan() and check_goal_completion().
+        
+        Args:
+            plan: The execution plan
+            transport: Tool transport for execution
+            stop_on_error: Stop on first error
+            reactive: Use reactive replanning
+            max_replans: Max replanning iterations
+            completion_threshold: Minimum similarity for completion
+            
+        Returns:
+            (execution_results, goal_completion)
+        """
+        results = self.execute_plan(
+            plan=plan,
+            transport=transport,
+            stop_on_error=stop_on_error,
+            reactive=reactive,
+            max_replans=max_replans,
+        )
+        
+        completion = self.check_goal_completion(
+            goal=plan.goal,
+            execution_results=results,
+            completion_threshold=completion_threshold,
+        )
+        
+        logger.info(f"Goal completion: {completion}")
+        return results, completion
+
     def _get_pm_field(self):
         """
         Get the underlying PMFlow field for native physics operations.
@@ -1138,6 +1371,54 @@ class ActionPlanner:
         
         return results
     
+    def execute_native_and_check(
+        self,
+        goal: str,
+        transport,
+        current_state: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        max_steps: int = 20,
+        stop_on_error: bool = True,
+        completion_threshold: float = 0.7,
+        **kwargs,
+    ) -> Tuple[List[Dict[str, Any]], GoalCompletion]:
+        """
+        Execute a goal using native PMFlow physics and check completion.
+        
+        Convenience method that combines execute_native() and check_goal_completion().
+        
+        Args:
+            goal: The goal to achieve
+            transport: Tool transport for execution
+            current_state: Optional description of current state
+            context: Optional context for argument filling
+            max_steps: Maximum trajectory steps
+            stop_on_error: Stop on first error
+            completion_threshold: Minimum similarity for completion
+            **kwargs: Additional args passed to execute_native
+            
+        Returns:
+            (execution_results, goal_completion)
+        """
+        results = self.execute_native(
+            plan_or_goal=goal,
+            transport=transport,
+            current_state=current_state,
+            context=context,
+            max_steps=max_steps,
+            stop_on_error=stop_on_error,
+            **kwargs,
+        )
+        
+        completion = self.check_goal_completion(
+            goal=goal,
+            execution_results=results,
+            completion_threshold=completion_threshold,
+        )
+        
+        logger.info(f"Native goal completion: {completion}")
+        return results, completion
+
     def _is_empty_result(self, result: Any) -> bool:
         """Check if a result indicates empty/not-found."""
         if result is None:

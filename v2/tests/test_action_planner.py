@@ -1306,5 +1306,198 @@ class TestNativeExecution(unittest.TestCase):
         )
 
 
+class TestGoalCompletion(unittest.TestCase):
+    """Tests for goal completion detection."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        from v2.lilith_v2.action_planner import (
+            ActionPlanner, ActionNode, ExecutionPlan, PlannedStep, GoalCompletion
+        )
+        from v2.lilith_v2.relational_graph_store import RelationalGraphStore
+        
+        self.temp_dir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.temp_dir, "test_actions.sqlite")
+        self.graph = RelationalGraphStore(self.db_path)
+        
+        self.encoder = MockEncoder(dimension=64, latent_dim=32)
+        self.planner = ActionPlanner(
+            encoder=self.encoder,
+            graph=self.graph,
+            trajectory_steps=10,
+            grounding_threshold=0.3,
+        )
+        
+        # Register some test actions using proper method signature
+        self.planner.register_action(
+            name="search_web",
+            description="search the web for information",
+            tool_binding="web_search",
+        )
+        self.planner.register_action(
+            name="login_user",
+            description="log in to the system",
+            tool_binding="auth_login",
+        )
+    
+    def tearDown(self):
+        """Clean up."""
+        self.graph.close()
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def test_goal_completion_success(self):
+        """Test goal completion detection for successful execution."""
+        # Simulate successful execution results
+        results = [
+            {"step": 1, "action": "search_web", "tool": "web_search", 
+             "result": {"status": "ok", "output": "found information about the topic"}},
+            {"step": 2, "action": "login_user", "tool": "auth_login",
+             "result": {"status": "ok", "output": "logged in successfully"}},
+        ]
+        
+        completion = self.planner.check_goal_completion(
+            goal="search for info and login",
+            execution_results=results,
+            final_state="completed search and login successfully",
+            completion_threshold=0.5,
+        )
+        
+        self.assertIsInstance(completion, GoalCompletion)
+        self.assertEqual(completion.steps_executed, 2)
+        self.assertEqual(completion.steps_failed, 0)
+        self.assertEqual(completion.steps_skipped, 0)
+        self.assertEqual(completion.execution_success_rate, 1.0)
+        # With mock encoder, similarity may vary, but should have valid confidence
+        self.assertGreaterEqual(completion.confidence, 0.0)
+        self.assertLessEqual(completion.confidence, 1.0)
+    
+    def test_goal_completion_failure(self):
+        """Test goal completion detection for failed execution."""
+        results = [
+            {"step": 1, "action": "search_web", "status": "error", "message": "network timeout"},
+            {"step": 2, "action": "login_user", "status": "skipped", "reason": "previous step failed"},
+        ]
+        
+        completion = self.planner.check_goal_completion(
+            goal="search and login",
+            execution_results=results,
+        )
+        
+        self.assertFalse(completion.completed)
+        self.assertEqual(completion.steps_failed, 1)
+        self.assertEqual(completion.steps_skipped, 1)
+        self.assertEqual(completion.steps_executed, 0)
+        self.assertIn("network timeout", completion.failure_reasons[0])
+    
+    def test_goal_completion_partial(self):
+        """Test goal completion detection for partial execution."""
+        results = [
+            {"step": 1, "action": "search_web", "tool": "web_search",
+             "result": {"status": "ok", "output": "found results"}},
+            {"step": 2, "action": "login_user", "status": "error", "message": "auth failed"},
+        ]
+        
+        completion = self.planner.check_goal_completion(
+            goal="search and then login",
+            execution_results=results,
+        )
+        
+        self.assertEqual(completion.steps_executed, 1)
+        self.assertEqual(completion.steps_failed, 1)
+        self.assertEqual(completion.execution_success_rate, 0.5)
+    
+    def test_goal_completion_empty_results(self):
+        """Test goal completion with no execution results."""
+        completion = self.planner.check_goal_completion(
+            goal="do something",
+            execution_results=[],
+        )
+        
+        self.assertFalse(completion.completed)
+        self.assertEqual(completion.steps_executed, 0)
+        self.assertEqual(completion.final_state_description, "no actions were executed")
+    
+    def test_infer_final_state(self):
+        """Test final state inference from results."""
+        results = [
+            {"step": 1, "action": "search_web", "tool": "web_search",
+             "result": {"output": "Python documentation found"}},
+            {"step": 2, "action": "read_page", "tool": "web_read",
+             "result": {"output": "Page content about Python programming"}},
+        ]
+        
+        final_state = self.planner._infer_final_state(
+            goal="learn about Python",
+            execution_results=results,
+        )
+        
+        self.assertIn("search_web", final_state)
+        self.assertIn("Page content about Python", final_state)
+    
+    def test_execute_and_check(self):
+        """Test combined execute and check functionality."""
+        from v2.lilith_v2.action_planner import ExecutionPlan, PlannedStep, ActionNode
+        
+        # Create a simple plan using the registered action
+        action = self.planner._action_cache.get("action_search_web")
+        if action:
+            step = PlannedStep(
+                step_num=1,
+                action=action,
+                args={},
+                waypoint_embedding=action.embedding,
+                confidence=0.9,
+            )
+            plan = ExecutionPlan(
+                goal="find information",
+                steps=[step],
+                trajectory_efficiency=0.8,
+                total_confidence=0.9,
+                estimated_success=0.85,
+            )
+            
+            class MockTransport:
+                def call(self, name, message, meta=None):
+                    return {"status": "ok", "output": "search results found"}
+            
+            results, completion = self.planner.execute_and_check(
+                plan=plan,
+                transport=MockTransport(),
+            )
+            
+            self.assertEqual(len(results), 1)
+            self.assertIsInstance(completion, GoalCompletion)
+            self.assertEqual(completion.steps_executed, 1)
+    
+    def test_goal_completion_repr(self):
+        """Test GoalCompletion string representation."""
+        from v2.lilith_v2.action_planner import GoalCompletion
+        
+        completion = GoalCompletion(
+            goal="test goal",
+            completed=True,
+            confidence=0.85,
+            semantic_similarity=0.9,
+            execution_success_rate=1.0,
+            steps_executed=3,
+            steps_failed=0,
+            steps_skipped=0,
+            final_state_description="all done",
+        )
+        
+        repr_str = repr(completion)
+        self.assertIn("COMPLETED", repr_str)
+        self.assertIn("0.85", repr_str)
+        self.assertIn("0.90", repr_str)
+
+
+# Import GoalCompletion at module level for tests
+try:
+    from v2.lilith_v2.action_planner import GoalCompletion
+except ImportError:
+    GoalCompletion = None
+
+
 if __name__ == "__main__":
     unittest.main()
