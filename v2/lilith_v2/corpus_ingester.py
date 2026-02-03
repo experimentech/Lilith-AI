@@ -1,12 +1,11 @@
 """
 Corpus Ingester for Lilith V2
 
-Single-pass extraction of vocabulary, grammar, concepts, and relationships
-from training files (JSONL, CSV, TXT).
+Uses Lilith's cognitive pipeline (SemanticExtractor, WorldModel, TopicExtractor)
+to extract vocabulary, grammar, concepts, and relationships from training files.
 
-The key insight: most entries share vocabulary and concepts, so the graph
-grows sub-linearly with input size (lots of edge additions between existing
-nodes rather than exponential node growth).
+This ensures ingested data matches Lilith's internal data structures and
+relationship types exactly how learn() would populate them.
 
 Usage:
     ingester = CorpusIngester(graph_store, encoder)
@@ -19,9 +18,17 @@ import re
 import os
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Generator
+from typing import Any, Dict, List, Optional, Set, Tuple, Generator, TYPE_CHECKING
 from dataclasses import dataclass, field
 from collections import Counter
+
+# Cognitive components for proper extraction (same as learn() pipeline)
+from .semantic_extractor import SemanticExtractor, ExtractedRelation
+from .world_model import WorldModel, WorldSituation, Entity
+from .topic_extractor import TopicExtractor
+
+if TYPE_CHECKING:
+    from .linguistic_processor import LinguisticProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -95,10 +102,11 @@ class ExtractionConfig:
 
 class CorpusIngester:
     """
-    Single-pass corpus ingestion for Lilith's knowledge graph.
+    Corpus ingestion using Lilith's cognitive pipeline.
     
-    Extracts vocabulary, concepts, and relationships from text files
-    and populates the graph store incrementally.
+    Uses SemanticExtractor, WorldModel, and TopicExtractor to extract
+    vocabulary, concepts, and relationships - ensuring data is populated
+    the same way as Lilith's learn() method would populate it.
     """
     
     def __init__(
@@ -107,6 +115,9 @@ class CorpusIngester:
         encoder=None,
         config: Optional[ExtractionConfig] = None,
         tenant_id: str = "production",
+        semantic_extractor: Optional[SemanticExtractor] = None,
+        world_model: Optional[WorldModel] = None,
+        topic_extractor: Optional[TopicExtractor] = None,
     ):
         """
         Initialize the ingester.
@@ -116,17 +127,32 @@ class CorpusIngester:
             encoder: Optional encoder for embeddings
             config: ExtractionConfig for extraction options
             tenant_id: Tenant ID for writes (default: "production")
+            semantic_extractor: SemanticExtractor for relation extraction
+            world_model: WorldModel for entity/relation extraction
+            topic_extractor: TopicExtractor for topic learning
         """
         self.graph = graph_store
         self.encoder = encoder
         self.config = config or ExtractionConfig()
         self.tenant_id = tenant_id
         
+        # Cognitive components (create if not provided)
+        self.semantic_extractor = semantic_extractor or SemanticExtractor()
+        self.world_model = world_model or WorldModel()
+        self.topic_extractor = topic_extractor  # Optional, needs encoder
+        if self.topic_extractor is None and self.encoder is not None:
+            self.topic_extractor = TopicExtractor(self.encoder)
+        
         # Track what we've seen in this session
         self._seen_words: Set[str] = set()
         self._word_counts: Counter = Counter()
         self._seen_concepts: Set[str] = set()
         self._seen_edges: Set[Tuple[str, str, str]] = set()
+        self._seen_topics: Set[str] = set()
+        
+        # Extracted relations and entities for stats
+        self._extracted_relations: List[ExtractedRelation] = []
+        self._extracted_entities: List[Entity] = []
         
         # Simple POS patterns (without full NLP library)
         self._pos_patterns = Counter()
@@ -310,21 +336,33 @@ class CorpusIngester:
             self._process_text(text, stats)
     
     def _process_text(self, text: str, stats: IngestionStats) -> None:
-        """Extract and store knowledge from a single text."""
-        # Tokenize
+        """
+        Extract and store knowledge from a single text using cognitive pipeline.
+        
+        Uses SemanticExtractor for relations (is_a, has_a, part_of, etc.),
+        WorldModel for entities and spatial/temporal/causal relations,
+        and TopicExtractor for topic learning.
+        """
+        # Tokenize for vocabulary extraction
         words = self._tokenize(text)
         
         if self.config.extract_vocabulary:
             self._extract_vocabulary(words, stats)
         
         if self.config.extract_concepts:
-            self._extract_concepts(text, words, stats)
+            # Use SemanticExtractor for relation-based concepts
+            self._extract_semantic_relations(text, stats)
         
         if self.config.extract_relationships:
-            self._extract_relationships(words, stats)
+            # Use WorldModel for entities and world relations
+            self._extract_world_relations(text, stats)
         
         if self.config.extract_grammar:
             self._extract_grammar(text, words, stats)
+        
+        # Topic learning (if topic extractor available)
+        if self.topic_extractor:
+            self._extract_topics(text, stats)
     
     def _tokenize(self, text: str) -> List[str]:
         """Tokenize text into words."""
@@ -380,13 +418,238 @@ class CorpusIngester:
                 stats.new_words += 1
                 self._seen_words.add(word)
     
+    def _extract_semantic_relations(self, text: str, stats: IngestionStats) -> None:
+        """
+        Extract semantic relations using SemanticExtractor.
+        
+        This uses Lilith's pattern-based extraction for:
+        - is_a (taxonomy)
+        - has_a (composition)
+        - part_of (meronymy)
+        - synonym, similar_to, opposite_of (lexical relations)
+        """
+        relations = self.semantic_extractor.extract(text)
+        
+        for rel in relations:
+            # Track extracted relations
+            self._extracted_relations.append(rel)
+            
+            # Add subject and object as concept nodes
+            subj_id = f"concept_{rel.subject.replace(' ', '_')}"
+            obj_id = f"concept_{rel.object.replace(' ', '_')}"
+            
+            # Add subject node if new
+            if subj_id not in self._seen_concepts:
+                existing = self.graph.get_node(subj_id, tenant_id=self.tenant_id)
+                if existing:
+                    stats.existing_concepts += 1
+                else:
+                    self.graph.add_node(
+                        node_id=subj_id,
+                        node_type="concept",
+                        term=rel.subject,
+                        confidence=rel.confidence,
+                        tenant_id=self.tenant_id,
+                    )
+                    stats.new_concepts += 1
+                self._seen_concepts.add(subj_id)
+            
+            # Add object node if new
+            if obj_id not in self._seen_concepts:
+                existing = self.graph.get_node(obj_id, tenant_id=self.tenant_id)
+                if existing:
+                    stats.existing_concepts += 1
+                else:
+                    self.graph.add_node(
+                        node_id=obj_id,
+                        node_type="concept",
+                        term=rel.object,
+                        confidence=rel.confidence,
+                        tenant_id=self.tenant_id,
+                    )
+                    stats.new_concepts += 1
+                self._seen_concepts.add(obj_id)
+            
+            # Add edge for the relation
+            edge_key = (subj_id, obj_id, rel.predicate)
+            if edge_key not in self._seen_edges:
+                try:
+                    self.graph.add_edge(
+                        source=subj_id,
+                        target=obj_id,
+                        edge_type=rel.predicate,
+                        confidence=rel.confidence,
+                        tenant_id=self.tenant_id,
+                    )
+                    stats.new_edges += 1
+                    self._seen_edges.add(edge_key)
+                except Exception:
+                    pass  # Edge creation failed
+            else:
+                stats.strengthened_edges += 1
+    
+    def _extract_world_relations(self, text: str, stats: IngestionStats) -> None:
+        """
+        Extract entities and world relations using WorldModel.
+        
+        This uses Lilith's WorldModel for:
+        - Entity extraction (noun phrases with determiners)
+        - Spatial relations (in, on, above, under, etc.)
+        - Temporal relations (before, after, during, etc.)
+        - Causal relations (because, causes, leads to, etc.)
+        """
+        situation = self.world_model.process_utterance(text)
+        
+        # Add entities as nodes
+        for entity in situation.entities:
+            self._extracted_entities.append(entity)
+            entity_id = f"entity_{entity.name.replace(' ', '_')}"
+            
+            if entity_id not in self._seen_concepts:
+                existing = self.graph.get_node(entity_id, tenant_id=self.tenant_id)
+                if existing:
+                    stats.existing_concepts += 1
+                else:
+                    self.graph.add_node(
+                        node_id=entity_id,
+                        node_type="entity",
+                        term=entity.name,
+                        confidence=1.0,
+                        data={"entity_type": entity.entity_type, "state": entity.state},
+                        tenant_id=self.tenant_id,
+                    )
+                    stats.new_concepts += 1
+                self._seen_concepts.add(entity_id)
+        
+        # Add spatial relations as edges
+        for rel in situation.spatial_relations:
+            entity_a_id = f"entity_{rel.entity_a.replace(' ', '_')}"
+            entity_b_id = f"entity_{rel.entity_b.replace(' ', '_')}"
+            edge_key = (entity_a_id, entity_b_id, f"spatial_{rel.relation_type}")
+            
+            if edge_key not in self._seen_edges:
+                # Ensure both nodes exist
+                if entity_a_id in self._seen_concepts and entity_b_id in self._seen_concepts:
+                    try:
+                        self.graph.add_edge(
+                            source=entity_a_id,
+                            target=entity_b_id,
+                            edge_type=f"spatial_{rel.relation_type}",
+                            confidence=0.8,
+                            tenant_id=self.tenant_id,
+                        )
+                        stats.new_edges += 1
+                        self._seen_edges.add(edge_key)
+                    except Exception:
+                        pass
+        
+        # Add temporal relations as edges
+        for rel in situation.temporal_relations:
+            event_a_id = f"event_{rel.event_a.replace(' ', '_')}"
+            event_b_id = f"event_{rel.event_b.replace(' ', '_')}"
+            
+            # Add event nodes if they don't exist
+            for event_id, event_name in [(event_a_id, rel.event_a), (event_b_id, rel.event_b)]:
+                if event_id not in self._seen_concepts:
+                    self.graph.add_node(
+                        node_id=event_id,
+                        node_type="event",
+                        term=event_name,
+                        confidence=0.8,
+                        tenant_id=self.tenant_id,
+                    )
+                    stats.new_concepts += 1
+                    self._seen_concepts.add(event_id)
+            
+            edge_key = (event_a_id, event_b_id, f"temporal_{rel.relation_type}")
+            if edge_key not in self._seen_edges:
+                try:
+                    self.graph.add_edge(
+                        source=event_a_id,
+                        target=event_b_id,
+                        edge_type=f"temporal_{rel.relation_type}",
+                        confidence=0.8,
+                        tenant_id=self.tenant_id,
+                    )
+                    stats.new_edges += 1
+                    self._seen_edges.add(edge_key)
+                except Exception:
+                    pass
+        
+        # Add causal relations as edges
+        for rel in situation.causal_relations:
+            cause_id = f"event_{rel.cause.replace(' ', '_')}"
+            effect_id = f"event_{rel.effect.replace(' ', '_')}"
+            
+            # Add cause/effect nodes if they don't exist
+            for event_id, event_name in [(cause_id, rel.cause), (effect_id, rel.effect)]:
+                if event_id not in self._seen_concepts:
+                    self.graph.add_node(
+                        node_id=event_id,
+                        node_type="event",
+                        term=event_name,
+                        confidence=0.8,
+                        tenant_id=self.tenant_id,
+                    )
+                    stats.new_concepts += 1
+                    self._seen_concepts.add(event_id)
+            
+            edge_key = (cause_id, effect_id, "causes")
+            if edge_key not in self._seen_edges:
+                try:
+                    self.graph.add_edge(
+                        source=cause_id,
+                        target=effect_id,
+                        edge_type="causes",
+                        confidence=0.8,
+                        tenant_id=self.tenant_id,
+                    )
+                    stats.new_edges += 1
+                    self._seen_edges.add(edge_key)
+                except Exception:
+                    pass
+    
+    def _extract_topics(self, text: str, stats: IngestionStats) -> None:
+        """
+        Learn topics from text using TopicExtractor.
+        
+        Extracts topic words and associates them with context.
+        """
+        if not self.topic_extractor:
+            return
+        
+        # Extract potential topic (the topic extractor identifies likely topic words)
+        topic, confidence = self.topic_extractor.extract_topic(text)
+        
+        if topic and topic not in self._seen_topics:
+            # Learn this topic with the text as context
+            self.topic_extractor.learn_topic(topic, text)
+            self._seen_topics.add(topic)
+            
+            # Also add as a concept node
+            topic_id = f"topic_{topic.replace(' ', '_')}"
+            if topic_id not in self._seen_concepts:
+                self.graph.add_node(
+                    node_id=topic_id,
+                    node_type="topic",
+                    term=topic,
+                    confidence=confidence,
+                    tenant_id=self.tenant_id,
+                )
+                stats.new_concepts += 1
+                self._seen_concepts.add(topic_id)
+    
     def _extract_concepts(
         self,
         text: str,
         words: List[str],
         stats: IngestionStats,
     ) -> None:
-        """Extract concepts (noun phrases, named entities)."""
+        """
+        Legacy concept extraction (fallback for backward compatibility).
+        
+        Prefer _extract_semantic_relations() which uses SemanticExtractor.
+        """
         cfg = self.config
         concepts = []
         
@@ -434,7 +697,14 @@ class CorpusIngester:
                 self._seen_concepts.add(concept_id)
     
     def _extract_relationships(self, words: List[str], stats: IngestionStats) -> None:
-        """Extract co-occurrence relationships."""
+        """
+        Legacy co-occurrence relationship extraction (fallback for backward compatibility).
+        
+        Prefer _extract_world_relations() which uses WorldModel for:
+        - Spatial relations
+        - Temporal relations
+        - Causal relations
+        """
         cfg = self.config
         content_words = [w for w in words if w not in self._stopwords and len(w) >= cfg.min_word_length]
         
@@ -512,13 +782,17 @@ class CorpusIngester:
             stats.new_patterns += 1
     
     def get_extraction_stats(self) -> Dict[str, Any]:
-        """Get current extraction statistics."""
+        """Get current extraction statistics including cognitive extractions."""
         return {
             "seen_words": self._seen_words.copy(),
             "word_counts": dict(self._word_counts),
             "seen_concepts": self._seen_concepts.copy(),
             "seen_edges": len(self._seen_edges),
             "pos_patterns": dict(self._pos_patterns),
+            # Cognitive extraction stats
+            "semantic_relations": len(self._extracted_relations),
+            "world_entities": len(self._extracted_entities),
+            "topics_learned": len(self._seen_topics),
         }
     
     def reset_session(self) -> None:
@@ -528,6 +802,16 @@ class CorpusIngester:
         self._seen_concepts.clear()
         self._seen_edges.clear()
         self._pos_patterns.clear()
+        # Reset cognitive tracking
+        self._extracted_relations.clear()
+        self._extracted_entities.clear()
+        self._seen_topics.clear()
+        # Reset world model state
+        if self.world_model:
+            self.world_model.active_entities.clear()
+            self.world_model.active_spatial_relations.clear()
+            self.world_model.active_temporal_relations.clear()
+            self.world_model.active_causal_relations.clear()
 
 
 def ingest_corpus(

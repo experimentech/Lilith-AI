@@ -94,27 +94,32 @@ class TestCorpusIngester(unittest.TestCase):
         self.assertIn("python", ext_stats["seen_words"])
     
     def test_concept_extraction(self):
-        """Test concepts are extracted."""
+        """Test concepts are extracted using SemanticExtractor patterns."""
+        # Use text with semantic patterns that SemanticExtractor can match:
+        # "X is a Y", "X is a type of Y", "X has Y", etc.
         texts = [
-            "Machine Learning is transforming industries.",
-            "Data Science combines statistics and programming.",
+            "Python is a programming language.",
+            "A dog is a mammal.",
+            "Machine learning is a field of study.",
         ]
         
         stats = self.ingester.ingest_texts(texts)
         
-        # Should have extracted some concepts
+        # Should have extracted concepts from "X is a Y" patterns
         self.assertGreater(stats.new_concepts, 0)
     
     def test_relationship_extraction(self):
-        """Test relationships are created between cooccurring words."""
+        """Test relationships are created using WorldModel."""
+        # Use text with entity patterns (determiners + nouns) and
+        # spatial/causal markers for WorldModel to extract
         texts = [
-            "cats dogs pets animals",
-            "cats dogs friends companions",
+            "The cat is on the mat.",
+            "The dog runs because it is happy.",
         ]
         
         stats = self.ingester.ingest_texts(texts)
         
-        # Should have edges between words that appear together
+        # Should have extracted entity relationships
         self.assertGreater(stats.new_edges, 0)
     
     def test_duplicate_handling(self):
