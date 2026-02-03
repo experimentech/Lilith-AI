@@ -149,9 +149,8 @@ class ActionPlanner:
         action_id = f"action_{name}"
         
         # Compute embedding from description
-        embedding = self.encoder.encode(description.split())
-        if embedding.dim() == 2:
-            embedding = embedding.squeeze(0)
+        # For trajectory grounding, we need LATENT space embedding (not full)
+        embedding = self._encode_to_latent(description.split())
         
         action = ActionNode(
             action_id=action_id,
@@ -184,6 +183,35 @@ class ActionPlanner:
         
         logger.debug(f"Registered action: {name} → {tool_binding}")
         return action_id
+    
+    def _encode_to_latent(self, tokens) -> torch.Tensor:
+        """
+        Encode tokens to latent space (not full embedding).
+        
+        Trajectory tracing operates in latent space, so actions must
+        be embedded there too for grounding to work.
+        """
+        # Try to get latent directly if encoder supports it
+        if hasattr(self.encoder, 'base_encoder') and hasattr(self.encoder, '_projection'):
+            # Real PMFlowEmbeddingEncoder: base → project to latent
+            base_emb = self.encoder.base_encoder.encode(tokens)
+            if hasattr(base_emb, 'to'):
+                base_emb = base_emb.to(self.encoder._projection.device)
+            latent = base_emb @ self.encoder._projection
+            if latent.dim() == 2:
+                latent = latent.squeeze(0)
+            return latent
+        else:
+            # Fallback: use full encode and truncate/project
+            embedding = self.encoder.encode(tokens)
+            if embedding.dim() == 2:
+                embedding = embedding.squeeze(0)
+            
+            # If encoder has latent_dim, truncate to that
+            if hasattr(self.encoder, 'latent_dim'):
+                embedding = embedding[:self.encoder.latent_dim]
+            
+            return embedding
     
     def _invalidate_embedding_cache(self):
         """Invalidate the stacked embedding cache."""
@@ -311,9 +339,13 @@ class ActionPlanner:
                 steps=self.trajectory_steps
             )
             
-            # trajectory is a tensor of shape [steps, latent_dim]
+            # trajectory may have shape [batch, steps, latent_dim] or [steps, latent_dim]
             if not isinstance(trajectory, torch.Tensor):
                 trajectory = torch.tensor(trajectory)
+            
+            # Squeeze batch dimension if present
+            if trajectory.dim() == 3:
+                trajectory = trajectory.squeeze(0)  # Now [steps, latent_dim]
             
             # Step 4: Ground each waypoint to nearest action
             steps = self._ground_trajectory_to_actions(trajectory, context)

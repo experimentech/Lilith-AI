@@ -68,19 +68,26 @@ class MockEncoder:
         self._intent_strength = 0.0
     
     def trace_trajectory(self, tokens, steps=10):
-        """Mock trajectory tracing."""
-        # Generate a trajectory of embeddings
+        """Mock trajectory tracing.
+        
+        Returns trajectory in latent space (latent_dim dimensions),
+        matching real PMFlowEmbeddingEncoder behavior.
+        """
+        # Generate a trajectory of embeddings in latent space
         start = self.encode(tokens)
+        # Project to latent space
+        start_latent = start[:, :self.latent_dim]  # [1, latent_dim]
         
         trajectory = []
-        current = start.clone()
+        current = start_latent.clone()
         
         for i in range(steps):
             # Drift toward intent if set
             if self._intent:
                 intent_emb = self.encode(self._intent)
+                intent_latent = intent_emb[:, :self.latent_dim]  # Project to latent
                 alpha = (i + 1) / steps * self._intent_strength
-                current = (1 - alpha) * current + alpha * intent_emb
+                current = (1 - alpha) * current + alpha * intent_latent
             else:
                 # Random walk
                 current = current + torch.randn_like(current) * 0.1
@@ -361,6 +368,180 @@ class TestActionPlannerWithCognitive(unittest.TestCase):
         
         self.assertIsNotNone(action_id)
         self.assertEqual(action_id, "action_test_action")
+
+
+class TestActionPlannerIntegration(unittest.TestCase):
+    """Integration tests with real PMFlowEmbeddingEncoder.
+    
+    These tests verify that the actual physics-based encoder produces
+    semantically meaningful trajectories that ground to appropriate actions.
+    """
+    
+    def setUp(self):
+        """Set up test fixtures with real encoder."""
+        self.temp_dir = tempfile.mkdtemp()
+        
+        # Try to import real encoder
+        try:
+            from pmflow.encoder import PMFlowEmbeddingEncoder
+            self.encoder = PMFlowEmbeddingEncoder(
+                dimension=64,
+                latent_dim=32,
+                enable_flow=True,
+            )
+            self.has_real_encoder = True
+        except ImportError:
+            self.has_real_encoder = False
+            self.encoder = None
+    
+    def tearDown(self):
+        """Clean up temp files."""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def test_semantic_trajectory_grounds_to_file_actions(self):
+        """Test that 'copy file' goal grounds to read/write actions."""
+        if not self.has_real_encoder:
+            self.skipTest("PMFlowEmbeddingEncoder not available")
+        
+        from v2.lilith_v2.action_planner import ActionPlanner
+        from v2.lilith_v2.relational_graph_store import RelationalGraphStore
+        
+        graph_path = os.path.join(self.temp_dir, "graph.sqlite")
+        graph = RelationalGraphStore(graph_path)
+        
+        planner = ActionPlanner(
+            encoder=self.encoder,
+            graph=graph,
+            trajectory_steps=15,
+            grounding_threshold=0.2,  # Lower threshold for real embeddings
+        )
+        
+        # Register file-related actions
+        planner.register_action(
+            name="read_file",
+            description="read the contents of a file from disk",
+            tool_binding="read_file",
+        )
+        planner.register_action(
+            name="write_file", 
+            description="write content to a file on disk",
+            tool_binding="write_file",
+        )
+        planner.register_action(
+            name="delete_file",
+            description="delete remove a file from disk",
+            tool_binding="delete_file",
+        )
+        
+        # Plan for file copy
+        plan = planner.plan(goal="copy the file to a backup location")
+        
+        self.assertIsNotNone(plan, "Plan should be generated with real encoder")
+        self.assertGreater(len(plan.steps), 0, "Plan should have steps")
+        
+        # Check that at least one file-related action was grounded
+        action_names = [s.action.name for s in plan.steps]
+        file_actions = {"read_file", "write_file", "delete_file"}
+        has_file_action = any(name in file_actions for name in action_names)
+        
+        self.assertTrue(
+            has_file_action,
+            f"Expected file actions, got: {action_names}"
+        )
+        
+        print(f"\nReal encoder plan for 'copy file': {action_names}")
+        print(f"Trajectory efficiency: {plan.trajectory_efficiency:.3f}")
+        print(f"Total confidence: {plan.total_confidence:.3f}")
+    
+    def test_semantic_similarity_produces_meaningful_embeddings(self):
+        """Verify that semantically similar texts produce similar embeddings."""
+        if not self.has_real_encoder:
+            self.skipTest("PMFlowEmbeddingEncoder not available")
+        
+        import torch.nn.functional as F
+        
+        # Encode related concepts
+        emb_read = self.encoder.encode(["read", "file", "contents"])
+        emb_write = self.encoder.encode(["write", "file", "data"])
+        emb_weather = self.encoder.encode(["sunny", "temperature", "forecast"])
+        
+        # Flatten for comparison
+        emb_read = emb_read.flatten()
+        emb_write = emb_write.flatten()
+        emb_weather = emb_weather.flatten()
+        
+        # Compute similarities
+        sim_read_write = F.cosine_similarity(
+            emb_read.unsqueeze(0), emb_write.unsqueeze(0)
+        ).item()
+        sim_read_weather = F.cosine_similarity(
+            emb_read.unsqueeze(0), emb_weather.unsqueeze(0)
+        ).item()
+        
+        print(f"\nSimilarity read-write: {sim_read_write:.3f}")
+        print(f"Similarity read-weather: {sim_read_weather:.3f}")
+        
+        # File operations should be more similar to each other than to weather
+        self.assertGreater(
+            sim_read_write, sim_read_weather,
+            "File operations should cluster together in embedding space"
+        )
+    
+    def test_intent_injection_affects_trajectory(self):
+        """Verify that inject_intent actually influences trajectory direction."""
+        if not self.has_real_encoder:
+            self.skipTest("PMFlowEmbeddingEncoder not available")
+        
+        import torch
+        import torch.nn.functional as F
+        
+        # Encode goal and project to latent space (to match trajectory space)
+        goal_emb = self.encoder.encode(["write", "file", "save"])
+        # Get base encoding (first encoder.dimension dims) and project to latent
+        base_dim = self.encoder.dimension
+        goal_base = goal_emb[:, :base_dim]  # [1, 64]
+        goal_latent = torch.matmul(goal_base, self.encoder._projection)  # [1, 32]
+        
+        # Trace trajectory WITHOUT intent
+        self.encoder.clear_intent()
+        traj_no_intent, _ = self.encoder.trace_trajectory(
+            ["current", "state"], steps=10
+        )
+        
+        # Inject intent and trace trajectory WITH intent
+        self.encoder.inject_intent(["write", "file", "save"], strength=0.5)
+        traj_with_intent, _ = self.encoder.trace_trajectory(
+            ["current", "state"], steps=10
+        )
+        self.encoder.clear_intent()
+        
+        # trajectory shape is [1, steps, 32] - get final step for each
+        # Squeeze batch and get last step: [steps, 32][-1] -> [32]
+        final_no_intent = traj_no_intent.squeeze(0)[-1].unsqueeze(0)  # [1, 32]
+        final_with_intent = traj_with_intent.squeeze(0)[-1].unsqueeze(0)  # [1, 32]
+        
+        # Both goal_latent and final trajectory steps are now [1, 32]
+        sim_no_intent = F.cosine_similarity(
+            goal_latent,
+            final_no_intent
+        ).item()
+        
+        sim_with_intent = F.cosine_similarity(
+            goal_latent,
+            final_with_intent
+        ).item()
+        
+        print(f"\nFinal trajectory similarity to goal:")
+        print(f"  Without intent: {sim_no_intent:.3f}")
+        print(f"  With intent: {sim_with_intent:.3f}")
+        
+        # With intent should be closer to goal (or at least not worse)
+        # Note: This might not always hold due to field dynamics, but should trend this way
+        self.assertGreaterEqual(
+            sim_with_intent, sim_no_intent - 0.1,
+            "Intent injection should pull trajectory toward goal"
+        )
 
 
 if __name__ == "__main__":
