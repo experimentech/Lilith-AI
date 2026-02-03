@@ -14,7 +14,14 @@ from v2.lilith_v2.multi_tenant_store import MultiTenantPMFlowManager, MultiTenan
 from v2.lilith_v2.mcp_router import MCPDescriptor
 from v2.lilith_v2.relational_store import RelationalStore
 
-# Try to import PMFlow encoder for agentic physics
+# Try to import SemanticPMFlowEncoder (preferred - trainable word embeddings)
+try:
+    from lilith.learned_vocabulary_encoder import SemanticPMFlowEncoder
+    HAS_SEMANTIC_ENCODER = True
+except ImportError:
+    HAS_SEMANTIC_ENCODER = False
+
+# Try to import PMFlow encoder for agentic physics (fallback)
 try:
     from pmflow import PMFlowEmbeddingEncoder
     HAS_PMFLOW = True
@@ -36,9 +43,28 @@ class SimpleEncoder:
         return torch.randn(64)
 
 
-def create_encoder(enable_flow: bool = True, verbose: bool = False):
-    """Create the best available encoder."""
-    if HAS_PMFLOW:
+def create_encoder(enable_flow: bool = True, verbose: bool = False, vocab_path=None):
+    """Create the best available encoder.
+    
+    Priority:
+    1. SemanticPMFlowEncoder - trainable word embeddings + PMFlow physics
+    2. PMFlowEmbeddingEncoder - hashed embeddings + PMFlow physics  
+    3. SimpleEncoder - basic fallback
+    """
+    if HAS_SEMANTIC_ENCODER:
+        encoder = SemanticPMFlowEncoder(
+            dimension=96,
+            latent_dim=48,
+            enable_flow=enable_flow,
+            vocab_path=vocab_path,
+            bootstrap_semantics=True,  # Learn core semantic relationships
+        )
+        if verbose:
+            flow_status = "enabled" if enable_flow else "disabled"
+            print(f"  SemanticPMFlowEncoder loaded (semantic learning + agentic flow: {flow_status})")
+            print(f"    Vocabulary: {encoder.vocab_size()} words")
+        return encoder
+    elif HAS_PMFLOW:
         encoder = PMFlowEmbeddingEncoder(
             dimension=96,
             latent_dim=48,
@@ -47,6 +73,7 @@ def create_encoder(enable_flow: bool = True, verbose: bool = False):
         if verbose:
             flow_status = "enabled" if enable_flow else "disabled"
             print(f"  PMFlowEmbeddingEncoder loaded (agentic flow: {flow_status})")
+            print(f"    ⚠️  Using hash-based encoding (no semantic learning)")
         return encoder
     else:
         if verbose:
@@ -115,8 +142,11 @@ def main():
     # 3. Inject Brain (CognitiveStage)
     # Replace NoopStage on 'trunk.vscode'
     
-    # Create encoder with agentic physics for reasoning
-    encoder = create_encoder(enable_flow=True, verbose=args.verbose)
+    # Create encoder with semantic learning + agentic physics
+    user_data_path = os.path.join(users_root, tenant_id)
+    os.makedirs(user_data_path, exist_ok=True)
+    vocab_path = os.path.join(user_data_path, "semantic_vocab")
+    encoder = create_encoder(enable_flow=True, verbose=args.verbose, vocab_path=vocab_path)
     
     # Response Store for pattern-based response generation with learning
     response_db_path = os.path.join(users_root, tenant_id, "responses.db")

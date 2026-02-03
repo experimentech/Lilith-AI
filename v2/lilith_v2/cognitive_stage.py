@@ -210,7 +210,13 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         
         This teaches the embedding space to separate opposite concepts
         and cluster similar concepts, even before interaction data.
+        
+        If using SemanticPMFlowEncoder, the encoder already does its own
+        bootstrap, so we just set up the learner for ongoing training.
         """
+        # Store contrastive learner for ongoing semantic learning
+        self._contrastive_learner = None
+        
         try:
             from lilith.contrastive_learner import ContrastiveLearner
             CONTRASTIVE_AVAILABLE = True
@@ -224,7 +230,10 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         if not hasattr(self.encoder, 'pm_field'):
             logger.debug(f"[{self.id}] Encoder lacks pm_field, skipping contrastive bootstrap")
             return
-            
+        
+        # Check if this is a SemanticPMFlowEncoder (already bootstrapped)
+        is_semantic_encoder = hasattr(self.encoder, 'base_encoder') and hasattr(self.encoder.base_encoder, 'vocab_size')
+        
         try:
             learner = ContrastiveLearner(
                 encoder=self.encoder,
@@ -233,6 +242,16 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
                 learning_rate=1e-3,
             )
             
+            # Store for ongoing learning
+            self._contrastive_learner = learner
+            
+            # SemanticPMFlowEncoder already bootstrapped core semantics
+            if is_semantic_encoder:
+                logger.debug(f"[{self.id}] SemanticPMFlowEncoder detected - using pre-bootstrapped semantics")
+                logger.debug(f"[{self.id}] Vocabulary size: {self.encoder.base_encoder.vocab_size()}")
+                return
+            
+            # For PMFlowEmbeddingEncoder, do the bootstrap training
             # Core semantic opposites (critical for dialog)
             opposites = [
                 ("agree", "disagree"), ("yes", "no"), ("like", "dislike"),
@@ -268,6 +287,76 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
                 
         except Exception as e:
             logger.debug(f"[{self.id}] Contrastive bootstrap failed: {e}")
+    
+    def learn_from_conversation(self, user_input: str, response: str) -> int:
+        """
+        Learn semantic relationships from a conversation turn.
+        
+        This enables continuous learning from experience:
+        1. Auto-adds new words to vocabulary (if SemanticPMFlowEncoder)
+        2. Extracts semantic relationships from user input and response
+        3. Adds extracted pairs to contrastive learner
+        
+        Args:
+            user_input: What the user said
+            response: What Lilith responded
+            
+        Returns:
+            Number of new semantic pairs learned
+        """
+        learned_count = 0
+        
+        # Auto-add vocabulary from text (SemanticPMFlowEncoder only)
+        if hasattr(self.encoder, 'auto_add_from_text'):
+            new_words = self.encoder.auto_add_from_text(user_input, min_freq=2)
+            new_words.update(self.encoder.auto_add_from_text(response, min_freq=2))
+            if new_words:
+                logger.debug(f"[{self.id}] Added {len(new_words)} new words to vocabulary")
+        
+        # Extract semantic relationships from conversation
+        if self._contrastive_learner is not None:
+            try:
+                relations = self.semantic_extractor.extract_from_text(user_input)
+                relations.extend(self.semantic_extractor.extract_from_text(response))
+                
+                for rel in relations:
+                    # Map relation type to contrastive pair type
+                    if rel.relation_type in ('is_a', 'similar_to', 'related_to', 'synonym'):
+                        pair_type = 'positive'
+                    elif rel.relation_type in ('opposite', 'antonym', 'different_from'):
+                        pair_type = 'hard_negative'
+                    else:
+                        continue
+                    
+                    # Add to learner
+                    if self._contrastive_learner.add_pair(
+                        rel.concept_a, rel.concept_b, pair_type,
+                        weight=rel.confidence,
+                        source='conversation'
+                    ):
+                        learned_count += 1
+                
+                # Incremental training if we learned enough pairs
+                if learned_count >= 5:
+                    self._contrastive_learner.incremental_update(
+                        [(rel.concept_a, rel.concept_b, pair_type) for rel in relations[-5:]],
+                        steps=3
+                    )
+                    logger.debug(f"[{self.id}] Incremental semantic training on {learned_count} pairs")
+                    
+            except Exception as e:
+                logger.debug(f"[{self.id}] Failed to learn from conversation: {e}")
+        
+        return learned_count
+    
+    def save_encoder_state(self, path=None):
+        """Save encoder state (vocabulary and learned embeddings)."""
+        if hasattr(self.encoder, 'save_state'):
+            try:
+                self.encoder.save_state(path)
+                logger.debug(f"[{self.id}] Saved encoder state")
+            except Exception as e:
+                logger.debug(f"[{self.id}] Failed to save encoder state: {e}")
 
     def _sync_physics_landscape(self, tenant_id: str = None):
         """
@@ -754,6 +843,9 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
                 "input": payload,
                 "response": response_text
             }
+            # Learn semantic relationships from this conversation turn
+            # This enables continuous vocabulary and embedding learning
+            self.learn_from_conversation(payload, response_text)
             
         # 6. Plasticity (Structural Learning)
         # Update the intuitive landscape based on what we just activated.

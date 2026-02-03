@@ -114,30 +114,42 @@ class ContrastiveLearner:
         self.metrics_history: List[TrainingMetrics] = []
         
     def _setup_optimizer(self):
-        """Setup optimizer for PMFlow field parameters."""
-        # Collect trainable parameters from PMFlow field
-        params = []
+        """Setup optimizer for encoder parameters.
         
-        # Handle MultiScalePMField
-        if hasattr(self.encoder.pm_field, 'fine_field'):
-            params.extend([
-                self.encoder.pm_field.fine_field.centers,
-                self.encoder.pm_field.fine_field.mus,
-                self.encoder.pm_field.coarse_field.centers,
-                self.encoder.pm_field.coarse_field.mus,
-            ])
-            if hasattr(self.encoder.pm_field, 'coarse_projection'):
-                params.extend(self.encoder.pm_field.coarse_projection.parameters())
+        Supports both:
+        - SemanticPMFlowEncoder: Uses get_trainable_parameters() for word embeddings + PMFlow
+        - PMFlowEmbeddingEncoder: Falls back to PMFlow field + projection (no word embeddings)
+        """
+        # Prefer using encoder's own method if available (SemanticPMFlowEncoder)
+        if hasattr(self.encoder, 'get_trainable_parameters'):
+            params = self.encoder.get_trainable_parameters()
+            for p in params:
+                if hasattr(p, 'requires_grad_'):
+                    p.requires_grad_(True)
         else:
-            # Standard PMField
-            params.extend([
-                self.encoder.pm_field.centers,
-                self.encoder.pm_field.mus,
-            ])
-        
-        # Also train the projection matrix
-        self.encoder._projection.requires_grad_(True)
-        params.append(self.encoder._projection)
+            # Fallback for PMFlowEmbeddingEncoder (no learnable word embeddings)
+            params = []
+            
+            # Handle MultiScalePMField
+            if hasattr(self.encoder.pm_field, 'fine_field'):
+                params.extend([
+                    self.encoder.pm_field.fine_field.centers,
+                    self.encoder.pm_field.fine_field.mus,
+                    self.encoder.pm_field.coarse_field.centers,
+                    self.encoder.pm_field.coarse_field.mus,
+                ])
+                if hasattr(self.encoder.pm_field, 'coarse_projection'):
+                    params.extend(self.encoder.pm_field.coarse_projection.parameters())
+            else:
+                # Standard PMField
+                params.extend([
+                    self.encoder.pm_field.centers,
+                    self.encoder.pm_field.mus,
+                ])
+            
+            # Also train the projection matrix
+            self.encoder._projection.requires_grad_(True)
+            params.append(self.encoder._projection)
         
         self.optimizer = torch.optim.AdamW(params, lr=self.learning_rate)
         
