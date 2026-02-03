@@ -10,11 +10,22 @@ from .relational_graph_store import RelationalGraphStore
 
 logger = logging.getLogger(__name__)
 
+
 class MultiTenantPMFlowManager(PMFlowStateStore):
     """
-    Manages tenant-specific PMFlow stores overlaid on a base 'Teacher' store.
+    Manages tenant-specific PMFlow stores overlaid on base stores.
+    
+    Layer order (highest to lowest priority):
+    1. Tenant-specific (data/users/{tenant}/)
+    2. Production (data/production/) - large corpus, gitignored
+    3. Base (data/base/) - seed data, tracked in git
     """
-    def __init__(self, base_root: str, tenant_root: str):
+    def __init__(
+        self, 
+        base_root: str, 
+        tenant_root: str,
+        production_root: Optional[str] = None,
+    ):
         self.base_root = Path(base_root)
         self.tenant_root = Path(tenant_root)
         self.base_root.mkdir(parents=True, exist_ok=True)
@@ -22,6 +33,16 @@ class MultiTenantPMFlowManager(PMFlowStateStore):
         
         # Base store is always active
         self._base_store = SQLitePMFlowStateStore(str(self.base_root / "pmflow.sqlite"))
+        
+        # Production store (optional, gitignored, for large corpus)
+        self._production_store: Optional[SQLitePMFlowStateStore] = None
+        if production_root:
+            self.production_root = Path(production_root)
+            if self.production_root.exists():
+                prod_db = self.production_root / "pmflow.sqlite"
+                if prod_db.exists():
+                    self._production_store = SQLitePMFlowStateStore(str(prod_db))
+                    logger.info(f"Production PMFlow store loaded: {prod_db}")
         
         # Cache for tenant stores (weak refs ideally, or LRU)
         self._stores: Dict[str, SQLitePMFlowStateStore] = {}
@@ -43,22 +64,22 @@ class MultiTenantPMFlowManager(PMFlowStateStore):
 
     def load_state(self, branch_id: str, tenant_id: str = None) -> Dict[str, Any]:
         """
-        Load state. If tenant has state, return it.
-        Otherwise fall back to base (Teacher) state.
-        Merge strategy: Overlay.
+        Load state. Priority: tenant → production → base.
         """
         # 1. Try Tenant
         if tenant_id and tenant_id != "teacher":
             store, _ = self._get_store(tenant_id)
             state = store.load_state(branch_id)
             if state: 
-                # If tenant has specific attractors, usage, etc, return that.
-                # In V2 PMFlow, state usually includes the Physics Landscape.
-                # If the user has 'forked' the landscape, they use theirs.
-                # If they haven't, we might want to return the base landscape.
                 return state
         
-        # 2. Fallback to Base
+        # 2. Try Production (if available)
+        if self._production_store:
+            state = self._production_store.load_state(branch_id)
+            if state:
+                return state
+        
+        # 3. Fallback to Base
         return self._base_store.load_state(branch_id)
 
     def save_state(self, branch_id: str, state: Dict[str, Any], version: int, tenant_id: str = None) -> None:
@@ -70,13 +91,18 @@ class MultiTenantPMFlowManager(PMFlowStateStore):
         return store.bump_version(branch_id)
 
     def latent_dims(self, branch_id: str, tenant_id: str = None) -> Tuple[int, ...]:
-        # Latent dims should match base if not set?
-        # For now, just query the target store
+        # Check tenant → production → base
         store, _ = self._get_store(tenant_id)
         dims = store.latent_dims(branch_id)
-        if not dims and tenant_id:
-             return self._base_store.latent_dims(branch_id)
-        return dims
+        if dims:
+            return dims
+        
+        if self._production_store:
+            dims = self._production_store.latent_dims(branch_id)
+            if dims:
+                return dims
+                
+        return self._base_store.latent_dims(branch_id)
 
     def compact(self, tenant_id: str = None) -> None:
         if tenant_id:
@@ -87,15 +113,27 @@ class MultiTenantPMFlowManager(PMFlowStateStore):
 
     def close(self) -> None:
         self._base_store.close()
+        if self._production_store:
+            self._production_store.close()
         for s in self._stores.values():
             s.close()
 
 
 class MultiTenantGraphManager(RelationalGraphStore):
     """
-    Manages tenant-specific Knowledge Graphs overlaid on a base 'Teacher' graph.
+    Manages tenant-specific Knowledge Graphs overlaid on base stores.
+    
+    Layer order (highest to lowest priority):
+    1. Tenant-specific (data/users/{tenant}/)
+    2. Production (data/production/) - large corpus, gitignored
+    3. Base (data/base/) - seed data, tracked in git
     """
-    def __init__(self, base_root: str, tenant_root: str):
+    def __init__(
+        self, 
+        base_root: str, 
+        tenant_root: str,
+        production_root: Optional[str] = None,
+    ):
         self.base_root = Path(base_root)
         self.tenant_root = Path(tenant_root)
         self.base_root.mkdir(parents=True, exist_ok=True)
@@ -103,6 +141,17 @@ class MultiTenantGraphManager(RelationalGraphStore):
         
         # We don't call super().__init__ because we don't hold a single connection
         self._base_store = RelationalGraphStore(str(self.base_root / "knowledge.sqlite"))
+        
+        # Production store (optional, gitignored, for large corpus)
+        self._production_store: Optional[RelationalGraphStore] = None
+        if production_root:
+            self.production_root = Path(production_root)
+            if self.production_root.exists():
+                prod_db = self.production_root / "knowledge.sqlite"
+                if prod_db.exists():
+                    self._production_store = RelationalGraphStore(str(prod_db))
+                    logger.info(f"Production graph store loaded: {prod_db}")
+        
         self._stores: Dict[str, RelationalGraphStore] = {}
     
     def _init_schema(self):
@@ -134,20 +183,26 @@ class MultiTenantGraphManager(RelationalGraphStore):
     # --- Read Operations (Overlay: User > Base) ---
 
     def get_node(self, node_id: str, tenant_id: str = None) -> Optional[Dict[str, Any]]:
-        # 1. Try Tenant
+        # Priority: tenant → production → base
         if tenant_id and tenant_id != "teacher":
             store = self._get_store(tenant_id)
             node = store.get_node(node_id)
             if node:
                 return node
         
-        # 2. Try Base
+        # Try production
+        if self._production_store:
+            node = self._production_store.get_node(node_id)
+            if node:
+                return node
+        
+        # Fallback to base
         return self._base_store.get_node(node_id)
 
     def get_related(self, source_id: str, edge_type: Optional[str] = None, tenant_id: str = None) -> List[Dict[str, Any]]:
         """
-        Merge neighbors from Base and Tenant.
-        If same target exists in both, Tenant version wins (higher confidence logic usually, but here simple override).
+        Merge neighbors from Base, Production, and Tenant.
+        If same target exists in multiple layers, higher priority wins.
         """
         results = {} # target_id -> relation_dict
 
@@ -155,15 +210,18 @@ class MultiTenantGraphManager(RelationalGraphStore):
         def merge_rows(rows):
             for r in rows:
                 tid = r["target"]["id"]
-                # Last write wins? Or confidence wins? 
-                # Let's say User > Base.
                 results[tid] = r
 
-        # 1. Base
+        # 1. Base (lowest priority)
         base_rows = self._base_store.get_related(source_id, edge_type)
         merge_rows(base_rows)
 
-        # 2. Tenant
+        # 2. Production (medium priority)
+        if self._production_store:
+            prod_rows = self._production_store.get_related(source_id, edge_type)
+            merge_rows(prod_rows)
+
+        # 3. Tenant (highest priority)
         if tenant_id and tenant_id != "teacher":
             store = self._get_store(tenant_id)
             tenant_rows = store.get_related(source_id, edge_type)
@@ -210,17 +268,21 @@ class MultiTenantGraphManager(RelationalGraphStore):
         return sorted(valid_paths, key=lambda x: x['confidence'], reverse=True)
 
     def find_nodes_by_term(self, term_fragment: str, tenant_id: str = None) -> List[Dict[str, Any]]:
-        # Quick search - query both and merge by term/id
+        # Search all layers and merge by id
         res_map = {}
         
         def merge(rows):
             for r in rows:
                 res_map[r['id']] = r
 
-        # Base
+        # Base (lowest priority)
         merge(self._base_store.find_nodes_by_term(term_fragment))
+        
+        # Production
+        if self._production_store:
+            merge(self._production_store.find_nodes_by_term(term_fragment))
 
-        # Tenant
+        # Tenant (highest priority)
         if tenant_id and tenant_id != "teacher":
             store = self._get_store(tenant_id)
             merge(store.find_nodes_by_term(term_fragment))
@@ -228,24 +290,30 @@ class MultiTenantGraphManager(RelationalGraphStore):
         return list(res_map.values())
         
     def get_all_terms(self, tenant_id: str = None) -> List[Tuple[str, str]]:
-        """Return (id, term) for all concepts, merging Base and Tenant terms."""
+        """Return (id, term) for all concepts, merging all layers."""
         
-        # Use a dict to handle overrides: node_id -> term
         terms_map = {}
         
-        # 1. Base Terms
+        # 1. Base Terms (lowest priority)
         for nid, term in self._base_store.get_all_terms():
             terms_map[nid] = term
+        
+        # 2. Production Terms
+        if self._production_store:
+            for nid, term in self._production_store.get_all_terms():
+                terms_map[nid] = term
             
-        # 2. Tenant Terms (Override)
+        # 3. Tenant Terms (highest priority)
         if tenant_id and tenant_id != "teacher":
             store = self._get_store(tenant_id)
             for nid, term in store.get_all_terms():
-                 terms_map[nid] = term # User definition wins
+                 terms_map[nid] = term
 
         return list(terms_map.items())
 
     def close(self) -> None:
         self._base_store.close()
+        if self._production_store:
+            self._production_store.close()
         for s in self._stores.values():
             s.close()

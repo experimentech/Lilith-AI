@@ -58,6 +58,12 @@ def main():
     parser.add_argument("--user", default="user", help="User/Tenant ID")
     parser.add_argument("--teacher", action="store_true", help="Run as Teacher")
     parser.add_argument("--verbose", action="store_true", help="Verbose logs")
+    parser.add_argument("--production", action="store_true", 
+                        help="Use production databases (data/production/)")
+    parser.add_argument("--ingest", type=str, metavar="FILE",
+                        help="Ingest a corpus file before starting")
+    parser.add_argument("--ingest-field", type=str, default="text",
+                        help="Text field name for JSON/CSV ingestion")
     args = parser.parse_args()
 
     if args.verbose:
@@ -70,11 +76,37 @@ def main():
     data_root = os.path.join(os.getcwd(), "data")
     base_root = os.path.join(data_root, "base")
     users_root = os.path.join(data_root, "users")
+    production_root = os.path.join(data_root, "production") if args.production else None
+    
+    # Check for production databases
+    if production_root and os.path.exists(production_root):
+        print(f"\033[1;33mUsing production databases: {production_root}\033[0m")
+    elif args.production:
+        print(f"\033[1;33mProduction enabled but {production_root} doesn't exist\033[0m")
+        production_root = None
     
     print(f"Data Root: {data_root}")
     
-    pmflow = MultiTenantPMFlowManager(base_root, users_root)
-    graph = MultiTenantGraphManager(base_root, users_root)
+    # Handle corpus ingestion before starting
+    if args.ingest:
+        print(f"\033[1;35mIngesting corpus: {args.ingest}\033[0m")
+        from v2.lilith_v2.corpus_ingester import ingest_corpus
+        try:
+            stats = ingest_corpus(
+                args.ingest,
+                data_dir=production_root or os.path.join(data_root, "production"),
+                text_field=args.ingest_field,
+            )
+            print(f"\033[1;32m{stats.summary()}\033[0m")
+            # If we just ingested, enable production mode
+            production_root = os.path.join(data_root, "production")
+        except Exception as e:
+            print(f"\033[1;31mIngestion failed: {e}\033[0m")
+            import traceback
+            traceback.print_exc()
+    
+    pmflow = MultiTenantPMFlowManager(base_root, users_root, production_root)
+    graph = MultiTenantGraphManager(base_root, users_root, production_root)
     
     # 2. Setup Runtime (Limbs)
     # Using default() gives us FS, Terminal, Weather integration
