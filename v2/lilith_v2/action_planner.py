@@ -611,11 +611,62 @@ class ActionPlanner:
             if step.action.tool_binding
         ]
     
+    def _encode_result_as_state(self, result: Dict[str, Any], action_name: str, goal: str) -> str:
+        """
+        Encode an execution result as a state description for replanning.
+        
+        This converts tool outputs into natural language state that can be
+        encoded by PMFlow for trajectory tracing. The physics then naturally
+        avoids trajectories through "dead end" states.
+        
+        Args:
+            result: The execution result dict
+            action_name: Name of the action that produced this result
+            goal: The original goal (for context)
+            
+        Returns:
+            Natural language state description
+        """
+        # Check for different result patterns
+        status = result.get("status", "unknown")
+        
+        if status == "error":
+            error_msg = result.get("message", "unknown error")
+            return f"action {action_name} failed with error: {error_msg}, goal is {goal}"
+        
+        if status == "skipped":
+            reason = result.get("reason", "unknown")
+            return f"action {action_name} was skipped: {reason}, goal is {goal}"
+        
+        # Check for empty/null results (like Wikipedia returning nothing)
+        tool_result = result.get("result")
+        if tool_result is None:
+            return f"action {action_name} returned no result, goal is {goal}"
+        
+        if isinstance(tool_result, dict):
+            # Check for explicit empty indicators
+            if tool_result.get("empty") or tool_result.get("not_found"):
+                return f"action {action_name} found nothing, need alternative approach for {goal}"
+            if tool_result.get("status") == "error":
+                return f"action {action_name} returned error: {tool_result.get('message', 'unknown')}, goal is {goal}"
+            # Check for low confidence
+            confidence = tool_result.get("confidence", 1.0)
+            if confidence < 0.3:
+                return f"action {action_name} completed with low confidence {confidence:.2f}, may need different approach for {goal}"
+        
+        if isinstance(tool_result, str) and len(tool_result.strip()) == 0:
+            return f"action {action_name} returned empty, need alternative for {goal}"
+        
+        # Success case
+        return f"action {action_name} completed successfully, progressing toward {goal}"
+    
     def execute_plan(
         self,
         plan: ExecutionPlan,
         transport,  # LocalToolsTransport or compatible
         stop_on_error: bool = True,
+        reactive: bool = False,
+        max_replans: int = 5,
     ) -> List[Dict[str, Any]]:
         """
         Execute a plan using a tool transport.
@@ -624,10 +675,26 @@ class ActionPlanner:
             plan: The execution plan to run
             transport: LocalToolsTransport or compatible with call() method
             stop_on_error: If True, stop execution on first error
+            reactive: If True, re-plan after each step based on results.
+                     Uses PMFlow physics to naturally adapt trajectory,
+                     avoiding dead-end paths through latent space.
+            max_replans: Maximum replanning iterations (prevents infinite loops)
             
         Returns:
             List of execution results, one per step
         """
+        if reactive:
+            return self._execute_reactive(plan, transport, stop_on_error, max_replans)
+        
+        return self._execute_static(plan, transport, stop_on_error)
+    
+    def _execute_static(
+        self,
+        plan: ExecutionPlan,
+        transport,
+        stop_on_error: bool,
+    ) -> List[Dict[str, Any]]:
+        """Execute plan without replanning (original behavior)."""
         results = []
         
         for step in plan.steps:
@@ -679,6 +746,158 @@ class ActionPlanner:
                     break
         
         return results
+    
+    def _execute_reactive(
+        self,
+        initial_plan: ExecutionPlan,
+        transport,
+        stop_on_error: bool,
+        max_replans: int,
+    ) -> List[Dict[str, Any]]:
+        """
+        Execute plan with reactive replanning after each step.
+        
+        Uses PMFlow's physics to naturally adapt the trajectory based on
+        execution results. Failed or empty results create "hazard" states
+        that the ODE trajectory curves around, finding alternative paths.
+        
+        This is the Lilith-philosophy approach: physics-based adaptation
+        rather than explicit conditionals or regex matching.
+        """
+        results = []
+        current_plan = initial_plan
+        current_state = "ready to execute plan"
+        replan_count = 0
+        executed_actions = set()  # Track to avoid loops
+        
+        while current_plan.steps and replan_count <= max_replans:
+            # Get next step
+            step = current_plan.steps[0]
+            
+            # Check for action loops
+            action_key = (step.action.action_id, step.step_num)
+            if action_key in executed_actions and replan_count > 0:
+                logger.warning(f"Detected action loop at {step.action.name}, stopping")
+                break
+            
+            if not step.action.tool_binding:
+                results.append({
+                    "step": len(results) + 1,
+                    "action": step.action.name,
+                    "status": "skipped",
+                    "reason": "no tool binding",
+                })
+                # Remove this step and continue
+                current_plan.steps = current_plan.steps[1:]
+                continue
+            
+            # Execute the step
+            message = {
+                "action": step.action.tool_binding,
+                "args": step.args,
+            }
+            
+            try:
+                result = transport.call(
+                    name="action_planner",
+                    message=message,
+                    meta={"step": len(results) + 1, "goal": current_plan.goal, "reactive": True},
+                )
+                
+                step_result = {
+                    "step": len(results) + 1,
+                    "action": step.action.name,
+                    "tool": step.action.tool_binding,
+                    "result": result,
+                }
+                results.append(step_result)
+                executed_actions.add(action_key)
+                
+                # Encode result as new state
+                current_state = self._encode_result_as_state(
+                    step_result, step.action.name, current_plan.goal
+                )
+                
+                # Check if we should stop
+                is_error = isinstance(result, dict) and result.get("status") == "error"
+                is_empty = self._is_empty_result(result)
+                
+                if is_error and stop_on_error:
+                    logger.warning(f"Reactive execution stopped at step {len(results)}: error")
+                    break
+                
+                # Re-plan from new state if result was suboptimal
+                if (is_error or is_empty) and replan_count < max_replans:
+                    logger.info(f"Result suboptimal, replanning from: {current_state[:50]}...")
+                    new_plan = self.plan(
+                        goal=current_plan.goal,
+                        current_state=current_state,
+                    )
+                    
+                    if new_plan and new_plan.steps:
+                        current_plan = new_plan
+                        replan_count += 1
+                        logger.info(f"Replan {replan_count}: new trajectory has {len(new_plan.steps)} steps")
+                        continue
+                    else:
+                        # Couldn't find alternative, continue with remaining original plan
+                        logger.warning("Replanning produced no alternative path")
+                
+                # Success - remove executed step and continue
+                current_plan.steps = current_plan.steps[1:]
+                
+            except Exception as e:
+                error_result = {
+                    "step": len(results) + 1,
+                    "action": step.action.name,
+                    "status": "error",
+                    "message": str(e),
+                }
+                results.append(error_result)
+                
+                if stop_on_error:
+                    logger.error(f"Reactive execution failed at step {len(results)}: {e}")
+                    break
+                
+                # Try to replan around the error
+                current_state = self._encode_result_as_state(
+                    error_result, step.action.name, current_plan.goal
+                )
+                if replan_count < max_replans:
+                    new_plan = self.plan(
+                        goal=current_plan.goal,
+                        current_state=current_state,
+                    )
+                    if new_plan and new_plan.steps:
+                        current_plan = new_plan
+                        replan_count += 1
+                        continue
+                
+                current_plan.steps = current_plan.steps[1:]
+        
+        if replan_count > 0:
+            logger.info(f"Reactive execution completed with {replan_count} replans")
+        
+        return results
+    
+    def _is_empty_result(self, result: Any) -> bool:
+        """Check if a result indicates empty/not-found."""
+        if result is None:
+            return True
+        if isinstance(result, str) and len(result.strip()) == 0:
+            return True
+        if isinstance(result, dict):
+            if result.get("empty") or result.get("not_found"):
+                return True
+            if result.get("status") == "not_found":
+                return True
+            # Check for empty content in common patterns
+            content = result.get("content") or result.get("data") or result.get("result")
+            if content is not None and (content == "" or content == [] or content == {}):
+                return True
+        if isinstance(result, (list, dict)) and len(result) == 0:
+            return True
+        return False
 
 
 # Convenience function for creating action planner with default tools

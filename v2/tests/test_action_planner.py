@@ -791,5 +791,208 @@ class TestActionLearning(unittest.TestCase):
         self.assertIn("delete", action_id)
 
 
+class TestReactiveExecution(unittest.TestCase):
+    """Test reactive replanning during execution."""
+    
+    def setUp(self):
+        """Set up test fixtures with planner and actions."""
+        from v2.lilith_v2.action_planner import ActionPlanner
+        
+        self.encoder = MockEncoder(dimension=64, latent_dim=32)
+        self.graph = MockGraphStore()
+        self.planner = ActionPlanner(
+            encoder=self.encoder,
+            graph=self.graph,
+            trajectory_steps=5,
+            grounding_threshold=0.2,
+        )
+        
+        # Register multiple actions for branching paths
+        self.planner.register_action(
+            name="search_wikipedia",
+            description="search wikipedia for information lookup",
+            tool_binding="search_wikipedia",
+        )
+        self.planner.register_action(
+            name="web_search",
+            description="search the web for information deep search",
+            tool_binding="web_search",
+        )
+        self.planner.register_action(
+            name="academic_search",
+            description="search academic papers scholarly research",
+            tool_binding="academic_search",
+        )
+    
+    def test_encode_result_as_state_success(self):
+        """Test encoding successful results as state."""
+        result = {
+            "step": 1,
+            "action": "search",
+            "result": {"content": "found information"},
+        }
+        state = self.planner._encode_result_as_state(result, "search", "find info")
+        self.assertIn("successfully", state)
+        self.assertIn("find info", state)
+    
+    def test_encode_result_as_state_error(self):
+        """Test encoding error results as state."""
+        result = {
+            "step": 1,
+            "status": "error",
+            "message": "connection failed",
+        }
+        state = self.planner._encode_result_as_state(result, "fetch", "get data")
+        self.assertIn("failed", state)
+        self.assertIn("error", state)
+    
+    def test_encode_result_as_state_empty(self):
+        """Test encoding empty results as state."""
+        result = {
+            "step": 1,
+            "action": "search",
+            "result": {"empty": True},
+        }
+        state = self.planner._encode_result_as_state(result, "search", "find info")
+        self.assertIn("found nothing", state)
+        self.assertIn("alternative", state)
+    
+    def test_encode_result_as_state_low_confidence(self):
+        """Test encoding low confidence results as state."""
+        result = {
+            "step": 1,
+            "action": "search",
+            "result": {"content": "maybe", "confidence": 0.2},
+        }
+        state = self.planner._encode_result_as_state(result, "search", "find info")
+        self.assertIn("low confidence", state)
+    
+    def test_is_empty_result_none(self):
+        """Test _is_empty_result with None."""
+        self.assertTrue(self.planner._is_empty_result(None))
+    
+    def test_is_empty_result_empty_string(self):
+        """Test _is_empty_result with empty string."""
+        self.assertTrue(self.planner._is_empty_result(""))
+        self.assertTrue(self.planner._is_empty_result("   "))
+    
+    def test_is_empty_result_dict_empty_flag(self):
+        """Test _is_empty_result with dict containing empty flag."""
+        self.assertTrue(self.planner._is_empty_result({"empty": True}))
+        self.assertTrue(self.planner._is_empty_result({"not_found": True}))
+        self.assertTrue(self.planner._is_empty_result({"status": "not_found"}))
+    
+    def test_is_empty_result_success(self):
+        """Test _is_empty_result with valid content."""
+        self.assertFalse(self.planner._is_empty_result({"content": "data"}))
+        self.assertFalse(self.planner._is_empty_result("some text"))
+        self.assertFalse(self.planner._is_empty_result([1, 2, 3]))
+    
+    def test_static_execution_no_replan(self):
+        """Test static execution doesn't replan on failure."""
+        plan = self.planner.plan(goal="search for information")
+        
+        if plan:
+            call_count = [0]
+            
+            class CountingTransport:
+                calls = []
+                def call(self, name, message, meta):
+                    call_count[0] += 1
+                    self.calls.append(message)
+                    return {"empty": True}  # Simulate empty result
+            
+            transport = CountingTransport()
+            results = self.planner.execute_plan(plan, transport, reactive=False)
+            
+            # Should execute all steps without replanning
+            self.assertEqual(len(results), len(plan.steps))
+    
+    def test_reactive_execution_replans_on_empty(self):
+        """Test reactive execution triggers replanning on empty results."""
+        plan = self.planner.plan(goal="search wikipedia for information")
+        
+        if plan:
+            replan_triggered = [False]
+            original_plan = self.planner.plan
+            
+            def tracking_plan(goal, current_state=None, **kwargs):
+                if current_state and "found nothing" in current_state:
+                    replan_triggered[0] = True
+                return original_plan(goal, current_state, **kwargs)
+            
+            self.planner.plan = tracking_plan
+            
+            class EmptyTransport:
+                calls = []
+                def call(self, name, message, meta):
+                    self.calls.append(message)
+                    return {"empty": True}
+            
+            transport = EmptyTransport()
+            results = self.planner.execute_plan(
+                plan, transport, reactive=True, max_replans=2
+            )
+            
+            # Should have attempted replanning
+            self.assertTrue(
+                replan_triggered[0] or len(transport.calls) > len(plan.steps),
+                "Reactive execution should trigger replanning on empty result"
+            )
+            
+            self.planner.plan = original_plan
+    
+    def test_reactive_max_replans_limit(self):
+        """Test that reactive execution respects max_replans."""
+        plan = self.planner.plan(goal="search for information")
+        
+        if plan:
+            replan_count = [0]
+            original_plan = self.planner.plan
+            
+            def counting_plan(goal, current_state=None, **kwargs):
+                if current_state:
+                    replan_count[0] += 1
+                return original_plan(goal, current_state, **kwargs)
+            
+            self.planner.plan = counting_plan
+            
+            class AlwaysEmptyTransport:
+                calls = []
+                def call(self, name, message, meta):
+                    self.calls.append(message)
+                    return {"empty": True}
+            
+            transport = AlwaysEmptyTransport()
+            results = self.planner.execute_plan(
+                plan, transport, reactive=True, max_replans=3
+            )
+            
+            # Should not exceed max_replans
+            self.assertLessEqual(replan_count[0], 3)
+            
+            self.planner.plan = original_plan
+    
+    def test_reactive_stops_on_error_when_configured(self):
+        """Test reactive execution stops on error when stop_on_error=True."""
+        plan = self.planner.plan(goal="search for information")
+        
+        if plan and len(plan.steps) > 1:
+            class ErrorTransport:
+                calls = []
+                def call(self, name, message, meta):
+                    self.calls.append(message)
+                    return {"status": "error", "message": "test error"}
+            
+            transport = ErrorTransport()
+            results = self.planner.execute_plan(
+                plan, transport, reactive=True, stop_on_error=True
+            )
+            
+            # Should stop after first error
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0].get("result", {}).get("status"), "error")
+
+
 if __name__ == "__main__":
     unittest.main()
