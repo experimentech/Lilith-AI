@@ -99,6 +99,13 @@ class DiscourseManager:
                 r"\bare\s+\w+",  # "X are Y"
                 r"\bmeans?\b",  # "X means Y"
             ],
+            "imperative": [
+                r"^(please\s+)?(do|make|create|write|read|open|close|start|stop|run|send|get|set|put|move|copy|delete|download|upload|install|sign\s*up|log\s*in|register)\b",
+                r"^(please\s+)?(go to|navigate to|browse to|click|type|enter|submit|fill|check|select)\b",
+                r"^(please\s+)?(can you|could you|would you|will you)\s+(do|make|create|write|read|open|send|get)\b",
+                r"^(i need you to|i want you to|i'd like you to)\b",
+                r"^(help me|assist me)\s+(to\s+)?\w+",
+            ],
             "elaboration_request": [
                 r"^(tell me more|more about|elaborate|expand|go on)\b",
                 r"^(what else|anything else|more details)\b",
@@ -172,7 +179,7 @@ class DiscourseManager:
         # Check patterns in priority order
         priority_order = [
             "greeting", "farewell", "feedback_positive", "feedback_negative",
-            "elaboration_request", "acknowledgment", "question", "teaching"
+            "elaboration_request", "acknowledgment", "imperative", "question", "teaching"
         ]
         
         for intent in priority_order:

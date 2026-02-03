@@ -191,6 +191,13 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         self.last_thought: Dict[str, Any] = {}
         self.last_interaction: Optional[Dict[str, str]] = None
         
+        # Action Planning State
+        # Pending plan awaiting user confirmation
+        self._pending_plan: Optional[ExecutionPlan] = None
+        self._pending_plan_goal: Optional[str] = None
+        # Allow internal formulation of plans (proactive)
+        self._allow_internal_formulation: bool = config.get("allow_internal_formulation", True) if config else True
+        
         # Sync physics with store
         self._sync_physics_landscape()
         
@@ -669,6 +676,26 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
              "trajectory_efficiency": deliberation_result.trajectory_efficiency if deliberation_result else None,
         }
         
+        # 4d. Internal Action Formulation (Proactive planning)
+        # If reasoning detected an action-worthy situation and internal formulation is allowed,
+        # propose a plan for user confirmation
+        if (self._allow_internal_formulation and 
+            self._action_planner and 
+            not self._pending_plan and
+            deliberation_result):
+            
+            # Check if reasoning suggest an action need
+            action_signal = self._detect_action_signal(
+                inferences=inferred_knowledge,
+                deliberation=deliberation_result,
+                context=ctx,
+            )
+            if action_signal:
+                logger.info(f"[{self.id}] Internal formulation: detected action signal '{action_signal}'")
+                if self._propose_plan(action_signal, ctx):
+                    # Mark that this was internally formulated (for response generation)
+                    self.last_thought["action_proposal"] = self.get_pending_plan_summary()
+        
         # 5. Synthesis / Generation
         # Use the Conversational Architecture for motivated, coherent response generation
         response_text = ""
@@ -813,6 +840,33 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         
         logger.debug(f"[{self.id}] Discourse: phase={dialogue_state.phase}, "
                     f"intent={dialogue_state.last_user_intent}, obligations={obligations}")
+        
+        # ===== Action Planning Trigger =====
+        # Check for imperative intent OR confirmation response
+        if self._action_planner and dialogue_state.last_user_intent == "imperative":
+            # User is requesting an action - generate plan for confirmation
+            if self._propose_plan(user_input, ctx):
+                # Return plan summary for user confirmation
+                summary = self.get_pending_plan_summary()
+                if summary:
+                    # Short-circuit normal response: return confirmation prompt
+                    logger.info(f"[{self.id}] Action plan proposed, awaiting confirmation")
+                    return f"I can help with that. Here's my plan:\n\n{summary}\n\nProceed? (yes/no)"
+        
+        # Check if this is a confirmation of pending plan
+        if self._pending_plan and dialogue_state.last_user_intent in ("acknowledgment", "feedback_positive"):
+            # User confirmed - execute
+            logger.info(f"[{self.id}] Plan confirmed by user")
+            commands = self.confirm_pending_plan(transport=None)  # Get commands without executing
+            if commands:
+                action_names = [c.get("action", "?") for c in commands]
+                return f"Executing plan: {', '.join(action_names)}"
+        
+        # Check if this is a rejection
+        if self._pending_plan and dialogue_state.last_user_intent == "feedback_negative":
+            self.reject_pending_plan(reason=user_input)
+            logger.info(f"[{self.id}] Plan rejected by user")
+            return "Okay, I won't do that. What would you like instead?"
         
         # ===== Stage 2: Communication Planning =====
         # Decide what to communicate based on drives and content
@@ -1119,6 +1173,60 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
                 seen[concept_id] = conf
         
         return sorted(seen.items(), key=lambda x: x[1], reverse=True)
+    
+    def _detect_action_signal(
+        self,
+        inferences: List[Dict],
+        deliberation: Optional[DeliberationResult],
+        context: Dict[str, Any],
+    ) -> Optional[str]:
+        """
+        Detect if reasoning implies an action need (internal formulation).
+        
+        Returns action goal string if action is warranted, None otherwise.
+        
+        This enables proactive behavior: "I notice X needs to happen"
+        rather than waiting for explicit commands.
+        """
+        # Action-worthy inference types (learned over time)
+        ACTION_INFERENCE_TYPES = {"needs_action", "should_do", "requires", "implies_action"}
+        
+        # Keywords that suggest action need
+        ACTION_KEYWORDS = {
+            "should", "need to", "must", "have to", "ought to",
+            "requires", "necessary", "important to"
+        }
+        
+        # Check inferences for action signals
+        for inf in inferences:
+            inf_type = inf.get("type", "")
+            conclusion = inf.get("conclusion", "")
+            
+            # Check inference type
+            if inf_type in ACTION_INFERENCE_TYPES:
+                return conclusion
+            
+            # Check conclusion for action keywords
+            conclusion_lower = conclusion.lower() if conclusion else ""
+            for kw in ACTION_KEYWORDS:
+                if kw in conclusion_lower:
+                    return conclusion
+        
+        # Check deliberation for resolved intent that implies action
+        if deliberation and deliberation.resolved_intent:
+            intent = deliberation.resolved_intent.lower()
+            # Action intents from reasoning
+            if any(w in intent for w in ["create", "write", "read", "do", "make", "send", "get"]):
+                return deliberation.resolved_intent
+        
+        # Check context for explicit action frame from linguistic processing
+        action_word = context.get("action")
+        target = context.get("target")
+        if action_word and target:
+            # Linguistic frame has action+target → synthesize goal
+            return f"{action_word} {target}"
+        
+        return None
 
     def encode(self, item: Any, ctx: Dict[str, Any]) -> Any:
         # Pass-through to encoder for interface compliance
@@ -1542,6 +1650,79 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
             return []
         
         return self._action_planner.execute_plan(plan, transport, stop_on_error)
+    
+    def has_pending_plan(self) -> bool:
+        """Check if there's a plan awaiting user confirmation."""
+        return self._pending_plan is not None
+    
+    def get_pending_plan_summary(self) -> Optional[str]:
+        """Get human-readable summary of pending plan for confirmation prompt."""
+        if not self._pending_plan:
+            return None
+        
+        steps_desc = []
+        for i, step in enumerate(self._pending_plan.steps, 1):
+            steps_desc.append(f"  {i}. {step.action.name}")
+        
+        return (
+            f"Plan for: {self._pending_plan_goal}\n"
+            f"Steps ({len(self._pending_plan.steps)}):\n" +
+            "\n".join(steps_desc) +
+            f"\nConfidence: {self._pending_plan.total_confidence:.0%}"
+        )
+    
+    def confirm_pending_plan(self, transport=None) -> Optional[List[Dict[str, Any]]]:
+        """
+        Confirm and execute the pending plan.
+        
+        Args:
+            transport: Tool transport for execution. If None, returns commands without executing.
+            
+        Returns:
+            Execution results if transport provided, else execution commands
+        """
+        if not self._pending_plan:
+            return None
+        
+        plan = self._pending_plan
+        self._pending_plan = None
+        self._pending_plan_goal = None
+        
+        if transport:
+            return self.execute_plan(plan, transport)
+        else:
+            return self.get_execution_commands(plan)
+    
+    def reject_pending_plan(self, reason: Optional[str] = None) -> None:
+        """
+        Reject the pending plan. Optionally provide feedback for learning.
+        
+        Args:
+            reason: Why the plan was rejected (for future learning)
+        """
+        if self._pending_plan and reason:
+            logger.info(f"[{self.id}] Plan rejected: {reason}")
+            # TODO: Use rejection for future planning improvements
+        
+        self._pending_plan = None
+        self._pending_plan_goal = None
+    
+    def _propose_plan(self, goal: str, context: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Generate a plan and store it for confirmation.
+        
+        Returns True if a valid plan was generated.
+        """
+        if not self._action_planner:
+            return False
+        
+        plan = self._action_planner.plan(goal, context)
+        if plan and plan.steps:
+            self._pending_plan = plan
+            self._pending_plan_goal = goal
+            logger.info(f"[{self.id}] Proposed plan with {len(plan.steps)} steps for: {goal}")
+            return True
+        return False
 
     def stats(self) -> Dict[str, Any]:
         stats = {

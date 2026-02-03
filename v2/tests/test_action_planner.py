@@ -544,5 +544,140 @@ class TestActionPlannerIntegration(unittest.TestCase):
         )
 
 
+class TestImperativeIntentDetection(unittest.TestCase):
+    """Test imperative intent detection for action planning triggers."""
+    
+    def test_discourse_manager_detects_imperative(self):
+        """Test that DiscourseManager identifies imperative intents."""
+        from v2.lilith_v2.discourse_manager import DiscourseManager
+        
+        dm = DiscourseManager()
+        
+        # Test imperative patterns
+        imperative_inputs = [
+            "Sign up for Moltbook",
+            "Please create a new account",
+            "Go to the settings page",
+            "Click on the submit button",
+            "Can you write a file for me?",
+            "I need you to read this document",
+            "Help me register for the service",
+        ]
+        
+        for inp in imperative_inputs:
+            state = dm.update(inp)
+            self.assertEqual(
+                state.last_user_intent, "imperative",
+                f"'{inp}' should be detected as imperative, got {state.last_user_intent}"
+            )
+    
+    def test_non_imperative_not_triggered(self):
+        """Test that questions and statements are not imperative."""
+        from v2.lilith_v2.discourse_manager import DiscourseManager
+        
+        dm = DiscourseManager()
+        
+        non_imperative = [
+            "What is Python?",  # question
+            "Hello there",  # greeting
+            "Thanks for the help",  # feedback
+            "Python is a language",  # statement
+        ]
+        
+        for inp in non_imperative:
+            state = dm.update(inp)
+            self.assertNotEqual(
+                state.last_user_intent, "imperative",
+                f"'{inp}' should NOT be imperative, got {state.last_user_intent}"
+            )
+
+
+class TestPlanConfirmationFlow(unittest.TestCase):
+    """Test the plan confirmation workflow."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.temp_dir = tempfile.mkdtemp()
+        
+    def tearDown(self):
+        """Clean up temp files."""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def test_pending_plan_state(self):
+        """Test pending plan management."""
+        from v2.lilith_v2.cognitive_stage import CognitiveStage
+        from v2.lilith_v2.pmflow_sqlite import SQLitePMFlowStateStore
+        from v2.lilith_v2.relational_graph_store import RelationalGraphStore
+        
+        pmflow_path = os.path.join(self.temp_dir, "pmflow.sqlite")
+        graph_path = os.path.join(self.temp_dir, "graph.sqlite")
+        
+        pmflow = SQLitePMFlowStateStore(pmflow_path)
+        graph = RelationalGraphStore(graph_path)
+        encoder = MockEncoder()
+        
+        brain = CognitiveStage(
+            node_id="test",
+            pmflow_store=pmflow,
+            graph_store=graph,
+            encoder=encoder,
+            config={"enable_action_planning": True},
+        )
+        
+        # Initially no pending plan
+        self.assertFalse(brain.has_pending_plan())
+        self.assertIsNone(brain.get_pending_plan_summary())
+        
+        # Register an action and propose a plan
+        brain.register_action("do_something", "do something useful", "do_it")
+        proposed = brain._propose_plan("do something now")
+        
+        if proposed:
+            self.assertTrue(brain.has_pending_plan())
+            summary = brain.get_pending_plan_summary()
+            self.assertIsNotNone(summary)
+            self.assertIn("do something now", summary)
+            
+            # Reject the plan
+            brain.reject_pending_plan("not needed")
+            self.assertFalse(brain.has_pending_plan())
+    
+    def test_plan_confirmation_returns_commands(self):
+        """Test confirming a plan returns execution commands."""
+        from v2.lilith_v2.cognitive_stage import CognitiveStage
+        from v2.lilith_v2.pmflow_sqlite import SQLitePMFlowStateStore
+        from v2.lilith_v2.relational_graph_store import RelationalGraphStore
+        
+        pmflow_path = os.path.join(self.temp_dir, "pmflow.sqlite")
+        graph_path = os.path.join(self.temp_dir, "graph.sqlite")
+        
+        pmflow = SQLitePMFlowStateStore(pmflow_path)
+        graph = RelationalGraphStore(graph_path)
+        encoder = MockEncoder()
+        
+        brain = CognitiveStage(
+            node_id="test",
+            pmflow_store=pmflow,
+            graph_store=graph,
+            encoder=encoder,
+            config={"enable_action_planning": True},
+        )
+        
+        # Register and propose
+        brain.register_action("save_file", "save a file to disk", "write_file", {"path": "$path"})
+        brain._propose_plan("save the document")
+        
+        if brain.has_pending_plan():
+            # Confirm without transport → returns commands
+            commands = brain.confirm_pending_plan(transport=None)
+            
+            self.assertIsNotNone(commands)
+            self.assertIsInstance(commands, list)
+            
+            # Plan should be cleared after confirmation
+            self.assertFalse(brain.has_pending_plan())
+
+
 if __name__ == "__main__":
     unittest.main()
