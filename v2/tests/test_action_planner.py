@@ -20,7 +20,11 @@ import torch
 
 
 class MockEncoder:
-    """Mock encoder with agentic physics features."""
+    """Mock encoder with agentic physics features.
+    
+    Uses bag-of-words hashing for pseudo-semantic similarity:
+    texts with overlapping words produce similar embeddings.
+    """
     
     def __init__(self, dimension=64, latent_dim=32):
         self.dimension = dimension
@@ -30,17 +34,28 @@ class MockEncoder:
         self._intent_strength = 0.0
     
     def encode(self, tokens):
-        """Encode tokens to embedding."""
-        # Create deterministic embedding based on token content
+        """Encode tokens to embedding with pseudo-semantic similarity."""
         if isinstance(tokens, list):
-            text = " ".join(tokens)
+            words = [w.lower() for w in tokens]
         else:
-            text = str(tokens)
+            words = str(tokens).lower().split()
         
-        # Hash-based pseudo-embedding
-        hash_val = hash(text) % 10000
-        torch.manual_seed(hash_val)
-        return torch.randn(1, self.dimension)
+        # Build embedding as sum of per-word vectors
+        # Words that appear in multiple texts will contribute the same component
+        embedding = torch.zeros(1, self.dimension)
+        for word in words:
+            # Deterministic vector per word
+            word_hash = hash(word) % 10000
+            torch.manual_seed(word_hash)
+            word_vec = torch.randn(1, self.dimension)
+            embedding += word_vec
+        
+        # Normalize to unit length
+        norm = torch.norm(embedding)
+        if norm > 0:
+            embedding = embedding / norm
+        
+        return embedding
     
     def inject_intent(self, tokens, strength=0.5):
         """Mock intent injection."""
