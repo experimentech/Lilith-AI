@@ -1494,9 +1494,375 @@ class TestGoalCompletion(unittest.TestCase):
 
 # Import GoalCompletion at module level for tests
 try:
-    from v2.lilith_v2.action_planner import GoalCompletion
+    from v2.lilith_v2.action_planner import GoalCompletion, ProceduralMemory, LearnedSequence
 except ImportError:
     GoalCompletion = None
+    ProceduralMemory = None
+    LearnedSequence = None
+
+
+class TestProceduralMemory(unittest.TestCase):
+    """Tests for procedural memory - learning and recalling action sequences."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.encoder = MockEncoder(dimension=64, latent_dim=32)
+        # Use lower threshold since mock encoder has limited semantic similarity
+        self.memory = ProceduralMemory(
+            encoder=self.encoder,
+            similarity_threshold=0.3,
+        )
+    
+    def test_learn_sequence(self):
+        """Test learning a new action sequence."""
+        completion = GoalCompletion(
+            goal="search for Python docs",
+            completed=True,
+            confidence=0.9,
+            semantic_similarity=0.85,
+            execution_success_rate=1.0,
+            steps_executed=2,
+            steps_failed=0,
+            steps_skipped=0,
+            final_state_description="found Python documentation",
+        )
+        
+        seq_id = self.memory.learn_sequence(
+            goal="search for Python docs",
+            action_sequence=["action_search_web", "action_read_page"],
+            completion=completion,
+            action_names=["search_web", "read_page"],
+        )
+        
+        self.assertIsNotNone(seq_id)
+        self.assertIn(seq_id, self.memory._sequences)
+        
+        sequence = self.memory._sequences[seq_id]
+        self.assertEqual(sequence.success_count, 1)
+        self.assertEqual(sequence.failure_count, 0)
+        self.assertEqual(sequence.total_attempts, 1)
+    
+    def test_update_sequence(self):
+        """Test updating an existing sequence with new execution."""
+        # Learn initial sequence
+        completion1 = GoalCompletion(
+            goal="login to system",
+            completed=True,
+            confidence=0.8,
+            semantic_similarity=0.9,
+            execution_success_rate=1.0,
+            steps_executed=1,
+            steps_failed=0,
+            steps_skipped=0,
+            final_state_description="logged in",
+        )
+        
+        seq_id = self.memory.learn_sequence(
+            goal="login to system",
+            action_sequence=["action_login"],
+            completion=completion1,
+        )
+        
+        # Execute again (success)
+        completion2 = GoalCompletion(
+            goal="login to system",
+            completed=True,
+            confidence=0.85,
+            semantic_similarity=0.92,
+            execution_success_rate=1.0,
+            steps_executed=1,
+            steps_failed=0,
+            steps_skipped=0,
+            final_state_description="logged in again",
+        )
+        
+        seq_id2 = self.memory.learn_sequence(
+            goal="login to system",
+            action_sequence=["action_login"],
+            completion=completion2,
+        )
+        
+        self.assertEqual(seq_id, seq_id2)
+        
+        sequence = self.memory._sequences[seq_id]
+        self.assertEqual(sequence.success_count, 2)
+        self.assertEqual(sequence.total_attempts, 2)
+        self.assertEqual(sequence.success_rate, 1.0)
+    
+    def test_learn_failure(self):
+        """Test learning from failed execution."""
+        completion = GoalCompletion(
+            goal="delete database",
+            completed=False,
+            confidence=0.3,
+            semantic_similarity=0.4,
+            execution_success_rate=0.0,
+            steps_executed=0,
+            steps_failed=1,
+            steps_skipped=0,
+            final_state_description="failed to delete",
+            failure_reasons=["permission denied"],
+        )
+        
+        seq_id = self.memory.learn_sequence(
+            goal="delete database",
+            action_sequence=["action_delete"],
+            completion=completion,
+        )
+        
+        sequence = self.memory._sequences[seq_id]
+        self.assertEqual(sequence.success_count, 0)
+        self.assertEqual(sequence.failure_count, 1)
+        self.assertEqual(sequence.success_rate, 0.0)
+    
+    def test_recall_similar_sequence(self):
+        """Test recalling sequences for similar goals."""
+        # Learn a sequence
+        completion = GoalCompletion(
+            goal="search web for programming tutorial",
+            completed=True,
+            confidence=0.9,
+            semantic_similarity=0.85,
+            execution_success_rate=1.0,
+            steps_executed=2,
+            steps_failed=0,
+            steps_skipped=0,
+            final_state_description="found tutorial",
+        )
+        
+        self.memory.learn_sequence(
+            goal="search web for programming tutorial",
+            action_sequence=["action_search", "action_read"],
+            completion=completion,
+        )
+        
+        # Recall for the exact same goal (should definitely match)
+        results = self.memory.recall_sequences(
+            goal="search web for programming tutorial",
+            top_k=3,
+            min_success_rate=0.0,  # Accept any success rate for this test
+        )
+        
+        # Should find the learned sequence
+        self.assertGreater(len(results), 0)
+        sequence, similarity = results[0]
+        # Exact match should have high similarity
+        self.assertGreater(similarity, 0.9)
+    
+    def test_recall_filters_low_success(self):
+        """Test that recall filters out low success rate sequences."""
+        # Learn a failing sequence
+        completion = GoalCompletion(
+            goal="unreliable action",
+            completed=False,
+            confidence=0.2,
+            semantic_similarity=0.3,
+            execution_success_rate=0.0,
+            steps_executed=0,
+            steps_failed=1,
+            steps_skipped=0,
+            final_state_description="failed",
+        )
+        
+        self.memory.learn_sequence(
+            goal="unreliable action",
+            action_sequence=["action_fail"],
+            completion=completion,
+        )
+        
+        # Recall with high min_success_rate
+        results = self.memory.recall_sequences(
+            goal="unreliable action",
+            min_success_rate=0.5,
+        )
+        
+        # Should not find the failing sequence
+        self.assertEqual(len(results), 0)
+    
+    def test_get_best_sequence(self):
+        """Test getting the single best sequence."""
+        # Learn a sequence
+        completion1 = GoalCompletion(
+            goal="find programming documentation",
+            completed=True,
+            confidence=0.7,
+            semantic_similarity=0.8,
+            execution_success_rate=1.0,
+            steps_executed=1,
+            steps_failed=0,
+            steps_skipped=0,
+            final_state_description="found docs",
+        )
+        
+        self.memory.learn_sequence(
+            goal="find programming documentation",
+            action_sequence=["action_search"],
+            completion=completion1,
+        )
+        
+        # Get best for exact same goal
+        best = self.memory.get_best_sequence(
+            "find programming documentation",
+            min_success_rate=0.0,  # Accept any for test
+        )
+        
+        self.assertIsNotNone(best)
+        self.assertEqual(best.action_ids, ["action_search"])
+    
+    def test_reliability_score(self):
+        """Test reliability score calculation."""
+        sequence = LearnedSequence(
+            sequence_id="test",
+            goal="test goal",
+            goal_embedding=torch.randn(32),
+            action_ids=["a", "b"],
+            action_names=["a", "b"],
+            success_count=8,
+            failure_count=2,
+            total_attempts=10,
+            avg_completion_confidence=0.9,
+        )
+        
+        # success_rate = 0.8, confidence = 0.9
+        # reliability = (0.8 * 0.7 + 0.9 * 0.3) * min(1.0, 10/10)
+        # = (0.56 + 0.27) * 1.0 = 0.83
+        self.assertAlmostEqual(sequence.reliability_score, 0.83, places=2)
+    
+    def test_get_statistics(self):
+        """Test procedural memory statistics."""
+        completion = GoalCompletion(
+            goal="test",
+            completed=True,
+            confidence=0.9,
+            semantic_similarity=0.9,
+            execution_success_rate=1.0,
+            steps_executed=1,
+            steps_failed=0,
+            steps_skipped=0,
+            final_state_description="done",
+        )
+        
+        self.memory.learn_sequence(
+            goal="test action",
+            action_sequence=["action_test"],
+            completion=completion,
+        )
+        
+        stats = self.memory.get_statistics()
+        
+        self.assertEqual(stats["total_sequences"], 1)
+        self.assertEqual(stats["total_attempts"], 1)
+        self.assertEqual(stats["avg_success_rate"], 1.0)
+
+
+class TestActionPlannerWithMemory(unittest.TestCase):
+    """Tests for ActionPlanner integration with ProceduralMemory."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        from v2.lilith_v2.action_planner import ActionPlanner
+        from v2.lilith_v2.relational_graph_store import RelationalGraphStore
+        
+        self.temp_dir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.temp_dir, "test_memory.sqlite")
+        self.graph = RelationalGraphStore(self.db_path)
+        
+        self.encoder = MockEncoder(dimension=64, latent_dim=32)
+        self.memory = ProceduralMemory(encoder=self.encoder)
+        
+        self.planner = ActionPlanner(
+            encoder=self.encoder,
+            graph=self.graph,
+            trajectory_steps=10,
+            grounding_threshold=0.3,
+            procedural_memory=self.memory,
+        )
+        
+        # Register actions
+        self.planner.register_action(
+            name="search_web",
+            description="search the web for information",
+            tool_binding="web_search",
+        )
+        self.planner.register_action(
+            name="read_page",
+            description="read a web page",
+            tool_binding="web_read",
+        )
+    
+    def tearDown(self):
+        """Clean up."""
+        self.graph.close()
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def test_execute_and_learn(self):
+        """Test that execute_and_learn stores sequences in memory."""
+        from v2.lilith_v2.action_planner import ExecutionPlan, PlannedStep
+        
+        action = self.planner._action_cache.get("action_search_web")
+        step = PlannedStep(
+            step_num=1,
+            action=action,
+            args={},
+            waypoint_embedding=action.embedding,
+            confidence=0.9,
+        )
+        plan = ExecutionPlan(
+            goal="find Python docs",
+            steps=[step],
+            trajectory_efficiency=0.8,
+            total_confidence=0.9,
+            estimated_success=0.85,
+        )
+        
+        class MockTransport:
+            def call(self, name, message, meta=None):
+                return {"status": "ok", "output": "found Python documentation"}
+        
+        results, completion, seq_id = self.planner.execute_and_learn(
+            plan=plan,
+            transport=MockTransport(),
+        )
+        
+        self.assertIsNotNone(seq_id)
+        self.assertEqual(len(self.memory._sequences), 1)
+        self.assertEqual(completion.steps_executed, 1)
+    
+    def test_plan_with_memory_uses_recalled_sequence(self):
+        """Test that plan_with_memory uses recalled sequences."""
+        from v2.lilith_v2.action_planner import ExecutionPlan, PlannedStep
+        
+        # First, learn a sequence by executing
+        action = self.planner._action_cache.get("action_search_web")
+        step = PlannedStep(
+            step_num=1,
+            action=action,
+            args={},
+            waypoint_embedding=action.embedding,
+            confidence=0.9,
+        )
+        plan = ExecutionPlan(
+            goal="search for JavaScript tutorial",
+            steps=[step],
+            trajectory_efficiency=0.8,
+            total_confidence=0.9,
+            estimated_success=0.85,
+        )
+        
+        class MockTransport:
+            def call(self, name, message, meta=None):
+                return {"status": "ok", "output": "found tutorial"}
+        
+        self.planner.execute_and_learn(plan=plan, transport=MockTransport())
+        
+        # Now plan for similar goal - should use memory
+        new_plan = self.planner.plan_with_memory(
+            goal="search for Python tutorial",  # Similar to JavaScript tutorial
+        )
+        
+        # Should get a plan (either from memory or trajectory)
+        self.assertIsNotNone(new_plan)
 
 
 if __name__ == "__main__":

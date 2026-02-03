@@ -101,6 +101,426 @@ class GoalCompletion:
         )
 
 
+@dataclass
+class LearnedSequence:
+    """
+    A learned action sequence for achieving a goal.
+    
+    Stored in procedural memory for recall when similar goals arise.
+    """
+    sequence_id: str
+    goal: str  # The goal this sequence achieved
+    goal_embedding: torch.Tensor  # For similarity-based recall
+    action_ids: List[str]  # Ordered list of action IDs
+    action_names: List[str]  # Human-readable names
+    
+    # Learning statistics
+    success_count: int = 0
+    failure_count: int = 0
+    total_attempts: int = 0
+    
+    # Quality metrics
+    avg_completion_confidence: float = 0.0
+    avg_execution_time: float = 0.0  # In steps
+    
+    # Context
+    created_at: Optional[str] = None  # ISO timestamp
+    last_used_at: Optional[str] = None
+    
+    @property
+    def success_rate(self) -> float:
+        """Compute success rate from attempts."""
+        if self.total_attempts == 0:
+            return 0.0
+        return self.success_count / self.total_attempts
+    
+    @property
+    def reliability_score(self) -> float:
+        """
+        Compute reliability score combining success rate and confidence.
+        
+        More attempts = more reliable estimate.
+        """
+        if self.total_attempts == 0:
+            return 0.0
+        
+        # Weight success rate by number of attempts (more attempts = more reliable)
+        attempt_weight = min(1.0, self.total_attempts / 10.0)
+        
+        return (self.success_rate * 0.7 + self.avg_completion_confidence * 0.3) * attempt_weight
+
+
+class ProceduralMemory:
+    """
+    Learns and recalls action sequences for achieving goals.
+    
+    Uses PMFlow embeddings for similarity-based recall:
+    - When a goal is completed successfully, the sequence is stored
+    - When planning for a new goal, similar past sequences are retrieved
+    - Success/failure tracking prioritizes reliable sequences
+    
+    This enables Lilith to learn from experience, reusing successful
+    patterns rather than always planning from scratch.
+    """
+    
+    def __init__(
+        self,
+        encoder,  # PMFlow encoder for goal embeddings
+        graph=None,  # Optional graph store for persistence
+        similarity_threshold: float = 0.7,
+        max_sequences_per_goal: int = 5,
+    ):
+        """
+        Initialize procedural memory.
+        
+        Args:
+            encoder: PMFlow encoder for computing goal embeddings
+            graph: Optional graph store for persisting sequences
+            similarity_threshold: Minimum similarity for sequence recall
+            max_sequences_per_goal: Max sequences to keep per goal type
+        """
+        self.encoder = encoder
+        self.graph = graph
+        self.similarity_threshold = similarity_threshold
+        self.max_sequences_per_goal = max_sequences_per_goal
+        
+        # In-memory sequence storage (also persisted to graph if available)
+        self._sequences: Dict[str, LearnedSequence] = {}
+        self._sequence_embeddings: Optional[torch.Tensor] = None
+        self._sequence_ids: List[str] = []
+        
+        logger.info("ProceduralMemory initialized")
+    
+    def learn_sequence(
+        self,
+        goal: str,
+        action_sequence: List[str],  # Action IDs or names
+        completion: GoalCompletion,
+        action_names: Optional[List[str]] = None,
+    ) -> Optional[str]:
+        """
+        Learn a new action sequence or update an existing one.
+        
+        Called after plan execution with the goal completion result.
+        Successful completions reinforce sequences, failures weaken them.
+        
+        Args:
+            goal: The goal that was attempted
+            action_sequence: List of action IDs in execution order
+            completion: GoalCompletion result from check_goal_completion
+            action_names: Optional human-readable action names
+            
+        Returns:
+            sequence_id if learned/updated, None if rejected
+        """
+        from datetime import datetime
+        
+        if not action_sequence:
+            return None
+        
+        # Generate sequence ID from goal + actions hash
+        seq_key = f"{goal}:{':'.join(action_sequence)}"
+        sequence_id = f"seq_{hash(seq_key) % 100000:05d}"
+        
+        # Check if we already have this sequence
+        if sequence_id in self._sequences:
+            return self._update_sequence(sequence_id, completion)
+        
+        # Create new sequence
+        goal_embedding = self._encode_goal(goal)
+        
+        sequence = LearnedSequence(
+            sequence_id=sequence_id,
+            goal=goal,
+            goal_embedding=goal_embedding,
+            action_ids=action_sequence,
+            action_names=action_names or action_sequence,
+            success_count=1 if completion.completed else 0,
+            failure_count=0 if completion.completed else 1,
+            total_attempts=1,
+            avg_completion_confidence=completion.confidence,
+            avg_execution_time=float(completion.steps_executed),
+            created_at=datetime.now().isoformat(),
+            last_used_at=datetime.now().isoformat(),
+        )
+        
+        self._sequences[sequence_id] = sequence
+        self._rebuild_embedding_index()
+        
+        # Persist to graph if available
+        if self.graph:
+            self._persist_sequence(sequence)
+        
+        logger.info(
+            f"Learned sequence {sequence_id}: {len(action_sequence)} actions, "
+            f"completed={completion.completed}"
+        )
+        
+        return sequence_id
+    
+    def _update_sequence(
+        self,
+        sequence_id: str,
+        completion: GoalCompletion,
+    ) -> str:
+        """Update an existing sequence with new execution result."""
+        from datetime import datetime
+        
+        sequence = self._sequences[sequence_id]
+        
+        # Update statistics
+        sequence.total_attempts += 1
+        if completion.completed:
+            sequence.success_count += 1
+        else:
+            sequence.failure_count += 1
+        
+        # Exponential moving average for confidence
+        alpha = 0.2
+        sequence.avg_completion_confidence = (
+            (1 - alpha) * sequence.avg_completion_confidence +
+            alpha * completion.confidence
+        )
+        sequence.avg_execution_time = (
+            (1 - alpha) * sequence.avg_execution_time +
+            alpha * float(completion.steps_executed)
+        )
+        
+        sequence.last_used_at = datetime.now().isoformat()
+        
+        # Update in graph
+        if self.graph:
+            self._persist_sequence(sequence)
+        
+        logger.debug(
+            f"Updated sequence {sequence_id}: "
+            f"success_rate={sequence.success_rate:.2f}, "
+            f"attempts={sequence.total_attempts}"
+        )
+        
+        return sequence_id
+    
+    def recall_sequences(
+        self,
+        goal: str,
+        top_k: int = 3,
+        min_success_rate: float = 0.3,
+    ) -> List[Tuple[LearnedSequence, float]]:
+        """
+        Recall similar sequences for a goal.
+        
+        Returns sequences with similar goals, ranked by similarity and
+        reliability score.
+        
+        Args:
+            goal: The goal to find sequences for
+            top_k: Maximum number of sequences to return
+            min_success_rate: Minimum success rate to consider
+            
+        Returns:
+            List of (sequence, similarity) tuples, sorted by match quality
+        """
+        if not self._sequences or self._sequence_embeddings is None:
+            return []
+        
+        goal_emb = self._encode_goal(goal)
+        
+        # Compute similarities
+        if goal_emb.dim() == 1:
+            goal_emb = goal_emb.unsqueeze(0)
+        
+        goal_norm = F.normalize(goal_emb, p=2, dim=-1)
+        seq_norm = F.normalize(self._sequence_embeddings, p=2, dim=-1)
+        
+        similarities = F.cosine_similarity(goal_norm, seq_norm, dim=-1)
+        
+        # Filter and rank
+        candidates = []
+        for idx, sim in enumerate(similarities.tolist()):
+            if sim < self.similarity_threshold:
+                continue
+            
+            seq_id = self._sequence_ids[idx]
+            sequence = self._sequences[seq_id]
+            
+            if sequence.success_rate < min_success_rate:
+                continue
+            
+            # Combined score: similarity * reliability
+            combined_score = sim * (0.5 + 0.5 * sequence.reliability_score)
+            candidates.append((sequence, sim, combined_score))
+        
+        # Sort by combined score
+        candidates.sort(key=lambda x: x[2], reverse=True)
+        
+        return [(seq, sim) for seq, sim, _ in candidates[:top_k]]
+    
+    def get_best_sequence(
+        self,
+        goal: str,
+        min_success_rate: float = 0.5,
+    ) -> Optional[LearnedSequence]:
+        """
+        Get the single best sequence for a goal.
+        
+        Convenience method for the common case of needing one good sequence.
+        """
+        results = self.recall_sequences(goal, top_k=1, min_success_rate=min_success_rate)
+        if results:
+            return results[0][0]
+        return None
+    
+    def _encode_goal(self, goal: str) -> torch.Tensor:
+        """Encode a goal to latent space."""
+        emb = self.encoder.encode([goal])
+        if not isinstance(emb, torch.Tensor):
+            emb = torch.as_tensor(emb)
+        
+        # Ensure 1D for storage
+        if emb.dim() > 1:
+            emb = emb.squeeze(0)
+        
+        return emb
+    
+    def _rebuild_embedding_index(self) -> None:
+        """Rebuild the sequence embedding matrix for similarity search."""
+        if not self._sequences:
+            self._sequence_embeddings = None
+            self._sequence_ids = []
+            return
+        
+        embeddings = []
+        seq_ids = []
+        
+        for seq_id, sequence in self._sequences.items():
+            embeddings.append(sequence.goal_embedding)
+            seq_ids.append(seq_id)
+        
+        self._sequence_embeddings = torch.stack(embeddings)
+        self._sequence_ids = seq_ids
+    
+    def _persist_sequence(self, sequence: LearnedSequence) -> None:
+        """Persist a sequence to the graph store."""
+        if not self.graph:
+            return
+        
+        try:
+            # Store as a node with sequence data
+            node_data = {
+                "goal": sequence.goal,
+                "action_ids": sequence.action_ids,
+                "action_names": sequence.action_names,
+                "success_count": sequence.success_count,
+                "failure_count": sequence.failure_count,
+                "total_attempts": sequence.total_attempts,
+                "avg_completion_confidence": sequence.avg_completion_confidence,
+                "avg_execution_time": sequence.avg_execution_time,
+                "created_at": sequence.created_at,
+                "last_used_at": sequence.last_used_at,
+                "embedding": sequence.goal_embedding.tolist() if hasattr(sequence.goal_embedding, 'tolist') else list(sequence.goal_embedding),
+            }
+            
+            self.graph.add_node(
+                node_id=sequence.sequence_id,
+                node_type="procedural_sequence",
+                term=sequence.goal[:100],  # Truncated goal as term
+                confidence=sequence.reliability_score,
+                data=node_data,
+            )
+        except Exception as e:
+            logger.warning(f"Could not persist sequence {sequence.sequence_id}: {e}")
+    
+    def load_from_graph(self) -> int:
+        """
+        Load sequences from graph store.
+        
+        Returns number of sequences loaded.
+        """
+        if not self.graph:
+            return 0
+        
+        try:
+            # Query for all procedural_sequence nodes
+            # This depends on graph store implementation
+            # For now, assume we can search by node_type
+            nodes = self.graph.search_nodes(
+                query="",
+                node_type="procedural_sequence",
+                limit=1000,
+            )
+            
+            count = 0
+            for node in nodes:
+                data = node.get("data", {})
+                if not data:
+                    continue
+                
+                embedding = data.get("embedding")
+                if embedding:
+                    embedding = torch.tensor(embedding)
+                else:
+                    # Re-encode goal
+                    embedding = self._encode_goal(data.get("goal", ""))
+                
+                sequence = LearnedSequence(
+                    sequence_id=node.get("node_id", f"seq_{count}"),
+                    goal=data.get("goal", ""),
+                    goal_embedding=embedding,
+                    action_ids=data.get("action_ids", []),
+                    action_names=data.get("action_names", []),
+                    success_count=data.get("success_count", 0),
+                    failure_count=data.get("failure_count", 0),
+                    total_attempts=data.get("total_attempts", 0),
+                    avg_completion_confidence=data.get("avg_completion_confidence", 0.0),
+                    avg_execution_time=data.get("avg_execution_time", 0.0),
+                    created_at=data.get("created_at"),
+                    last_used_at=data.get("last_used_at"),
+                )
+                
+                self._sequences[sequence.sequence_id] = sequence
+                count += 1
+            
+            if count > 0:
+                self._rebuild_embedding_index()
+                logger.info(f"Loaded {count} sequences from graph")
+            
+            return count
+            
+        except Exception as e:
+            logger.warning(f"Could not load sequences from graph: {e}")
+            return 0
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get procedural memory statistics."""
+        if not self._sequences:
+            return {
+                "total_sequences": 0,
+                "avg_success_rate": 0.0,
+                "total_attempts": 0,
+            }
+        
+        total_success = sum(s.success_count for s in self._sequences.values())
+        total_attempts = sum(s.total_attempts for s in self._sequences.values())
+        
+        return {
+            "total_sequences": len(self._sequences),
+            "avg_success_rate": total_success / max(total_attempts, 1),
+            "total_attempts": total_attempts,
+            "top_sequences": [
+                {
+                    "goal": s.goal[:50],
+                    "success_rate": s.success_rate,
+                    "attempts": s.total_attempts,
+                }
+                for s in sorted(
+                    self._sequences.values(),
+                    key=lambda x: x.reliability_score,
+                    reverse=True,
+                )[:5]
+            ],
+        }
+
+
 class ActionPlanner:
     """
     Plans multi-step actions using PMFlow's agentic physics.
@@ -112,6 +532,9 @@ class ActionPlanner:
     
     This enables physics-based "thinking about what to do" - the same
     mechanisms used for semantic reasoning now applied to action selection.
+    
+    Optionally integrates with ProceduralMemory to learn and recall
+    successful action sequences, improving planning over time.
     """
     
     def __init__(
@@ -121,6 +544,7 @@ class ActionPlanner:
         trajectory_steps: int = 10,
         grounding_threshold: float = 0.3,
         max_plan_length: int = 20,
+        procedural_memory: Optional["ProceduralMemory"] = None,
     ):
         """
         Initialize action planner.
@@ -131,12 +555,14 @@ class ActionPlanner:
             trajectory_steps: Number of steps when tracing trajectory
             grounding_threshold: Minimum similarity to ground waypoint to action
             max_plan_length: Maximum steps in a plan
+            procedural_memory: Optional ProceduralMemory for sequence learning/recall
         """
         self.encoder = encoder
         self.graph = graph
         self.trajectory_steps = trajectory_steps
         self.grounding_threshold = grounding_threshold
         self.max_plan_length = max_plan_length
+        self.procedural_memory = procedural_memory
         
         # Check for agentic physics
         self._has_flow = hasattr(encoder, 'enable_flow') and encoder.enable_flow
@@ -148,7 +574,8 @@ class ActionPlanner:
         self._action_embeddings: Optional[torch.Tensor] = None
         self._action_ids: List[str] = []
         
-        logger.info(f"ActionPlanner initialized (flow={'enabled' if self._has_flow else 'disabled'})")
+        pm_status = "enabled" if procedural_memory else "disabled"
+        logger.info(f"ActionPlanner initialized (flow={'enabled' if self._has_flow else 'disabled'}, procedural_memory={pm_status})")
     
     def register_action(
         self,
@@ -1112,6 +1539,138 @@ class ActionPlanner:
         
         logger.info(f"Goal completion: {completion}")
         return results, completion
+    
+    def execute_and_learn(
+        self,
+        plan: ExecutionPlan,
+        transport,
+        stop_on_error: bool = True,
+        reactive: bool = False,
+        max_replans: int = 5,
+        completion_threshold: float = 0.7,
+    ) -> Tuple[List[Dict[str, Any]], GoalCompletion, Optional[str]]:
+        """
+        Execute a plan, check completion, and learn the sequence.
+        
+        Extends execute_and_check to store the action sequence in
+        procedural memory for future recall.
+        
+        Args:
+            plan: The execution plan
+            transport: Tool transport for execution
+            stop_on_error: Stop on first error
+            reactive: Use reactive replanning
+            max_replans: Max replanning iterations
+            completion_threshold: Minimum similarity for completion
+            
+        Returns:
+            (execution_results, goal_completion, sequence_id)
+            sequence_id is None if procedural memory is disabled
+        """
+        results, completion = self.execute_and_check(
+            plan=plan,
+            transport=transport,
+            stop_on_error=stop_on_error,
+            reactive=reactive,
+            max_replans=max_replans,
+            completion_threshold=completion_threshold,
+        )
+        
+        sequence_id = None
+        if self.procedural_memory and plan.steps:
+            # Extract action IDs and names from plan
+            action_ids = [step.action.action_id for step in plan.steps]
+            action_names = [step.action.name for step in plan.steps]
+            
+            sequence_id = self.procedural_memory.learn_sequence(
+                goal=plan.goal,
+                action_sequence=action_ids,
+                completion=completion,
+                action_names=action_names,
+            )
+            
+            if sequence_id:
+                logger.info(f"Learned sequence {sequence_id} for goal: {plan.goal[:50]}")
+        
+        return results, completion, sequence_id
+    
+    def plan_with_memory(
+        self,
+        goal: str,
+        current_state: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        min_sequence_success_rate: float = 0.5,
+        prefer_memory: bool = True,
+    ) -> Optional[ExecutionPlan]:
+        """
+        Plan with procedural memory lookup before trajectory-based planning.
+        
+        If a successful sequence is found in procedural memory for a similar
+        goal, it's converted to an ExecutionPlan. Otherwise, falls back to
+        standard trajectory-based planning.
+        
+        Args:
+            goal: The goal to achieve
+            current_state: Optional description of current state
+            context: Optional context for argument filling
+            min_sequence_success_rate: Minimum success rate for recalled sequences
+            prefer_memory: If True, prefer memory over trajectory planning
+            
+        Returns:
+            ExecutionPlan or None
+        """
+        # Try procedural memory first
+        if self.procedural_memory and prefer_memory:
+            sequence = self.procedural_memory.get_best_sequence(
+                goal=goal,
+                min_success_rate=min_sequence_success_rate,
+            )
+            
+            if sequence:
+                plan = self._sequence_to_plan(sequence, goal, context or {})
+                if plan:
+                    logger.info(
+                        f"Using recalled sequence {sequence.sequence_id} "
+                        f"(success_rate={sequence.success_rate:.2f})"
+                    )
+                    return plan
+        
+        # Fall back to trajectory-based planning
+        return self.plan(goal=goal, current_state=current_state, context=context)
+    
+    def _sequence_to_plan(
+        self,
+        sequence: LearnedSequence,
+        goal: str,
+        context: Dict[str, Any],
+    ) -> Optional[ExecutionPlan]:
+        """Convert a learned sequence to an execution plan."""
+        steps = []
+        
+        for i, action_id in enumerate(sequence.action_ids):
+            action = self._action_cache.get(action_id)
+            if not action:
+                logger.warning(f"Action {action_id} not found in cache, skipping sequence")
+                return None
+            
+            args = self._fill_args(action.arg_template, context)
+            
+            step = PlannedStep(
+                step_num=i + 1,
+                action=action,
+                args=args,
+                waypoint_embedding=action.embedding if action.embedding is not None else torch.zeros(self.encoder.latent_dim if hasattr(self.encoder, 'latent_dim') else 32),
+                confidence=sequence.reliability_score,
+            )
+            steps.append(step)
+        
+        return ExecutionPlan(
+            goal=goal,
+            steps=steps,
+            trajectory_efficiency=1.0,  # Memory recall is "efficient"
+            total_confidence=sequence.reliability_score,
+            estimated_success=sequence.success_rate,
+        )
 
     def _get_pm_field(self):
         """
@@ -1543,5 +2102,8 @@ __all__ = [
     "ActionNode", 
     "PlannedStep",
     "ExecutionPlan",
+    "GoalCompletion",
+    "LearnedSequence",
+    "ProceduralMemory",
     "create_default_planner",
 ]
