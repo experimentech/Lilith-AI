@@ -679,5 +679,117 @@ class TestPlanConfirmationFlow(unittest.TestCase):
             self.assertFalse(brain.has_pending_plan())
 
 
+class TestActionLearning(unittest.TestCase):
+    """Test action learning capabilities."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.temp_dir = tempfile.mkdtemp()
+        
+    def tearDown(self):
+        """Clean up temp files."""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def test_learn_action_from_text(self):
+        """Test learning actions from natural language."""
+        from v2.lilith_v2.action_planner import ActionPlanner
+        from v2.lilith_v2.relational_graph_store import RelationalGraphStore
+        
+        graph_path = os.path.join(self.temp_dir, "graph.sqlite")
+        graph = RelationalGraphStore(graph_path)
+        encoder = MockEncoder()
+        
+        planner = ActionPlanner(encoder=encoder, graph=graph)
+        
+        # Test various teaching patterns
+        test_cases = [
+            ("the save command writes files to disk", "save"),
+            ("use navigate to go to a URL", "navigate"),
+            ("click does submit the form", "click"),
+        ]
+        
+        for text, expected_name in test_cases:
+            action_id = planner.learn_action_from_text(text)
+            self.assertIsNotNone(action_id, f"Failed to learn from: {text}")
+            self.assertIn(expected_name, action_id)
+    
+    def test_discover_tools(self):
+        """Test auto-discovery of tools from transport."""
+        from v2.lilith_v2.action_planner import ActionPlanner
+        from v2.lilith_v2.relational_graph_store import RelationalGraphStore
+        from v2.lilith_v2.mcp_transport_tools import LocalToolsTransport
+        
+        graph_path = os.path.join(self.temp_dir, "graph.sqlite")
+        graph = RelationalGraphStore(graph_path)
+        encoder = MockEncoder()
+        
+        planner = ActionPlanner(encoder=encoder, graph=graph)
+        
+        # Set up transport with some tools
+        transport = LocalToolsTransport()
+        transport.register_tool("read_file", lambda path: f"contents of {path}", "Read a file from disk")
+        transport.register_tool("write_file", lambda path, content: True, "Write content to file")
+        
+        # Discover tools
+        count = planner.discover_tools(transport)
+        
+        self.assertEqual(count, 2)
+        self.assertIn("action_read_file", planner._action_cache)
+        self.assertIn("action_write_file", planner._action_cache)
+    
+    def test_discover_skips_existing(self):
+        """Test that discovery skips already registered actions."""
+        from v2.lilith_v2.action_planner import ActionPlanner
+        from v2.lilith_v2.relational_graph_store import RelationalGraphStore
+        from v2.lilith_v2.mcp_transport_tools import LocalToolsTransport
+        
+        graph_path = os.path.join(self.temp_dir, "graph.sqlite")
+        graph = RelationalGraphStore(graph_path)
+        encoder = MockEncoder()
+        
+        planner = ActionPlanner(encoder=encoder, graph=graph)
+        
+        # Pre-register one action
+        planner.register_action("read_file", "read file contents", "read_file")
+        
+        # Set up transport
+        transport = LocalToolsTransport()
+        transport.register_tool("read_file", lambda path: "contents", "Read file")
+        transport.register_tool("write_file", lambda path, content: True, "Write file")
+        
+        # Discover - should only add write_file
+        count = planner.discover_tools(transport)
+        
+        self.assertEqual(count, 1)  # Only write_file is new
+    
+    def test_cognitive_stage_learn_action(self):
+        """Test learning actions via CognitiveStage."""
+        from v2.lilith_v2.cognitive_stage import CognitiveStage
+        from v2.lilith_v2.pmflow_sqlite import SQLitePMFlowStateStore
+        from v2.lilith_v2.relational_graph_store import RelationalGraphStore
+        
+        pmflow_path = os.path.join(self.temp_dir, "pmflow.sqlite")
+        graph_path = os.path.join(self.temp_dir, "graph.sqlite")
+        
+        pmflow = SQLitePMFlowStateStore(pmflow_path)
+        graph = RelationalGraphStore(graph_path)
+        encoder = MockEncoder()
+        
+        brain = CognitiveStage(
+            node_id="test",
+            pmflow_store=pmflow,
+            graph_store=graph,
+            encoder=encoder,
+            config={"enable_action_planning": True},
+        )
+        
+        # Learn action
+        action_id = brain.learn_action("the delete command removes files")
+        
+        self.assertIsNotNone(action_id)
+        self.assertIn("delete", action_id)
+
+
 if __name__ == "__main__":
     unittest.main()

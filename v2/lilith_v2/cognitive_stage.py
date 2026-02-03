@@ -384,6 +384,13 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
                      # Boost mood as we are learning!
                      self.affective.update(0.5, ctx)
                      logger.info(f"[{self.id}] Pragmatic: Teaching Intent Detected")
+                     
+                     # ACTION LEARNING: Check if teaching an action
+                     # e.g., "The save command writes files to disk"
+                     if self._action_planner:
+                         learned_action = self._action_planner.learn_action_from_text(payload, tenant_id=tenant_id)
+                         if learned_action:
+                             logger.info(f"[{self.id}] Learned new action from teaching: {learned_action}")
                  
                  # Record interaction for patterns
                  topic_result = self.topic_extractor.extract_topic(payload)
@@ -1612,6 +1619,46 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
             effects=effects,
             tenant_id=tenant_id,
         )
+    
+    def discover_tools(self, transport, tenant_id: Optional[str] = None) -> int:
+        """
+        Auto-discover and register actions from a tools transport.
+        
+        This enables learning available tools by enumerating them from
+        LocalToolsTransport or MCP servers.
+        
+        Args:
+            transport: Object with list_tools() method
+            tenant_id: Optional tenant ID
+            
+        Returns:
+            Number of new actions registered
+        """
+        if not self._action_planner:
+            logger.warning("Action planning not enabled")
+            return 0
+        return self._action_planner.discover_tools(transport, tenant_id)
+    
+    def learn_action(self, text: str, tool_binding: Optional[str] = None, tenant_id: Optional[str] = None) -> Optional[str]:
+        """
+        Learn an action from natural language teaching.
+        
+        Parses patterns like:
+        - "The save command writes files to disk"
+        - "Click submits the form"
+        
+        Args:
+            text: Natural language description
+            tool_binding: Optional explicit tool binding
+            tenant_id: Optional tenant ID
+            
+        Returns:
+            action_id if learned, None otherwise
+        """
+        if not self._action_planner:
+            logger.warning("Action planning not enabled")
+            return None
+        return self._action_planner.learn_action_from_text(text, tool_binding, tenant_id)
     
     def get_execution_commands(self, plan: ExecutionPlan) -> List[Dict[str, Any]]:
         """

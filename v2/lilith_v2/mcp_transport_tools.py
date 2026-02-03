@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 from .mcp_transport import MCPTransport
 
 class LocalToolsTransport(MCPTransport):
@@ -6,10 +6,32 @@ class LocalToolsTransport(MCPTransport):
 
     def __init__(self) -> None:
         self.tools: Dict[str, Callable[..., Any]] = {}
+        self._tool_descriptions: Dict[str, str] = {}  # Tool name -> description
 
-    def register_tool(self, name: str, func: Callable[..., Any]) -> None:
-        """Register a python function as a callable tool."""
+    def register_tool(self, name: str, func: Callable[..., Any], description: str = "") -> None:
+        """Register a python function as a callable tool.
+        
+        Args:
+            name: Tool name for invocation
+            func: Python callable to execute
+            description: Human-readable description for action learning
+        """
         self.tools[name] = func
+        # Use docstring if no description provided
+        if not description and func.__doc__:
+            description = func.__doc__.strip().split('\n')[0]
+        self._tool_descriptions[name] = description or f"Execute {name}"
+    
+    def list_tools(self) -> List[Dict[str, str]]:
+        """List available tools with their descriptions.
+        
+        Returns:
+            List of {"name": str, "description": str} dicts
+        """
+        return [
+            {"name": name, "description": self._tool_descriptions.get(name, "")}
+            for name in self.tools.keys()
+        ]
 
     def call(self, name: str, message: Any, meta: Dict[str, Any]) -> Any:
         """

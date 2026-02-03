@@ -184,6 +184,121 @@ class ActionPlanner:
         logger.debug(f"Registered action: {name} → {tool_binding}")
         return action_id
     
+    def discover_tools(self, transport, tenant_id: Optional[str] = None) -> int:
+        """
+        Auto-discover and register actions from a tools transport.
+        
+        This enables learning by enumerating available tools from
+        LocalToolsTransport or MCP servers.
+        
+        Args:
+            transport: Object with list_tools() method returning
+                       [{"name": str, "description": str}, ...]
+            tenant_id: Optional tenant for multi-tenant
+            
+        Returns:
+            Number of new actions registered
+        """
+        if not hasattr(transport, 'list_tools'):
+            logger.warning("Transport does not support tool discovery (no list_tools method)")
+            return 0
+        
+        registered = 0
+        try:
+            tools = transport.list_tools()
+            for tool in tools:
+                name = tool.get("name")
+                description = tool.get("description", f"Execute {name}")
+                
+                if not name:
+                    continue
+                
+                # Skip if already registered
+                action_id = f"action_{name}"
+                if action_id in self._action_cache:
+                    continue
+                
+                # Register as action
+                self.register_action(
+                    name=name,
+                    description=description,
+                    tool_binding=name,  # Same name
+                    tenant_id=tenant_id,
+                )
+                registered += 1
+                
+            if registered > 0:
+                logger.info(f"Discovered and registered {registered} tools as actions")
+                
+        except Exception as e:
+            logger.error(f"Tool discovery failed: {e}")
+        
+        return registered
+    
+    def learn_action_from_text(
+        self,
+        text: str,
+        tool_binding: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Learn an action from natural language description.
+        
+        Parses teaching patterns like:
+        - "The save command writes files to disk"
+        - "Click submits the form"
+        - "Navigate goes to a URL"
+        
+        Args:
+            text: Natural language description of the action
+            tool_binding: Optional explicit tool binding (inferred if not provided)
+            tenant_id: Optional tenant for multi-tenant
+            
+        Returns:
+            action_id if learned, None if no action pattern detected
+        """
+        import re
+        
+        # Action teaching patterns
+        patterns = [
+            # "the X command does Y"
+            r"(?:the\s+)?(\w+)\s+command\s+(.+)",
+            # "X action does Y"  
+            r"(\w+)\s+action\s+(.+)",
+            # "use X to Y"
+            r"use\s+(\w+)\s+to\s+(.+)",
+            # "X does Y" (simple)
+            r"^(\w+)\s+(?:does|will|can)\s+(.+)",
+        ]
+        
+        text_lower = text.lower().strip()
+        
+        for pattern in patterns:
+            match = re.search(pattern, text_lower, re.IGNORECASE)
+            if match:
+                name = match.group(1)
+                description = match.group(2).strip()
+                
+                # Clean up
+                name = name.replace(" ", "_")
+                if description.endswith("."):
+                    description = description[:-1]
+                
+                # Infer tool binding if not provided
+                binding = tool_binding or name
+                
+                action_id = self.register_action(
+                    name=name,
+                    description=description,
+                    tool_binding=binding,
+                    tenant_id=tenant_id,
+                )
+                
+                logger.info(f"Learned action from text: '{name}' → '{description}'")
+                return action_id
+        
+        return None
+
     def _encode_to_latent(self, tokens) -> torch.Tensor:
         """
         Encode tokens to latent space (not full embedding).
