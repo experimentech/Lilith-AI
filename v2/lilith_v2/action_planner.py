@@ -880,6 +880,264 @@ class ActionPlanner:
         
         return results
     
+    def _get_pm_field(self):
+        """
+        Get the underlying PMFlow field for native physics operations.
+        
+        Returns the field that has step(), mark_as_hazard(), etc.
+        """
+        if not hasattr(self.encoder, 'pm_field'):
+            return None
+        
+        pm_field = self.encoder.pm_field
+        
+        # For MultiScalePMField, use fine_field (higher resolution)
+        if hasattr(pm_field, 'fine_field'):
+            return pm_field.fine_field
+        
+        return pm_field
+    
+    def _ground_point_to_action(
+        self, 
+        z: torch.Tensor, 
+        context: Dict[str, Any],
+    ) -> Optional[Tuple[PlannedStep, int]]:
+        """
+        Ground a single latent point to the nearest action.
+        
+        Returns (PlannedStep, action_center_idx) or None if no match.
+        The center index is needed for gravity adjustments.
+        """
+        if self._action_embeddings is None:
+            return None
+        
+        if z.dim() == 1:
+            z = z.unsqueeze(0)
+        
+        # Normalize for cosine similarity
+        z_norm = F.normalize(z, p=2, dim=-1)
+        action_embs = F.normalize(self._action_embeddings, p=2, dim=-1)
+        
+        # Find best matching action
+        similarities = F.cosine_similarity(z_norm, action_embs, dim=-1)
+        best_idx = int(similarities.argmax().item())
+        best_sim = float(similarities[best_idx].item())
+        
+        if best_sim < self.grounding_threshold:
+            return None
+        
+        action_id = self._action_ids[best_idx]
+        action = self._action_cache[action_id]
+        
+        # Fill arguments from context
+        args = self._fill_args(action.arg_template, context)
+        
+        step = PlannedStep(
+            step_num=0,  # Will be set by caller
+            action=action,
+            args=args,
+            waypoint_embedding=z.squeeze(0),
+            confidence=best_sim,
+        )
+        
+        return step, best_idx
+    
+    def execute_native(
+        self,
+        plan_or_goal: Union["ExecutionPlan", str],
+        transport,
+        current_state: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        max_steps: int = 20,
+        stop_on_error: bool = True,
+        hazard_radius: float = 1.0,
+        hazard_strength: float = -0.5,
+        attractor_radius: float = 1.0,
+        attractor_strength: float = 0.3,
+        convergence_threshold: float = 0.05,
+    ) -> List[Dict[str, Any]]:
+        """
+        Execute a goal using native PMFlow physics.
+        
+        This is the physics-faithful implementation that:
+        - Stays in latent space during execution
+        - Uses step-by-step trajectory evolution
+        - Modifies gravitational field (μ, Ω) based on outcomes
+        - Naturally curves around dead ends via mark_as_hazard()
+        
+        This embodies the Lilith philosophy: let physics handle
+        branching rather than explicit conditionals.
+        
+        Args:
+            plan_or_goal: ExecutionPlan or string goal description
+            transport: LocalToolsTransport or compatible
+            current_state: Optional starting state description
+            context: Arguments to fill into action templates
+            max_steps: Maximum execution steps
+            stop_on_error: Stop on first error
+            hazard_radius: Radius for marking failures as hazards
+            hazard_strength: Repulsion strength for hazards (negative)
+            attractor_radius: Radius for marking success as attractors
+            attractor_strength: Attraction strength for successes
+            convergence_threshold: Movement threshold to detect convergence
+            
+        Returns:
+            List of execution results
+        """
+        # Extract goal from plan or use directly
+        if isinstance(plan_or_goal, ExecutionPlan):
+            goal = plan_or_goal.goal
+        else:
+            goal = plan_or_goal
+        
+        pm_field = self._get_pm_field()
+        if pm_field is None:
+            logger.error("Native execution requires encoder with pm_field attribute")
+            return []
+        
+        if not hasattr(pm_field, 'step'):
+            logger.error("Native execution requires PMFlow v0.3.5+ with step() method")
+            return []
+        
+        self._ensure_embedding_cache()
+        if self._action_embeddings is None or len(self._action_ids) == 0:
+            logger.warning("No actions registered for native execution")
+            return []
+        
+        context = context or {}
+        results = []
+        executed_actions = set()
+        prev_z = None
+        
+        try:
+            # Inject goal as gravitational attractor
+            self.encoder.inject_intent(goal.split(), strength=0.5)
+            
+            # Initialize position in latent space
+            start_text = current_state if current_state else "current state ready to act"
+            z = self._encode_to_latent(start_text.split())
+            if z.dim() == 1:
+                z = z.unsqueeze(0)
+            
+            # Move tensor to same device as pm_field
+            device = pm_field.centers.device
+            z = z.to(device)
+            
+            for step_num in range(1, max_steps + 1):
+                prev_z = z.clone()
+                
+                # Single physics step through the gravitational field
+                z = pm_field.step(z)
+                
+                # Check for convergence
+                if prev_z is not None:
+                    movement = (z - prev_z).norm().item()
+                    if movement < convergence_threshold:
+                        logger.info(f"Native execution converged at step {step_num}")
+                        break
+                
+                # Ground current position to nearest action
+                grounding = self._ground_point_to_action(z.cpu(), context)
+                
+                if grounding is None:
+                    # No action matches this point, continue evolving
+                    continue
+                
+                planned_step, action_idx = grounding
+                action = planned_step.action
+                
+                # Check for loops
+                if action.action_id in executed_actions:
+                    # Already executed this action, may be stuck
+                    # Mark current position as mild hazard to encourage moving on
+                    pm_field.mark_as_hazard(z.squeeze(), radius=hazard_radius * 0.5, repulsion_strength=hazard_strength * 0.3)
+                    continue
+                
+                # Execute the action
+                if not action.tool_binding:
+                    results.append({
+                        "step": step_num,
+                        "action": action.name,
+                        "status": "skipped",
+                        "reason": "no tool binding",
+                    })
+                    continue
+                
+                message = {
+                    "action": action.tool_binding,
+                    "args": planned_step.args,
+                }
+                
+                try:
+                    result = transport.call(
+                        name="action_planner",
+                        message=message,
+                        meta={"step": step_num, "goal": goal, "native": True},
+                    )
+                    
+                    step_result = {
+                        "step": step_num,
+                        "action": action.name,
+                        "tool": action.tool_binding,
+                        "confidence": planned_step.confidence,
+                        "result": result,
+                    }
+                    results.append(step_result)
+                    executed_actions.add(action.action_id)
+                    
+                    # Evaluate outcome and modify gravitational field
+                    is_error = isinstance(result, dict) and result.get("status") == "error"
+                    is_empty = self._is_empty_result(result)
+                    
+                    if is_error or is_empty:
+                        # Mark this region as hazard - trajectories will curve away
+                        affected = pm_field.mark_as_hazard(
+                            z.squeeze(), 
+                            radius=hazard_radius, 
+                            repulsion_strength=hazard_strength
+                        )
+                        logger.debug(f"Marked hazard at step {step_num}: {affected} centers affected")
+                        
+                        if is_error and stop_on_error:
+                            logger.warning(f"Native execution stopped at step {step_num}: error")
+                            break
+                    else:
+                        # Success - mark as attractor to reinforce this path
+                        affected = pm_field.mark_as_attractor(
+                            z.squeeze(),
+                            radius=attractor_radius,
+                            attraction_strength=attractor_strength
+                        )
+                        logger.debug(f"Marked attractor at step {step_num}: {affected} centers affected")
+                        
+                        # Check if we might have reached the goal
+                        # (could be enhanced with goal proximity detection)
+                        
+                except Exception as e:
+                    error_result = {
+                        "step": step_num,
+                        "action": action.name,
+                        "status": "error",
+                        "message": str(e),
+                    }
+                    results.append(error_result)
+                    
+                    # Mark as hazard
+                    pm_field.mark_as_hazard(z.squeeze(), radius=hazard_radius, repulsion_strength=hazard_strength)
+                    
+                    if stop_on_error:
+                        logger.error(f"Native execution failed at step {step_num}: {e}")
+                        break
+            
+            logger.info(f"Native execution completed: {len(results)} actions in {max_steps} steps")
+            
+        finally:
+            # Clear intent after execution
+            if hasattr(self.encoder, 'clear_intent'):
+                self.encoder.clear_intent()
+        
+        return results
+    
     def _is_empty_result(self, result: Any) -> bool:
         """Check if a result indicates empty/not-found."""
         if result is None:
@@ -898,6 +1156,54 @@ class ActionPlanner:
         if isinstance(result, (list, dict)) and len(result) == 0:
             return True
         return False
+
+    def _apply_result_to_field(
+        self,
+        pm_field,
+        z: torch.Tensor,
+        result: Any,
+        hazard_radius: float = 1.0,
+        hazard_strength: float = -0.5,
+        attractor_radius: float = 1.0,
+        attractor_strength: float = 0.3,
+    ) -> None:
+        """
+        Apply execution result to the gravitational field.
+        
+        This translates execution outcomes to field modifications:
+        - Errors → mark_as_hazard (repulsive region)
+        - Empty results → mark_as_hazard (mild)
+        - Complete success → mark_as_attractor (strong)
+        - Partial success → mark_as_attractor (weak) or no change
+        
+        Args:
+            pm_field: PMFlow field with mark_as_hazard/mark_as_attractor
+            z: Current position in latent space
+            result: Execution result from transport
+            hazard_radius: Radius for hazard regions
+            hazard_strength: Repulsion for hazards (negative)
+            attractor_radius: Radius for attractors
+            attractor_strength: Attraction strength (positive)
+        """
+        if z.dim() == 2:
+            z = z.squeeze(0)
+        
+        is_error = isinstance(result, dict) and result.get("status") == "error"
+        is_empty = self._is_empty_result(result)
+        is_complete = isinstance(result, dict) and result.get("complete", False)
+        
+        if is_error:
+            # Strong hazard for errors
+            pm_field.mark_as_hazard(z, radius=hazard_radius, repulsion_strength=hazard_strength)
+        elif is_empty:
+            # Milder hazard for empty results
+            pm_field.mark_as_hazard(z, radius=hazard_radius * 0.7, repulsion_strength=hazard_strength * 0.5)
+        elif is_complete:
+            # Strong attractor for complete success
+            pm_field.mark_as_attractor(z, radius=attractor_radius, attraction_strength=attractor_strength)
+        else:
+            # Partial success - weak attractor
+            pm_field.mark_as_attractor(z, radius=attractor_radius * 0.5, attraction_strength=attractor_strength * 0.3)
 
 
 # Convenience function for creating action planner with default tools
