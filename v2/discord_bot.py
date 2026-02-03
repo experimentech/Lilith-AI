@@ -176,6 +176,11 @@ class LilithV2DiscordBot:
                 "enable_learning": True,
                 "enable_reasoning": True,
                 "deliberation_steps": 10,
+                # SECURITY: Disable action planning in Discord mode
+                # No tool transport is connected, so actions can't execute anyway,
+                # but this prevents unnecessary plan proposals and confusion.
+                "enable_action_planning": False,
+                "allow_internal_formulation": False,
             }
         )
         
