@@ -25,6 +25,12 @@ from .pattern_store_adapter import PatternStoreAdapter
 from .store import Store
 from .reasoning_stage import ReasoningStage, DeliberationResult, Inference
 
+# Conversational Architecture Stages (v2 enhancement)
+from .discourse_manager import DiscourseManager, DialogueState, DialogueAct
+from .communication_planner import CommunicationPlanner, CommunicationPlan
+from .compositional_realizer import CompositionalRealizer, RealizationResult
+from .self_monitor import SelfMonitor, MonitoringResult
+
 logger = logging.getLogger(__name__)
 
 class CognitiveStage: # We don't inherit from Stage Protocol directly as class, we implement it
@@ -73,7 +79,19 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         self.generative = GenerativeSystem(self.graph)
         self.grounder = ConceptGrounder(self.graph)
         self.world_model = WorldModel()
-        self.topic_extractor = TopicExtractor(self.encoder)
+        
+        # Linguistic Processor (multi-stage BioNN/Database processing)
+        # Created early so TopicExtractor can use it for POS tagging
+        self.linguistic = LinguisticProcessor(
+            graph_store=self.graph,
+            encoder=self.encoder
+        )
+        
+        # Topic Extractor (uses linguistic processor for noun extraction)
+        self.topic_extractor = TopicExtractor(
+            encoder=self.encoder,
+            linguistic_processor=self.linguistic
+        )
         
         # Response Composer (Pattern-based response generation with learning)
         # Initialize pattern store for response patterns
@@ -94,12 +112,6 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
             )
             logger.info(f"[{node_id}] ResponseComposer initialized with pattern store")
         
-        # Linguistic Processor (multi-stage BioNN/Database processing)
-        self.linguistic = LinguisticProcessor(
-            graph_store=self.graph,
-            encoder=self.encoder
-        )
-        
         # Reasoning Stage (Agentic Physics-based deliberation)
         # Only enabled if encoder has enable_flow=True
         self._reasoning_enabled = config.get("enable_reasoning", True) if config else True
@@ -113,6 +125,31 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
             )
             has_flow = hasattr(encoder, 'enable_flow') and encoder.enable_flow
             logger.info(f"[{node_id}] ReasoningStage initialized (agentic_flow={has_flow})")
+        
+        # ===== Conversational Architecture Stages =====
+        # These stages enable motivated, coherent conversation by:
+        # 1. Tracking dialogue state and obligations
+        # 2. Planning what to communicate based on drives
+        # 3. Realizing plans as language (using learned frames)
+        # 4. Monitoring output quality before sending
+        
+        self._discourse_manager = DiscourseManager(max_history=10)
+        self._communication_planner = CommunicationPlanner(
+            curiosity_threshold=config.get("curiosity_threshold", 0.6) if config else 0.6,
+            confidence_threshold=config.get("confidence_threshold", 0.5) if config else 0.5,
+            warmth_threshold=config.get("warmth_threshold", 0.5) if config else 0.5,
+        )
+        # CompositionalRealizer with pattern store for learning-driven responses
+        self._compositional_realizer = CompositionalRealizer(
+            graph_store=self.graph,
+            pattern_store=self._response_store  # Enables learned pattern retrieval
+        )
+        self._self_monitor = SelfMonitor(min_score=0.5)
+        
+        # Enable/disable conversational architecture
+        self._conversational_mode = config.get("conversational_mode", True) if config else True
+        if self._conversational_mode:
+            logger.info(f"[{node_id}] Conversational Architecture enabled (discourse, planning, composition, monitoring)")
         
         # Physics Engine (BioNN / Intuition)
         # Determine encoder output dimension by running a test encode
@@ -141,6 +178,74 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         
         # Sync physics with store
         self._sync_physics_landscape()
+        
+        # Bootstrap contrastive learning for semantic separation
+        self._bootstrap_contrastive_pairs()
+
+    def _bootstrap_contrastive_pairs(self):
+        """
+        Bootstrap core semantic relationships via contrastive learning.
+        
+        This teaches the embedding space to separate opposite concepts
+        and cluster similar concepts, even before interaction data.
+        """
+        try:
+            from lilith.contrastive_learner import ContrastiveLearner
+            CONTRASTIVE_AVAILABLE = True
+        except ImportError:
+            CONTRASTIVE_AVAILABLE = False
+            
+        if not CONTRASTIVE_AVAILABLE:
+            logger.debug(f"[{self.id}] Contrastive learning not available")
+            return
+            
+        if not hasattr(self.encoder, 'pm_field'):
+            logger.debug(f"[{self.id}] Encoder lacks pm_field, skipping contrastive bootstrap")
+            return
+            
+        try:
+            learner = ContrastiveLearner(
+                encoder=self.encoder,
+                margin=0.3,
+                temperature=0.07,
+                learning_rate=1e-3,
+            )
+            
+            # Core semantic opposites (critical for dialog)
+            opposites = [
+                ("agree", "disagree"), ("yes", "no"), ("like", "dislike"),
+                ("good", "bad"), ("happy", "sad"), ("right", "wrong"),
+                ("true", "false"), ("positive", "negative"),
+                ("accept", "reject"), ("approve", "disapprove"),
+            ]
+            
+            # Similar intent patterns
+            similar_intents = [
+                ("how are you", "what's up"),
+                ("how are you", "how's it going"),
+                ("hello", "hi"),
+                ("goodbye", "bye"),
+                ("thanks", "thank you"),
+                ("sorry", "my apologies"),
+                ("I agree", "that's right"),
+                ("I disagree", "that's wrong"),
+            ]
+            
+            count = 0
+            for a, b in opposites:
+                learner.add_symmetric_pair(a, b, "hard_negative", 1.0, "bootstrap")
+                count += 2
+            for a, b in similar_intents:
+                learner.add_symmetric_pair(a, b, "positive", 0.9, "bootstrap")
+                count += 2
+                
+            # Quick training pass (just a few epochs to seed)
+            if count > 0:
+                learner.train(epochs=3, batch_size=16, verbose=False)
+                logger.debug(f"[{self.id}] Bootstrapped {count} contrastive pairs")
+                
+        except Exception as e:
+            logger.debug(f"[{self.id}] Contrastive bootstrap failed: {e}")
 
     def _sync_physics_landscape(self, tenant_id: str = None):
         """
@@ -259,7 +364,8 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
                      logger.info(f"[{self.id}] Pragmatic: Teaching Intent Detected")
                  
                  # Record interaction for patterns
-                 current_topic = self.topic_extractor.extract_topic(payload) or "general"
+                 topic_result = self.topic_extractor.extract_topic(payload)
+                 current_topic = topic_result[0] if topic_result[0] else "general"
                  self.generative.pragmatics.learn_from_interaction(
                      payload, prev_out, current_topic
                  )
@@ -280,6 +386,26 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
                      self._response_composer.record_outcome(success)
                      outcome_symbol = '✓' if success else '✗'
                      logger.debug(f"[{self.id}] Response learning: {outcome_symbol} from implicit feedback")
+                     
+                     # PATTERN EXTRACTION: If positive feedback, store response as pattern
+                     # This is where the system grows its repertoire by learning
+                     # what responses work in what contexts
+                     if success and fb_result.score > 0.3:
+                         try:
+                             last_input = self.last_interaction.get("input", "")
+                             last_response = self.last_interaction.get("response", "")
+                             if last_input and last_response and len(last_response) > 5:
+                                 # Determine intent from discourse state
+                                 intent = self._discourse_manager.state.last_user_intent or "general"
+                                 self._response_composer.add_pattern(
+                                     trigger=last_input,
+                                     response=last_response,
+                                     intent=intent,
+                                     initial_score=0.6 + (fb_result.score * 0.2)
+                                 )
+                                 logger.info(f"[{self.id}] Learned pattern: '{last_input[:30]}...' → '{last_response[:30]}...'")
+                         except Exception as e:
+                             logger.debug(f"[{self.id}] Pattern extraction failed: {e}")
             
             # World Modeling (Grounded situational awareness)
             self.world_model.process_utterance(payload)
@@ -317,7 +443,13 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
                         logger.error(f"Failed to persist knowledge: {e}")
             
             # Syntax Learning (Novelty: Learn HOW it was said)
+            # This feeds both GenerativeSystem AND CompositionalRealizer
             self.generative.learn_grammar(payload, extracted_knowledge)
+            
+            # Learn syntactic frames for compositional output
+            # Extract the pattern from the input text and the relations we found
+            for rel in extracted_knowledge:
+                self._learn_syntactic_frame_from_input(payload, rel)
 
         # 0b. Explicit Feedback (if provided in ctx)
         start_feedback = ctx.get("feedback_score", 0.0)
@@ -365,12 +497,70 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         active_concepts = self._ground_vector_to_concepts(evolved_vector, ctx)
         
         # 4. Gap Filling (Knowledge Augmentation)
-        # If we have low grounding confidence (few concepts found) OR high curiosity,
-        # we try to fetch external knowledge.
         external_context: List[KnowledgeFragment] = []
+        
+        # First check if we already have knowledge in the graph about this topic
+        has_graph_knowledge = False
+        if isinstance(payload, str):
+            # Extract likely subject and check graph
+            subject = self._extract_subject(payload, "")
+            if subject:
+                subject_id = subject.lower().replace(" ", "_")
+                existing = self.graph.get_node(subject_id, tenant_id=tenant_id)
+                if existing and existing.get("data", {}).get("definition"):
+                    has_graph_knowledge = True
+                    # Use the stored knowledge
+                    definition = existing["data"]["definition"]
+                    external_context = [KnowledgeFragment(
+                        source="graph_recall",
+                        content=definition,
+                        identifier=subject,
+                        confidence=existing.get("confidence", 0.8),
+                    )]
+                    logger.info(f"[{self.id}] Recalled knowledge from graph: {subject}")
+        
+        # Trigger external lookup when:
+        # - No concepts grounded, OR
+        # - Few concepts (<3) with high curiosity, OR
+        # - Query is a question and we have no strong inference confidence
+        # - Statement contains unknown nouns (proactive learning)
+        # BUT only if we don't already have graph knowledge
+        # AND only for genuine knowledge queries, not social/phatic phrases
+        
+        # Social/phatic utterances that should NOT trigger knowledge lookup
+        SOCIAL_PATTERNS = [
+            "how are you", "how's it going", "what's up", "how do you do",
+            "hi", "hello", "hey", "bye", "goodbye", "thanks", "thank you",
+            "good morning", "good afternoon", "good evening", "good night",
+            "nice to meet you", "pleased to meet you", "you're welcome",
+        ]
+        is_social = isinstance(payload, str) and any(
+            payload.lower().strip().startswith(p) or payload.lower().strip() == p
+            for p in SOCIAL_PATTERNS
+        )
+        
+        is_question = isinstance(payload, str) and not is_social and any(
+            payload.lower().startswith(q) for q in 
+            ["what ", "who ", "where ", "when ", "why ", "how ", "do you know", "tell me about", "define ", "can you tell"]
+        )
+        
+        # Check for unknown nouns in statements (proactive learning)
+        # Skip for social phrases
+        unknown_nouns = []
+        if isinstance(payload, str) and not is_question and not is_social:
+            unknown_nouns = self._find_unknown_nouns(payload, tenant_id)
+        
+        # For questions about specific topics without graph knowledge, always try external lookup
+        # For general queries, only augment with sparse grounding
+        # For statements with unknown nouns, learn about them proactively
+        # Skip for social/phatic phrases - they don't need external knowledge
         should_augment = (
-            len(active_concepts) == 0 or 
-            (affective_state["curiosity_drive"] > 0.7 and len(active_concepts) < 3)
+            not is_social and 
+            not has_graph_knowledge and (
+                len(active_concepts) == 0 or 
+                (affective_state["curiosity_drive"] > 0.7 and len(active_concepts) < 3) or
+                is_question  # Questions about unknown topics should always try external lookup
+            )
         )
         
         if should_augment and isinstance(payload, str): # Currently only text lookup supported
@@ -378,11 +568,32 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
                 fragments = self.knowledge_service.search(payload, ctx)
                 if fragments:
                     external_context = fragments
-                    # In a full system, we would immediately encode these fragments
-                    # and re-run Grounding to find new concept IDs they point to.
+                    
+                    # Learn from the fetched knowledge
+                    for fragment in fragments:
+                        self._learn_from_fragment(fragment, payload, tenant_id)
+                    
                     logger.info(f"[{self.id}] Knowledge Augmentation found {len(fragments)} items.")
             except Exception as e:
                 logger.warning(f"[{self.id}] Knowledge Augmentation error: {e}")
+        
+        # Proactive learning: look up unknown nouns from statements
+        if unknown_nouns and isinstance(payload, str):
+            for noun in unknown_nouns[:2]:  # Limit to 2 nouns per statement
+                try:
+                    # Check if already in graph
+                    noun_id = noun.lower().replace(" ", "_")
+                    if self.graph.get_node(noun_id, tenant_id=tenant_id):
+                        continue
+                    
+                    # Look up the noun
+                    fragments = self.knowledge_service.search(f"What is a {noun}?", ctx)
+                    if fragments:
+                        for fragment in fragments:
+                            self._learn_from_fragment(fragment, f"What is a {noun}?", tenant_id)
+                        logger.info(f"[{self.id}] Proactive learning: {noun}")
+                except Exception as e:
+                    logger.debug(f"[{self.id}] Proactive learning failed for {noun}: {e}")
 
         # 4b. Reasoning (Symbolic Traversal)
         # Use the explicit graph to find logical connections, starting from active concepts
@@ -406,6 +617,7 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
                     context=ctx.get("original_text"),
                     goal=goal,
                     max_steps=self.config.get("deliberation_steps", 10),
+                    tenant_id=tenant_id,
                 )
                 
                 # Extract additional inferences
@@ -443,11 +655,28 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         }
         
         # 5. Synthesis / Generation
-        # Try ResponseComposer first (pattern-based with learning), fallback to GenerativeSystem
+        # Use the Conversational Architecture for motivated, coherent response generation
         response_text = ""
         composed_response = None
         
-        if self._response_composer:
+        if self._conversational_mode:
+            try:
+                response_text = self._generate_conversational_response(
+                    payload=payload,
+                    ctx=ctx,
+                    active_concepts=active_concepts,
+                    inferred_knowledge=inferred_knowledge,
+                    external_context=external_context,
+                    deliberation_result=deliberation_result,
+                    tenant_id=tenant_id,
+                )
+                self.last_thought["composition_source"] = "conversational"
+            except Exception as e:
+                logger.warning(f"[{self.id}] Conversational generation failed: {e}")
+                response_text = ""
+        
+        # Fallback: Try ResponseComposer (pattern-based with learning)
+        if not response_text and self._response_composer:
             try:
                 composed_response = self._response_composer.compose(
                     thought_context=self.last_thought,
@@ -462,7 +691,7 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
             except Exception as e:
                 logger.warning(f"[{self.id}] ResponseComposer failed: {e}")
         
-        # Fallback to GenerativeSystem
+        # Ultimate fallback to GenerativeSystem
         if not response_text:
             response_text = self.generative.compose(self.last_thought)
             self.last_thought["composition_source"] = "generative"
@@ -483,6 +712,241 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         self._update_intuition(active_concepts, ctx)
         
         logger.info(f"[{self.id}] Thought process complete. Concepts: {len(active_concepts)}, Response len: {len(response_text)}")
+
+    def _generate_conversational_response(
+        self,
+        payload: Any,
+        ctx: Dict[str, Any],
+        active_concepts: List[Tuple[str, float]],
+        inferred_knowledge: List[Dict],
+        external_context: List,
+        deliberation_result: Optional[DeliberationResult],
+        tenant_id: Optional[str] = None,
+    ) -> str:
+        """
+        Generate a response using the full Conversational Architecture.
+        
+        Four-stage pipeline:
+        1. Discourse Management: Track dialogue state, identify intent, obligations
+        2. Communication Planning: Decide what to communicate based on drives
+        3. Compositional Realization: Build language from concepts/relations
+        4. Self-Monitoring: Check quality before output
+        
+        This is where learning manifests as behavior - learned frames, discourse
+        markers, and syntactic patterns are used to generate output.
+        """
+        user_input = ctx.get("original_text", str(payload))
+        
+        # ===== Stage 1: Discourse Management =====
+        # Track where we are in the conversation and what's expected
+        
+        # Extract entities and topic from grounding
+        entities = []
+        for concept_id, confidence in active_concepts:
+            if confidence > 0.5:
+                # Get term from graph
+                try:
+                    node = self.graph.get_node(concept_id, tenant_id=tenant_id)
+                    if node and node.get("term"):
+                        entities.append(node["term"])
+                except Exception:
+                    entities.append(concept_id.replace("_", " "))
+        
+        # Get topic - simple approach, let learning discover what works
+        # Priority: entities from grounding > previous topic > first content word
+        topic = None
+        
+        # 1. First entity from grounding (already semantically relevant)
+        if entities:
+            for entity in entities:
+                if len(entity) > 2 and not entity.startswith("I "):
+                    topic = entity
+                    break
+        
+        # 2. Fallback to topic from previous turn (continuity)
+        if not topic:
+            prev_context = self._discourse_manager.get_topic_context()
+            if prev_context.get("current_topic"):
+                topic = prev_context["current_topic"]
+        
+        # 3. Fallback to extracted knowledge subject
+        if not topic and self.last_thought.get("extracted_knowledge"):
+            extracted = self.last_thought["extracted_knowledge"]
+            if extracted:
+                topic = extracted[0].subject
+        
+        # 4. Last resort: first meaningful word from input
+        if not topic and isinstance(payload, str):
+            words = payload.split()
+            for word in words:
+                # Skip very short words and common function words
+                if len(word) > 3 and word.lower() not in {"what", "when", "where", "which", "that", "this", "have", "been", "will", "would", "could"}:
+                    topic = word.rstrip("?!.,")
+                    break
+        
+        # Update discourse state
+        dialogue_state = self._discourse_manager.update(
+            user_input=user_input,
+            extracted_entities=entities,
+            extracted_topic=topic,
+            bot_response=self.last_interaction.get("response") if self.last_interaction else None,
+        )
+        
+        # Get obligations (what must we address?)
+        obligations = self._discourse_manager.get_obligations()
+        topic_context = self._discourse_manager.get_topic_context()
+        
+        logger.debug(f"[{self.id}] Discourse: phase={dialogue_state.phase}, "
+                    f"intent={dialogue_state.last_user_intent}, obligations={obligations}")
+        
+        # ===== Stage 2: Communication Planning =====
+        # Decide what to communicate based on drives and content
+        
+        # Get affective state (the drives)
+        affective_state = self.affective.get_state_vector()
+        
+        # Build working memory representation for planner
+        working_memory = {}
+        if deliberation_result:
+            for cid, concept in self._reasoning._working_memory.items():
+                working_memory[cid] = concept
+        
+        # Prepare inferences for planner
+        plan_inferences = []
+        for inf in inferred_knowledge:
+            plan_inferences.append(inf)
+        
+        # Create communication plan
+        plan = self._communication_planner.plan(
+            obligations=obligations,
+            working_memory=working_memory,
+            affective_state=affective_state,
+            inferences=plan_inferences,
+            external_knowledge=external_context,
+            current_topic=topic,
+            topic_context=topic_context,
+            user_intent=dialogue_state.last_user_intent,
+        )
+        
+        logger.debug(f"[{self.id}] Plan: goal={plan.primary_goal}, stance={plan.stance}, "
+                    f"content={len(plan.content_concepts)}, follow_up={plan.follow_up_goal}")
+        
+        # ===== Stage 3: Compositional Realization =====
+        # Build language from the plan using learned frames
+        
+        # Add relations from extracted knowledge if not already in plan
+        if self.last_thought.get("extracted_knowledge"):
+            for rel in self.last_thought["extracted_knowledge"]:
+                relation_tuple = (rel.subject, rel.predicate, rel.object)
+                if relation_tuple not in plan.content_relations:
+                    plan.content_relations.append(relation_tuple)
+        
+        # Add relations from external knowledge if it's a definition
+        if external_context and plan.primary_goal in ("inform", "elaborate"):
+            for frag in external_context[:1]:
+                content = frag.content if hasattr(frag, 'content') else str(frag)
+                if content and topic:
+                    # Add as a fact
+                    if content not in plan.content_facts:
+                        plan.content_facts.append(content)
+        
+        # Realize the plan as language
+        result = self._compositional_realizer.realize(
+            plan=plan,
+            topic_context=topic_context,
+        )
+        
+        draft_response = result.text
+        
+        logger.debug(f"[{self.id}] Realization: {len(result.frames_used)} frames, "
+                    f"confidence={result.confidence:.2f}")
+        
+        # ===== Stage 4: Self-Monitoring =====
+        # Check quality before output
+        
+        monitoring = self._self_monitor.evaluate(
+            draft=draft_response,
+            plan=plan,
+            dialogue_state=dialogue_state,
+            user_input=user_input,
+        )
+        
+        if not monitoring.passed:
+            logger.debug(f"[{self.id}] Self-monitor issues: {monitoring.issues}")
+            # Try revision
+            revised = self._self_monitor.suggest_revision(
+                draft=draft_response,
+                result=monitoring,
+                plan=plan,
+            )
+            if revised and revised != draft_response:
+                draft_response = revised
+                logger.debug(f"[{self.id}] Self-monitor revised response")
+        
+        # Record response for future repetition detection
+        self._self_monitor.record_response(draft_response, topic)
+        
+        # Update discourse manager with our response
+        self._discourse_manager.state.last_bot_response = draft_response
+        
+        # ===== Learning from Output =====
+        # If we used learned frames successfully, reinforce them
+        for frame_id in result.frames_used:
+            if "learned_" in frame_id:
+                self._compositional_realizer.update_frame_success(frame_id, True)
+        
+        return draft_response
+
+    def _learn_syntactic_frame_from_input(self, text: str, relation: ExtractedRelation) -> None:
+        """
+        Learn a syntactic frame from observed input.
+        
+        This is crucial for compositional generation - we learn HOW things
+        are expressed so we can express things the same way.
+        
+        Example:
+            Input: "A dolphin is a marine mammal"
+            Relation: (dolphin, is_a, marine mammal)
+            Learned Frame: "A {subject} is a {object}"
+        """
+        import re
+        
+        if not relation.subject or not relation.object:
+            return
+        
+        # Create template by replacing subject/object with placeholders
+        template = text
+        
+        # Case-insensitive replacement
+        subj_pattern = re.escape(relation.subject)
+        obj_pattern = re.escape(relation.object)
+        
+        # Replace subject first (usually longer), then object
+        # Sort by length to avoid partial replacements
+        replacements = sorted([
+            (subj_pattern, "{subject}", relation.subject),
+            (obj_pattern, "{object}", relation.object),
+        ], key=lambda x: len(x[2]), reverse=True)
+        
+        for pattern, placeholder, original in replacements:
+            template = re.sub(f"(?i)\\b{pattern}\\b", placeholder, template, count=1)
+        
+        # Only learn if we successfully created a template with both placeholders
+        if "{subject}" in template and "{object}" in template:
+            # Clean up the template
+            template = template.strip()
+            
+            # Normalize predicate
+            predicate = relation.predicate.lower().replace(" ", "_")
+            
+            # Teach the compositional realizer
+            self._compositional_realizer.learn_frame(
+                predicate=predicate,
+                template=template,
+            )
+            
+            logger.debug(f"[{self.id}] Learned syntactic frame for '{predicate}': {template}")
+
 
     def _update_intuition(self, activated_concepts: List[Tuple[str, float]], ctx: Dict):
         """
@@ -508,9 +972,24 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         # Ensure tensor is CPU/detached and FLATTENED for storage
         if isinstance(thought_vector, torch.Tensor):
             thought_vector = thought_vector.detach().cpu().flatten().tolist()
-        elif isinstance(thought_vector, list) and thought_vector and isinstance(thought_vector[0], list):
-            # Already a nested list - flatten it
-            thought_vector = thought_vector[0]
+        
+        # Robust flattening: unwrap nested lists until we have a flat list of numbers
+        while isinstance(thought_vector, list) and thought_vector:
+            if isinstance(thought_vector[0], (list, tuple)):
+                thought_vector = thought_vector[0]
+            elif hasattr(thought_vector[0], 'tolist'):
+                # Element is a tensor/ndarray
+                thought_vector = thought_vector[0].tolist()
+                if not isinstance(thought_vector, list):
+                    thought_vector = [thought_vector]
+            else:
+                # First element is a scalar - we're flat
+                break
+        
+        # Final validation: ensure all elements are numeric
+        if not thought_vector or not all(isinstance(x, (int, float)) for x in thought_vector):
+            logger.warning(f"[{self.id}] Plasticity: Invalid thought_vector type: {type(thought_vector)}")
+            return
 
         try:
             # 2. Load State
@@ -606,12 +1085,13 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
             
             # C: Topic Extraction (Neural Grounding)
             # Find implicit topics ("Tell me about snakes" -> snakes)
-            topic = self.topic_extractor.extract_topic(original_text)
+            topic, topic_confidence = self.topic_extractor.extract_topic(original_text)
             if topic:
-                # Add topic as a concept match with high confidence
+                # Add topic as a concept match with confidence from extractor
                 t_id = topic.lower().replace(" ", "_")
-                matches.append((t_id, 0.95))
-                logger.info(f"[{self.id}] Neural Topic Grounding found: {topic}")
+                # Use topic_confidence but cap at 0.95
+                matches.append((t_id, min(topic_confidence, 0.95)))
+                logger.info(f"[{self.id}] Neural Topic Grounding found: {topic} (conf: {topic_confidence:.2f})")
 
         # 2. Vector-based Grounding (Future)
         # In production v2, this would be an ANN search (FAISS/HNSW).
@@ -671,6 +1151,262 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         # Also update affective state
         feedback_score = 0.3 if success else -0.2
         self.affective.update(feedback_score, {})
+    
+    def _learn_from_fragment(
+        self,
+        fragment: KnowledgeFragment,
+        original_query: str,
+        tenant_id: Optional[str] = None
+    ) -> int:
+        """
+        Learn from an external knowledge fragment.
+        
+        This extracts semantic relations, concepts, and vocabulary from
+        external knowledge (Wikipedia, Dictionary) and adds them to the
+        graph and pattern stores.
+        
+        Args:
+            fragment: The knowledge fragment to learn from
+            original_query: The query that triggered the lookup
+            tenant_id: Tenant context for storage
+            
+        Returns:
+            Number of items learned (relations + concepts)
+        """
+        learned_count = 0
+        content = fragment.content
+        identifier = fragment.identifier
+        source = fragment.source
+        
+        if not content:
+            return 0
+        
+        logger.debug(f"[{self.id}] Learning from {source}: {identifier[:50]}...")
+        
+        # 1. Extract the main subject from the query
+        subject = self._extract_subject(original_query, identifier)
+        
+        # 2. Extract semantic relations from the content
+        extractor = SemanticExtractor()
+        relations = extractor.extract(content)
+        
+        # 3. Add the main concept to the graph
+        try:
+            subject_id = subject.lower().replace(" ", "_")
+            
+            # Create concept node with embedding
+            subject_embedding = self.encoder.encode(subject.split())
+            embedding_list = subject_embedding.flatten().tolist()[:64]  # Truncate for storage
+            
+            self.graph.add_node(
+                node_id=subject_id,
+                node_type="concept",
+                term=subject,
+                confidence=fragment.confidence,
+                data={
+                    "source": source,
+                    "definition": content[:500],  # Store first 500 chars
+                    "embedding": embedding_list,
+                },
+                tenant_id=tenant_id,
+            )
+            learned_count += 1
+            logger.debug(f"[{self.id}] Added concept node: {subject}")
+        except Exception as e:
+            logger.debug(f"[{self.id}] Failed to add concept {subject}: {e}")
+        
+        # 4. Add extracted relations to the graph
+        for rel in relations:
+            try:
+                # Normalize IDs
+                subj_id = rel.subject.lower().replace(" ", "_")
+                obj_id = rel.object.lower().replace(" ", "_")
+                
+                # Add object node if it doesn't exist
+                if not self.graph.get_node(obj_id, tenant_id=tenant_id):
+                    self.graph.add_node(
+                        node_id=obj_id,
+                        node_type="concept",
+                        term=rel.object,
+                        confidence=rel.confidence * 0.8,  # Slightly lower for inferred
+                        data={"source": f"extracted_from_{source}"},
+                        tenant_id=tenant_id,
+                    )
+                
+                # Add the relationship edge
+                self.graph.add_edge(
+                    from_id=subj_id,
+                    to_id=obj_id,
+                    relation_type=rel.predicate,
+                    confidence=rel.confidence,
+                    tenant_id=tenant_id,
+                )
+                learned_count += 1
+                logger.debug(f"[{self.id}] Added relation: {rel.subject} -[{rel.predicate}]-> {rel.object}")
+            except Exception as e:
+                logger.debug(f"[{self.id}] Failed to add relation: {e}")
+        
+        # 5. Add to response pattern store for future retrieval
+        if self._response_composer and self._response_composer.patterns:
+            try:
+                # Create a concise definition response
+                first_sentence = content.split('.')[0] + '.'
+                self._response_composer.patterns.add_pattern(
+                    trigger_context=original_query,
+                    response_text=first_sentence,
+                    success_score=fragment.confidence,
+                    intent="learned_definition",
+                )
+                learned_count += 1
+                logger.debug(f"[{self.id}] Added response pattern for: {original_query[:30]}")
+            except Exception as e:
+                logger.debug(f"[{self.id}] Failed to add response pattern: {e}")
+        
+        # 6. Extract and learn vocabulary (key terms)
+        key_terms = self._extract_key_terms_from_content(content)
+        for term in key_terms[:5]:  # Limit to top 5 terms
+            try:
+                term_id = term.lower().replace(" ", "_")
+                if not self.graph.get_node(term_id, tenant_id=tenant_id):
+                    term_embedding = self.encoder.encode(term.split())
+                    self.graph.add_node(
+                        node_id=term_id,
+                        node_type="term",
+                        term=term,
+                        confidence=0.6,  # Lower confidence for extracted terms
+                        data={
+                            "source": f"vocabulary_{source}",
+                            "embedding": term_embedding.flatten().tolist()[:64],
+                        },
+                        tenant_id=tenant_id,
+                    )
+                    learned_count += 1
+            except Exception as e:
+                logger.debug(f"[{self.id}] Failed to add term {term}: {e}")
+        
+        logger.info(f"[{self.id}] Learned {learned_count} items from {source}: {identifier}")
+        return learned_count
+    
+    def _extract_subject(self, query: str, identifier: str) -> str:
+        """Extract the main subject from a query or use the identifier."""
+        q = query.lower()
+        # Sorted by length (longest first) like knowledge_service
+        prefixes = [
+            "can you tell me about ", "can you explain ",
+            "do you know about ", "do you know what ",
+            "tell me about ", "tell me what ",
+            "what is the ", "what is an ", "what is a ", "what is ",
+            "what are the ", "what are ",
+            "definition of ",
+            "who was ", "who are ", "who is ",
+            "where was ", "where is ",
+            "when was ", "when did ",
+            "why does ", "why do ", "why is ",
+            "how does ", "how do ", "how is ",
+            "describe ", "explain ", "define ",
+        ]
+        for prefix in prefixes:
+            if q.startswith(prefix):
+                result = query[len(prefix):].strip("?.! ")
+                # Strip leading articles
+                for article in ["a ", "an ", "the "]:
+                    if result.lower().startswith(article):
+                        result = result[len(article):]
+                return result.strip()
+        return identifier
+    
+    def _extract_key_terms_from_content(self, content: str) -> List[str]:
+        """Extract key terms (proper nouns, technical terms) from content."""
+        import re
+        terms = []
+        
+        # Find proper nouns (capitalized words not at sentence start)
+        words = content.split()
+        for i, word in enumerate(words[1:], 1):  # Skip first word
+            # Check if capitalized and not common word
+            if word[0].isupper() and len(word) > 2:
+                clean = re.sub(r'[^\w]', '', word)
+                if clean and clean.lower() not in {'the', 'a', 'an', 'is', 'are', 'was', 'were'}:
+                    terms.append(clean)
+        
+        # Deduplicate while preserving order
+        seen = set()
+        unique_terms = []
+        for term in terms:
+            if term.lower() not in seen:
+                seen.add(term.lower())
+                unique_terms.append(term)
+        
+        return unique_terms
+    
+    def _find_unknown_nouns(
+        self,
+        text: str,
+        tenant_id: Optional[str] = None
+    ) -> List[str]:
+        """
+        Find nouns in text that are not yet known in the graph.
+        
+        Uses simple heuristics to identify likely nouns:
+        - Capitalized words (proper nouns)
+        - Words after articles (a, an, the)
+        - Common noun patterns
+        
+        Args:
+            text: Input text to analyze
+            tenant_id: Tenant context
+            
+        Returns:
+            List of unknown noun terms
+        """
+        import re
+        
+        unknown = []
+        words = text.split()
+        
+        # Common function words to skip
+        skip_words = {
+            'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them',
+            'my', 'your', 'his', 'her', 'its', 'our', 'their',
+            'this', 'that', 'these', 'those',
+            'is', 'am', 'are', 'was', 'were', 'be', 'been', 'being',
+            'have', 'has', 'had', 'do', 'does', 'did',
+            'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can',
+            'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+            'of', 'with', 'by', 'from', 'as', 'into', 'through', 'during',
+            'very', 'really', 'quite', 'just', 'also', 'too', 'so', 'today', 'yesterday',
+            'saw', 'see', 'seen', 'look', 'looked', 'pretty', 'beautiful', 'nice', 'good',
+        }
+        
+        for i, word in enumerate(words):
+            # Clean the word
+            clean = re.sub(r'[^\w]', '', word).lower()
+            if not clean or len(clean) < 3 or clean in skip_words:
+                continue
+            
+            # Check if it's after an article (likely a noun)
+            is_after_article = i > 0 and words[i-1].lower() in ('a', 'an', 'the')
+            
+            # Check if capitalized (proper noun) - not at sentence start
+            is_proper_noun = word[0].isupper() and i > 0 and not words[i-1].endswith('.')
+            
+            if is_after_article or is_proper_noun:
+                # Check if known in graph
+                node_id = clean.replace(" ", "_")
+                existing = self.graph.get_node(node_id, tenant_id=tenant_id)
+                
+                if not existing or not existing.get("data", {}).get("definition"):
+                    unknown.append(clean)
+        
+        # Deduplicate
+        seen = set()
+        unique = []
+        for noun in unknown:
+            if noun not in seen:
+                seen.add(noun)
+                unique.append(noun)
+        
+        return unique
 
     def stats(self) -> Dict[str, Any]:
         stats = {

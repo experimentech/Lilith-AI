@@ -16,7 +16,7 @@ class RelationalStore(Store):
 
     def __init__(self, path: str) -> None:
         self._path = Path(path)
-        self._conn = sqlite3.connect(self._path)
+        self._conn = sqlite3.connect(self._path, check_same_thread=False)
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT, expires_at REAL)"
         )

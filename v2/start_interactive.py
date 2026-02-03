@@ -116,10 +116,7 @@ def main():
     
     runtime.stages["trunk.vscode"] = cognitive
     
-    print("\033[1;32mSystem Online.\033[0m")
-    print("Commands: 'exit' to quit, 'health' for status, 'stats' for cognitive stats.")
-    print("Feedback: 'feedback+' = good response, 'feedback-' = bad response.")
-    print("Debug: 'reasoning' to show last deliberation result.")
+    print("\033[1;32mSystem Online.\033[0m Type /help for commands.")
     
     # 4. Interaction Loop
     ctx = {"tenant": tenant_id, "modality": "text"}
@@ -137,14 +134,26 @@ def main():
             if not user_input.strip():
                 continue
                 
-            if user_input.strip().lower() in ["exit", "quit"]:
+            if user_input.strip().lower() in ["/exit", "/quit"]:
                 break
+            
+            if user_input.strip().lower() == "/help":
+                print("\033[1;34mCommands:\033[0m")
+                print("  /exit, /quit     - Exit the CLI")
+                print("  /health          - System health check")
+                print("  /stats           - Cognitive stats")
+                print("  /feedback+       - Record positive feedback")
+                print("  /feedback-       - Record negative feedback")
+                print("  /reasoning       - Show last deliberation")
+                print("  /explain [style] - Explain reasoning (narrative/step_by_step/technical)")
+                print("  /consolidate     - Run memory consolidation")
+                continue
                 
-            if user_input.strip().lower() == "health":
+            if user_input.strip().lower() == "/health":
                 print(runtime.health_check(tenant=tenant_id))
                 continue
             
-            if user_input.strip().lower() == "stats":
+            if user_input.strip().lower() == "/stats":
                 stats = cognitive.stats()
                 print(f"\033[1;34mCognitive Stats:\033[0m")
                 for k, v in stats.items():
@@ -156,17 +165,17 @@ def main():
                         print(f"  {k}: {v}")
                 continue
             
-            if user_input.strip().lower() == "feedback+":
+            if user_input.strip().lower() == "/feedback+":
                 cognitive.record_response_outcome(success=True)
                 print("\033[1;32m✓ Positive feedback recorded\033[0m")
                 continue
             
-            if user_input.strip().lower() == "feedback-":
+            if user_input.strip().lower() == "/feedback-":
                 cognitive.record_response_outcome(success=False)
                 print("\033[1;31m✗ Negative feedback recorded\033[0m")
                 continue
             
-            if user_input.strip().lower() == "reasoning":
+            if user_input.strip().lower() == "/reasoning":
                 # Show last deliberation result
                 if hasattr(cognitive, '_reasoning') and cognitive._reasoning:
                     result = cognitive._reasoning.get_last_result()
@@ -178,11 +187,58 @@ def main():
                         print(f"  Mental Effort: {result.mental_effort:.3f}")
                         print(f"  Focus: {result.focus_concept}")
                         print(f"  Intent: {result.resolved_intent}")
+                        
+                        # Show concept chains if any were discovered
+                        if result.concept_chains:
+                            print(f"  \033[1;33mConcept Chains: {len(result.concept_chains)}\033[0m")
+                            for chain in result.concept_chains[:3]:  # Show top 3
+                                chain_str = " -> ".join(f"{t}[{r}]" for t, r in zip(chain.terms[:-1], chain.relations))
+                                chain_str += f" -> {chain.terms[-1]}" if chain.terms else ""
+                                print(f"    [{chain.confidence:.2f}] {chain_str}")
+                        
+                        # Show abstractions if any were formed
+                        if result.abstractions:
+                            print(f"  \033[1;36mAbstractions: {len(result.abstractions)}\033[0m")
+                            for abs in result.abstractions[:3]:  # Show top 3
+                                pattern_str = " -> ".join(abs.pattern)
+                                print(f"    [{abs.confidence:.2f}] {abs.name}: {pattern_str}")
+                                print(f"      Seen {abs.occurrence_count}x, exemplars: {', '.join(abs.exemplar_terms[:3])}")
+                        
                         print(f"  Inferences: {len(result.inferences)}")
                         for inf in result.inferences[:5]:  # Show first 5
-                            print(f"    - [{inf.inference_type}] {inf.conclusion[:60]}...")
+                            marker = "⛓" if inf.inference_type == "chain" else "•"
+                            print(f"    {marker} [{inf.inference_type}] {inf.conclusion[:60]}...")
                     else:
                         print("No deliberation result yet.")
+                else:
+                    print("Reasoning stage not enabled.")
+                continue
+            
+            if user_input.strip().lower() == "/consolidate":
+                # Run memory consolidation
+                if hasattr(cognitive, '_reasoning') and cognitive._reasoning:
+                    stats = cognitive._reasoning.consolidate_memory(tenant_id=tenant_id)
+                    print(f"\033[1;35mMemory Consolidation:\033[0m")
+                    print(f"  Strengthened connections: {stats.get('strengthened_connections', 0)}")
+                    print(f"  New attractors: {stats.get('new_attractors', 0)}")
+                    print(f"  Merged abstractions: {stats.get('merged_abstractions', 0)}")
+                    print(f"  Decayed: {stats.get('decayed_connections', 0)} working memory items")
+                else:
+                    print("Reasoning stage not enabled.")
+                continue
+            
+            if user_input.strip().lower().startswith("/explain"):
+                # Generate explanation of last reasoning
+                if hasattr(cognitive, '_reasoning') and cognitive._reasoning:
+                    parts = user_input.strip().split()
+                    style = parts[1] if len(parts) > 1 else "narrative"
+                    if style not in ("narrative", "step_by_step", "technical"):
+                        style = "narrative"
+                    
+                    explanation = cognitive._reasoning.explain(style=style)
+                    style_label = style.replace("_", "-")
+                    print(f"\033[1;36mExplanation ({style_label}):\033[0m")
+                    print(explanation)
                 else:
                     print("Reasoning stage not enabled.")
                 continue

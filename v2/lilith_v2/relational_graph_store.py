@@ -12,7 +12,7 @@ class RelationalGraphStore:
 
     def __init__(self, path: str) -> None:
         self._path = Path(path)
-        self._conn = sqlite3.connect(self._path)
+        self._conn = sqlite3.connect(self._path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA foreign_keys = ON")
         self._conn.execute("PRAGMA journal_mode = WAL")

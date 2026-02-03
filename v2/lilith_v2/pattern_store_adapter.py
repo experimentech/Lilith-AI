@@ -84,6 +84,28 @@ class PatternStoreAdapter:
         for _, value in self.store.list(prefix=self._prefix()):
             yield value
 
+    def get_top_patterns(self, n: int = 5) -> list[Dict[str, Any]]:
+        """Get top N patterns by success score for replay/consolidation."""
+        patterns = list(self.list())
+        patterns.sort(key=lambda p: p.get("success_score", 0.0), reverse=True)
+        return patterns[:n]
+
+    def prune_low_scoring(self, threshold: float = 0.2) -> int:
+        """Remove patterns with success score below threshold. Returns count pruned."""
+        pruned = 0
+        for pattern in list(self.list()):
+            if pattern.get("success_score", 0.0) < threshold:
+                pid = pattern.get("id")
+                if pid:
+                    self.store.delete(self._key(pid))
+                    pruned += 1
+        return pruned
+
+    @property
+    def patterns(self) -> list[Dict[str, Any]]:
+        """Property access to all patterns (for health monitoring)."""
+        return list(self.list())
+
     def _prefix(self) -> str:
         return f"{self.namespace}:pattern:"
 

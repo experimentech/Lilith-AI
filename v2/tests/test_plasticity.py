@@ -19,16 +19,16 @@ class MockEncoder:
 class MockGraph(RelationalGraphStore):
     def __init__(self):
         self.nodes = {}
-    def add_node(self, node_id, node_type, term, confidence=1.0, data=None):
+    def add_node(self, node_id, node_type, term, confidence=1.0, data=None, tenant_id=None):
         self.nodes[node_id] = term
     def add_edge(self, *args, **kwargs): pass
     def traverse_bfs(self, *args, **kwargs): return []
-    def get_node(self, node_id): return {"term": self.nodes.get(node_id)}
-    def get_all_terms(self):
+    def get_node(self, node_id, tenant_id=None): return {"term": self.nodes.get(node_id)}
+    def get_all_terms(self, tenant_id=None):
         # Used by ConceptGrounder hydrate
         # Return list of (id, term) tuples
         return [(nid, term) for nid, term in self.nodes.items()]
-    def find_nodes(self, term):
+    def find_nodes(self, term, tenant_id=None):
         # Support grounding
         found = []
         for nid, val in self.nodes.items():
@@ -39,7 +39,7 @@ class MockGraph(RelationalGraphStore):
                 m.confidence = 1.0
                 found.append(m)
         return found
-    def get_edges(self, *args): return []
+    def get_edges(self, *args, **kwargs): return []
 
 class TestPlasticity(unittest.TestCase):
     def setUp(self):

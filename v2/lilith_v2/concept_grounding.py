@@ -109,9 +109,13 @@ class ConceptGrounder:
         # We need to scan bigrams or check full phrase match against text?
         # For prototype simplicity:
         # Check against full text (slow but works for "computer science")
-        if process and self._term_cache:
+        if process and self._term_cache and isinstance(self._term_cache, list) and len(self._term_cache) > 0:
              # Try to match the WHOLE text against concepts too?
-             ids, terms = zip(*self._term_cache)
+             try:
+                 ids, terms = zip(*self._term_cache)
+             except (ValueError, TypeError):
+                 # Empty or malformed cache
+                 return found_concepts
              # This is expensive if we have 10k terms. For small graph in test it is fine.
              # Find concepts that appear in the text
              # Actually, better: if the text contains a concept term.
@@ -149,8 +153,12 @@ class ConceptGrounder:
         if not self._term_cache:
             return None
             
-        # Unpack terms for rapidfuzz
-        ids, terms = zip(*self._term_cache)
+        # Unpack terms for rapidfuzz - guard against empty list
+        try:
+            ids, terms = zip(*self._term_cache)
+        except ValueError:
+            # Empty cache
+            return None
         
         if process:
             # RapidFuzz extraction
@@ -197,11 +205,16 @@ class ConceptGrounder:
         # Here we just fetch all terms (assuming <10k for prototype).
         if self._term_cache_dirty:
             # Protocol check: does graph support tenant_id?
-            # If so, pass it.
-            if hasattr(self.graph, 'get_all_terms') and 'tenant_id' in self.graph.get_all_terms.__code__.co_varnames:
-                 self._term_cache = self.graph.get_all_terms(tenant_id=tenant_id)
-            else:
-                 self._term_cache = self.graph.get_all_terms()
+            # If so, pass it. Use try/except to handle mocks gracefully.
+            try:
+                method = getattr(self.graph, 'get_all_terms', None)
+                if method and hasattr(method, '__code__') and 'tenant_id' in method.__code__.co_varnames:
+                    self._term_cache = self.graph.get_all_terms(tenant_id=tenant_id)
+                else:
+                    self._term_cache = self.graph.get_all_terms()
+            except (AttributeError, TypeError):
+                # Fallback for mocks or objects without proper introspection
+                self._term_cache = self.graph.get_all_terms()
             
             self._term_cache_dirty = False 
             # In production set dirty=True after every learn() call via callback?

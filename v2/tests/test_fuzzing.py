@@ -30,6 +30,11 @@ def generate_noise(text: str, error_rate: float = 0.1) -> str:
 def stage():
     pmflow = MagicMock()
     graph = MagicMock()
+    # Configure mock to return proper types
+    graph.get_all_terms.return_value = []
+    graph.get_node.return_value = None
+    graph.find_nodes.return_value = []
+    
     encoder = MagicMock()
     encoder.encode.return_value = MagicMock() # Mock tensor
     

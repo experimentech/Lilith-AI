@@ -334,6 +334,8 @@ class ContrastiveLearner:
             ("hot", "cold"), ("big", "small"), ("fast", "slow"),
             ("happy", "sad"), ("good", "bad"), ("light", "dark"),
             ("up", "down"), ("left", "right"), ("yes", "no"),
+            ("agree", "disagree"), ("accept", "reject"), ("like", "dislike"),
+            ("true", "false"), ("right", "wrong"), ("positive", "negative"),
         ]
         
         # Unrelated pairs (negatives)

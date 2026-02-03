@@ -1,5 +1,10 @@
 """v2 stub interfaces package."""
 
+# Re-export key classes for convenience
+from v2.lilith_v2.cognitive_stage import CognitiveStage
+from v2.lilith_v2.reasoning_stage import ReasoningStage, ConceptChain, DeliberationResult
+from v2.lilith_v2.cognitive_cycle import CognitiveCycle, ActionTier, NeuralHealthMetrics
+
 __all__ = [
 	"stage",
 	"store",
@@ -31,4 +36,13 @@ __all__ = [
 	"persistence_sqlite",
 	"response_composer",
 	"reasoning_stage",
+	"cognitive_cycle",
+	# Re-exported classes
+	"CognitiveStage",
+	"ReasoningStage",
+	"ConceptChain",
+	"DeliberationResult",
+	"CognitiveCycle",
+	"ActionTier",
+	"NeuralHealthMetrics",
 ]

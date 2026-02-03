@@ -209,6 +209,12 @@ class ResponseComposer:
         self.last_query = user_input
         self.metrics['responses_composed'] += 1
         
+        # Detect if this is a question about a topic
+        is_knowledge_question = any(
+            user_input.lower().startswith(q) for q in 
+            ["what ", "who ", "where ", "when ", "why ", "how ", "do you know", "tell me about", "define "]
+        )
+        
         # Priority 1: Graph inference results (direct answers)
         inference = thought_context.get("inference", [])
         if inference and self.mode == CompositionMode.GRAPH_FIRST:
@@ -217,33 +223,39 @@ class ResponseComposer:
                 self.last_response = graph_response
                 return graph_response
         
-        # Priority 2: Pattern-based response with retrieval
+        # Priority 2: External knowledge for questions (promote this for knowledge queries)
+        external = thought_context.get("external_knowledge", [])
+        if external and is_knowledge_question:
+            ext_response = self._compose_from_external(external)
+            self.last_response = ext_response
+            return ext_response
+        
+        # Priority 3: Pattern-based response with retrieval
         pattern_response = self._compose_from_patterns(user_input, thought_context, topk)
         if pattern_response and not pattern_response.is_fallback:
             self.last_response = pattern_response
             self.adaptive.register_confidence(pattern_response.confidence)
             return pattern_response
         
-        # Priority 3: Graph inference (fallback)
+        # Priority 4: Graph inference (fallback)
         if inference:
             graph_response = self._compose_from_inference(inference, thought_context)
             if graph_response:
                 self.last_response = graph_response
                 return graph_response
         
-        # Priority 4: Extracted knowledge acknowledgment
+        # Priority 5: External knowledge (for non-questions)
+        if external:
+            ext_response = self._compose_from_external(external)
+            self.last_response = ext_response
+            return ext_response
+        
+        # Priority 6: Extracted knowledge acknowledgment
         extracted = thought_context.get("extracted_knowledge", [])
         if extracted:
             ack_response = self._acknowledge_learning(extracted)
             self.last_response = ack_response
             return ack_response
-        
-        # Priority 5: External knowledge
-        external = thought_context.get("external_knowledge", [])
-        if external:
-            ext_response = self._compose_from_external(external)
-            self.last_response = ext_response
-            return ext_response
         
         # Fallback
         fallback = self._compose_fallback()
@@ -822,6 +834,18 @@ class ResponseComposer:
         if self.patterns:
             self.patterns.update_success(pattern_id, -strength, plasticity_rate=1.0)
             logger.info(f"👎 Downvoted pattern: {pattern_id}")
+    
+    def get_top_patterns(self, n: int = 5) -> list[Dict[str, Any]]:
+        """Get top N patterns by success score (for homeostatic replay)."""
+        if self.patterns and hasattr(self.patterns, 'get_top_patterns'):
+            return self.patterns.get_top_patterns(n)
+        return []
+    
+    def prune_low_scoring(self, threshold: float = 0.2) -> int:
+        """Prune patterns below threshold (for homeostatic maintenance)."""
+        if self.patterns and hasattr(self.patterns, 'prune_low_scoring'):
+            return self.patterns.prune_low_scoring(threshold)
+        return 0
     
     def get_stats(self) -> Dict[str, Any]:
         """Get composition statistics."""

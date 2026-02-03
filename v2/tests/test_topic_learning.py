@@ -34,12 +34,13 @@ class TestTopicLearning(unittest.TestCase):
         self.extractor.learn_topic("Rust", "Rust is a fast language.")
         
         # 2. Extract from exact match
-        topic = self.extractor.extract_topic("Do you know about Rust?")
+        topic, confidence = self.extractor.extract_topic("Do you know about Rust?")
         self.assertEqual(topic, "Rust")
+        self.assertGreater(confidence, 0.5)
         
         # 3. Extract from noisy query
         # "tell me about" is in scaffolding, so it should be stripped
-        topic = self.extractor.extract_topic("Please tell me about Rust !!!")
+        topic, _ = self.extractor.extract_topic("Please tell me about Rust !!!")
         self.assertEqual(topic, "Rust")
 
     def test_differentiation(self):
@@ -49,8 +50,8 @@ class TestTopicLearning(unittest.TestCase):
         # Should distinguish based on vector similarity (random vectors are orthogonal-ish in high dim, 
         # but low dim 10 might have collisions. Let's hope hash func is distinct enough.)
         
-        res_rust = self.extractor.extract_topic("Rust")
-        res_python = self.extractor.extract_topic("Python")
+        res_rust, _ = self.extractor.extract_topic("Rust")
+        res_python, _ = self.extractor.extract_topic("Python")
         
         self.assertEqual(res_rust, "Rust")
         self.assertEqual(res_python, "Python")

@@ -79,10 +79,29 @@ class WikipediaProvider(KnowledgeProvider):
         # Strip common question prefixes (Could be replaced by an LLM call or trained model later)
         # Keeping it simple for the architectural skeleton
         q = query.lower()
-        starts = ["what is ", "who is ", "tell me about ", "define "]
+        # Sorted by length (longest first) to match more specific prefixes first
+        starts = [
+            "can you tell me about ", "can you explain ",
+            "do you know about ", "do you know what ",
+            "tell me about ", "tell me what ",
+            "what is the ", "what is an ", "what is a ", "what is ",
+            "what are the ", "what are ",
+            "definition of ",
+            "who was ", "who are ", "who is ",
+            "where was ", "where is ",
+            "when was ", "when did ",
+            "why does ", "why do ", "why is ",
+            "how does ", "how do ", "how is ",
+            "describe ", "explain ", "define ",
+        ]
         for s in starts:
             if q.startswith(s):
-                return query[len(s):].strip("?.! ")
+                result = query[len(s):].strip("?.! ")
+                # Also strip leading articles
+                for article in ["a ", "an ", "the "]:
+                    if result.lower().startswith(article):
+                        result = result[len(article):]
+                return result.strip()
         return query.strip("?.! ")
 
 class DictionaryProvider(KnowledgeProvider):
