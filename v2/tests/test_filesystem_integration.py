@@ -4,7 +4,28 @@ from v2.lilith_v2.app import V2Runtime
 from v2.lilith_v2.mcp_router import MCPDescriptor, EndpointType
 
 class TestFileSystemIntegration(unittest.TestCase):
+    def setUp(self):
+        # Ensure clean state
+        if "LILITH_ENABLE_FS" in os.environ:
+            del os.environ["LILITH_ENABLE_FS"]
+    
+    def test_fs_disabled_by_default(self):
+        """File system operations should be disabled by default for safety."""
+        runtime = V2Runtime.default()
+        binding = runtime.bindings["trunk.tools"]
+        adapter = binding.ports[0]
+        transport = adapter._transport
+        
+        # list_tools should NOT include read_file or write_file
+        tools = transport.list_tools()
+        tool_names = {t["name"] for t in tools}
+        
+        self.assertNotIn("read_file", tool_names, "read_file should be disabled by default")
+        self.assertNotIn("write_file", tool_names, "write_file should be disabled by default")
+    
     def test_fs_tools(self):
+        # Enable file system for this test
+        os.environ["LILITH_ENABLE_FS"] = "true"
         # 1. Init Runtime (uses default() which wires trunk.tools)
         runtime = V2Runtime.default()
         
@@ -86,6 +107,9 @@ class TestFileSystemIntegration(unittest.TestCase):
     def tearDown(self):
         if os.path.exists("test_output.txt"):
             os.remove("test_output.txt")
+        # Reset env var
+        if "LILITH_ENABLE_FS" in os.environ:
+            del os.environ["LILITH_ENABLE_FS"]
 
 if __name__ == "__main__":
     unittest.main()

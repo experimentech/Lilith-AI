@@ -2,53 +2,53 @@
   "beagle": {
     "name": "beagle",
     "embedding": [
-      0.2672612078115344,
-      0.5345224156230688,
-      0.8017836894094945
+      0.2672612081132829,
+      0.5345224162265658,
+      0.8017836930304767
     ],
     "contexts": [
       "A Beagle is a type of dog."
     ],
-    "usage": 3,
+    "usage": 4,
     "success_rate": 0.5
   },
   "dog": {
     "name": "dog",
     "embedding": [
-      0.2672612078115344,
-      0.5345224156230688,
-      0.8017836894094945
+      0.2672612081132829,
+      0.5345224162265658,
+      0.8017836930304767
     ],
     "contexts": [
       "A Beagle is a type of dog."
     ],
-    "usage": 3,
+    "usage": 4,
     "success_rate": 0.5
   },
   "sparrow": {
     "name": "sparrow",
     "embedding": [
-      0.2672612078115344,
-      0.5345224156230688,
-      0.8017836894094945
+      0.2672612081132829,
+      0.5345224162265658,
+      0.8017836930304767
     ],
     "contexts": [
       "A Sparrow is a type of Bird."
     ],
-    "usage": 3,
+    "usage": 4,
     "success_rate": 0.5
   },
   "bird": {
     "name": "bird",
     "embedding": [
-      0.2672612078115344,
-      0.5345224156230688,
-      0.8017836894094945
+      0.2672612081132829,
+      0.5345224162265658,
+      0.8017836930304767
     ],
     "contexts": [
       "A Sparrow is a type of Bird."
     ],
-    "usage": 3,
+    "usage": 4,
     "success_rate": 0.5
   }
 }

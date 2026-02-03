@@ -58,7 +58,9 @@ class V2Runtime:
     @classmethod
     def default(cls) -> "V2Runtime":
         # Setup Limb Capabilities based on Env Vars (Safeguards)
-        enable_fs = os.getenv("LILITH_ENABLE_FS", "true").lower() == "true"
+        # SECURITY: All dangerous capabilities disabled by default
+        # Must be explicitly enabled via environment variables
+        enable_fs = os.getenv("LILITH_ENABLE_FS", "false").lower() == "true"
         enable_terminal = os.getenv("LILITH_ENABLE_TERMINAL", "false").lower() == "true"
         workspace_root = os.getcwd()
 
