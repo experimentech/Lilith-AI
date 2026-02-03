@@ -24,6 +24,7 @@ from .response_composer import ResponseComposer, ComposedResponse
 from .pattern_store_adapter import PatternStoreAdapter
 from .store import Store
 from .reasoning_stage import ReasoningStage, DeliberationResult, Inference
+from .action_planner import ActionPlanner, ExecutionPlan, PlannedStep
 
 # Conversational Architecture Stages (v2 enhancement)
 from .discourse_manager import DiscourseManager, DialogueState, DialogueAct
@@ -150,6 +151,20 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         self._conversational_mode = config.get("conversational_mode", True) if config else True
         if self._conversational_mode:
             logger.info(f"[{node_id}] Conversational Architecture enabled (discourse, planning, composition, monitoring)")
+        
+        # ===== Action Planner (Physics-based action sequencing) =====
+        # Uses trajectory tracing to plan multi-step actions
+        self._action_planning_enabled = config.get("enable_action_planning", True) if config else True
+        self._action_planner: Optional[ActionPlanner] = None
+        if self._action_planning_enabled:
+            self._action_planner = ActionPlanner(
+                encoder=self.encoder,
+                graph=self.graph,
+                trajectory_steps=config.get("action_trajectory_steps", 10) if config else 10,
+                grounding_threshold=config.get("action_grounding_threshold", 0.3) if config else 0.3,
+            )
+            has_flow = hasattr(encoder, 'enable_flow') and encoder.enable_flow
+            logger.info(f"[{node_id}] ActionPlanner initialized (agentic_flow={has_flow})")
         
         # Physics Engine (BioNN / Intuition)
         # Determine encoder output dimension by running a test encode
@@ -1408,6 +1423,126 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         
         return unique
 
+    # ===== Action Planning API =====
+    
+    def plan_actions(
+        self,
+        goal: str,
+        current_state: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        tenant_id: Optional[str] = None,
+    ) -> Optional[ExecutionPlan]:
+        """
+        Plan a sequence of actions to achieve a goal.
+        
+        Uses PMFlow's agentic physics to trace a trajectory from current state
+        toward the goal, grounding waypoints to registered actions.
+        
+        Args:
+            goal: Natural language goal description (e.g., "sign up to Moltbook")
+            current_state: Optional description of current state
+            context: Additional context for filling action arguments
+            tenant_id: Optional tenant ID for multi-tenant
+            
+        Returns:
+            ExecutionPlan with steps, or None if planning fails
+            
+        Example:
+            plan = brain.plan_actions("copy file.txt to backup/")
+            for step in plan.steps:
+                print(f"{step.step_num}: {step.action.name} -> {step.action.tool_binding}")
+        """
+        if not self._action_planner:
+            logger.warning("Action planning not enabled")
+            return None
+        
+        return self._action_planner.plan(
+            goal=goal,
+            current_state=current_state,
+            context=context or {},
+            tenant_id=tenant_id,
+        )
+    
+    def register_action(
+        self,
+        name: str,
+        description: str,
+        tool_binding: str,
+        arg_template: Optional[Dict[str, Any]] = None,
+        preconditions: Optional[List[str]] = None,
+        effects: Optional[List[str]] = None,
+        tenant_id: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Register an action for planning.
+        
+        Actions are stored as nodes in the knowledge graph with embeddings
+        computed from their description, enabling physics-based grounding.
+        
+        Args:
+            name: Action name (e.g., "navigate_to_url")
+            description: What this action does (used for semantic embedding)
+            tool_binding: Tool name in LocalToolsTransport to call
+            arg_template: Default/required arguments template
+            preconditions: State requirements before action can run
+            effects: State changes after action completes
+            tenant_id: Optional tenant ID
+            
+        Returns:
+            action_id if successful, None if planning not enabled
+        """
+        if not self._action_planner:
+            logger.warning("Action planning not enabled")
+            return None
+        
+        return self._action_planner.register_action(
+            name=name,
+            description=description,
+            tool_binding=tool_binding,
+            arg_template=arg_template,
+            preconditions=preconditions,
+            effects=effects,
+            tenant_id=tenant_id,
+        )
+    
+    def get_execution_commands(self, plan: ExecutionPlan) -> List[Dict[str, Any]]:
+        """
+        Convert a plan to execution format for LocalToolsTransport.
+        
+        Returns list of {"action": tool_name, "args": {...}} dicts
+        ready for somatic layer execution.
+        """
+        if not self._action_planner:
+            return []
+        return self._action_planner.to_execution_format(plan)
+    
+    def execute_plan(
+        self,
+        plan: ExecutionPlan,
+        transport,  # LocalToolsTransport or compatible
+        stop_on_error: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """
+        Execute a planned action sequence.
+        
+        Args:
+            plan: ExecutionPlan from plan_actions()
+            transport: Tool transport with call() method
+            stop_on_error: Stop on first error if True
+            
+        Returns:
+            List of step results
+            
+        Example:
+            plan = brain.plan_actions("backup important files")
+            results = brain.execute_plan(plan, tools_transport)
+        """
+        if not self._action_planner:
+            logger.warning("Action planning not enabled")
+            return []
+        
+        return self._action_planner.execute_plan(plan, transport, stop_on_error)
+
     def stats(self) -> Dict[str, Any]:
         stats = {
             "mood": self.affective.mood.label,
@@ -1428,6 +1563,13 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
             stats["reasoning_enabled"] = True
         else:
             stats["reasoning_enabled"] = False
+        
+        # Add action planner stats if available
+        if self._action_planner:
+            stats["action_planning_enabled"] = True
+            stats["registered_actions"] = len(self._action_planner._action_cache)
+        else:
+            stats["action_planning_enabled"] = False
         
         return stats
 
