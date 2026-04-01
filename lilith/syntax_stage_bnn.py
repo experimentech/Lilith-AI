@@ -29,6 +29,13 @@ import numpy as np
 from .embedding import PMFlowEmbeddingEncoder
 from .stage_coordinator import StageType, StageConfig, StageArtifact
 
+# Prefer semantic encoder for learning capability
+try:
+    from .learned_vocabulary_encoder import SemanticPMFlowEncoder
+    HAS_SEMANTIC_ENCODER = True
+except ImportError:
+    HAS_SEMANTIC_ENCODER = False
+
 # Import PMFlow plasticity functions (0.3.1 features)
 try:
     from pmflow import vectorized_pm_plasticity, contrastive_plasticity, batch_plasticity_update
@@ -135,11 +142,19 @@ class SyntaxStage:
         
         # Initialize PMFlow encoder for POS sequences
         if encoder is None:
-            logger.info("Initializing PMFlow encoder for syntax stage...")
-            self.encoder = PMFlowEmbeddingEncoder(
-                latent_dim=config.encoder_config.get("latent_dim", 32),
-                seed=config.encoder_config.get("seed", 42),
-            )
+            logger.info("Initializing encoder for syntax stage...")
+            if HAS_SEMANTIC_ENCODER:
+                self.encoder = SemanticPMFlowEncoder(
+                    dimension=config.encoder_config.get("dimension", 96),
+                    latent_dim=config.encoder_config.get("latent_dim", 32),
+                    enable_flow=True,
+                    bootstrap_semantics=True,
+                )
+            else:
+                self.encoder = PMFlowEmbeddingEncoder(
+                    latent_dim=config.encoder_config.get("latent_dim", 32),
+                    seed=config.encoder_config.get("seed", 42),
+                )
         else:
             self.encoder = encoder
             

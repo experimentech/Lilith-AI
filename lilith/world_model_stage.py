@@ -34,6 +34,11 @@ import torch.nn.functional as F
 
 from .cognitive_stage_base import CognitiveStageBase, CognitivePattern, RetrievalResult
 from .embedding import PMFlowEmbeddingEncoder
+try:
+    from .learned_vocabulary_encoder import SemanticPMFlowEncoder
+    HAS_SEMANTIC_ENCODER = True
+except ImportError:
+    HAS_SEMANTIC_ENCODER = False
 
 logger = logging.getLogger(__name__)
 
@@ -178,11 +183,19 @@ class WorldModelStage(CognitiveStageBase):
             enable_tracking: Track entities across conversations
         """
         # Create encoder with appropriate latent_dim for world modeling
+        # Prefer semantic encoder for meaningful word representations
         if encoder is None:
-            encoder = PMFlowEmbeddingEncoder(
-                latent_dim=64,  # Larger than syntax (32) for complex grounded reps
-                seed=42,
-            )
+            if HAS_SEMANTIC_ENCODER:
+                encoder = SemanticPMFlowEncoder(
+                    latent_dim=64,  # Larger than syntax (32) for complex grounded reps
+                    seed=42,
+                    bootstrap_semantics=True,
+                )
+            else:
+                encoder = PMFlowEmbeddingEncoder(
+                    latent_dim=64,
+                    seed=42,
+                )
         
         # Initialize base class
         super().__init__(

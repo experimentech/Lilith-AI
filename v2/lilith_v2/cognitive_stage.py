@@ -1,6 +1,9 @@
 import logging
 import json
+import uuid
 from typing import Any, Dict, List, Optional, Tuple, Union
+from pathlib import Path
+from datetime import datetime, timezone
 
 import torch
 import numpy as np
@@ -31,8 +34,44 @@ from .discourse_manager import DiscourseManager, DialogueState, DialogueAct
 from .communication_planner import CommunicationPlanner, CommunicationPlan
 from .compositional_realizer import CompositionalRealizer, RealizationResult
 from .self_monitor import SelfMonitor, MonitoringResult
+from .linguistic_relation_extractor import LinguisticRelationExtractor, ExtractedRelation as LinguisticRelation
+from .plastic_integration import PlasticProcessor, create_plastic_processor_for_stage
+
+try:
+    from .pmflow_lm_adapter import PMFlowLanguageAdapter
+except Exception:  # pragma: no cover
+    PMFlowLanguageAdapter = None  # type: ignore
 
 logger = logging.getLogger(__name__)
+
+
+def _build_pmflow_language_model(config: Dict[str, Any]) -> Any:
+    """Build optional PMFlow language model adapter from config."""
+    if not config or not config.get("enabled", False):
+        return None
+    if PMFlowLanguageAdapter is None:
+        logger.warning("pmflow_lm enabled but adapter import failed")
+        return None
+
+    checkpoint_path = config.get("checkpoint_path")
+    vocab_path = config.get("vocab_path")
+    if not checkpoint_path or not vocab_path:
+        logger.warning("pmflow_lm enabled but checkpoint_path/vocab_path is missing")
+        return None
+    if not Path(checkpoint_path).exists() or not Path(vocab_path).exists():
+        logger.warning("pmflow_lm paths do not exist: checkpoint=%s vocab=%s", checkpoint_path, vocab_path)
+        return None
+
+    try:
+        return PMFlowLanguageAdapter.from_checkpoint(
+            checkpoint_path=checkpoint_path,
+            vocab_path=vocab_path,
+            device=config.get("device", "cpu"),
+            model_kwargs=config.get("model_kwargs", {}),
+        )
+    except Exception as exc:
+        logger.warning("Failed to initialize pmflow_lm adapter: %s", exc)
+        return None
 
 class CognitiveStage: # We don't inherit from Stage Protocol directly as class, we implement it
     """
@@ -78,14 +117,23 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         self.feedback_detector = FeedbackDetector()
         self.semantic_extractor = SemanticExtractor()
         self.generative = GenerativeSystem(self.graph)
-        self.grounder = ConceptGrounder(self.graph)
         self.world_model = WorldModel()
+        pmflow_lm_cfg = self.config.get("pmflow_lm", {})
+        self.language_model = _build_pmflow_language_model(pmflow_lm_cfg)
+        self.grounder = ConceptGrounder(
+            self.graph,
+            language_model=self.language_model,
+            enable_lm_rerank=bool(pmflow_lm_cfg.get("enable_sense_lm_rerank", False)),
+            lm_rerank_min_ambiguity=float(pmflow_lm_cfg.get("lm_rerank_min_ambiguity", 0.12)),
+            lm_rerank_weight=float(pmflow_lm_cfg.get("lm_rerank_weight", 0.25)),
+        )
         
         # Linguistic Processor (multi-stage BioNN/Database processing)
         # Created early so TopicExtractor can use it for POS tagging
         self.linguistic = LinguisticProcessor(
             graph_store=self.graph,
-            encoder=self.encoder
+            encoder=self.encoder,
+            language_model=self.language_model,
         )
         
         # Topic Extractor (uses linguistic processor for noun extraction)
@@ -166,6 +214,15 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
             has_flow = hasattr(encoder, 'enable_flow') and encoder.enable_flow
             logger.info(f"[{node_id}] ActionPlanner initialized (agentic_flow={has_flow})")
         
+        # ===== Linguistic Relation Extractor =====
+        # Learns semantic relationships from natural language statements like:
+        # "hot is the opposite of cold" → antonym(hot, cold)
+        # "a dog is an animal" → hypernym(dog, animal)
+        self._relation_extractor = LinguisticRelationExtractor(
+            bootstrap_path="data/seed/capability_bootstrap.json"
+        )
+        logger.debug(f"[{node_id}] LinguisticRelationExtractor initialized")
+        
         # Physics Engine (BioNN / Intuition)
         # Determine encoder output dimension by running a test encode
         # The physics engine needs to match this for evolution to work
@@ -180,6 +237,23 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         
         # Use ParallelPMField to hold the "Mind Landscape" (Attractors)
         self.physics = ParallelPMField(d_latent=dim, n_centers=8, steps=10) # Default 8 thoughts
+        
+        # ===== Plastic Processing (Learnable Word/Intent Filtering) =====
+        # Replaces hardcoded stop words and intent detection with learned layers
+        # Created AFTER physics so we can integrate with BioNN/PMFlow
+        self._plastic_processor: Optional[PlasticProcessor] = None
+        if config and config.get("enable_plastic_processing", True):
+            from pathlib import Path
+            plastic_data_dir = config.get("plastic_data_dir")
+            self._plastic_processor = create_plastic_processor_for_stage(
+                stage_id=node_id,
+                data_dir=Path(plastic_data_dir) if plastic_data_dir else None,
+                device="cpu",
+                encoder=self.encoder,  # Share embeddings with semantic encoder
+                graph_store=self.graph,  # Persist learned patterns to graph
+                pmflow=self.physics,  # Integrate with BioNN dynamics
+            )
+            logger.info(f"[{node_id}] Plastic processing enabled (integrated with encoder, graph, PMFlow)")
 
         # In-memory interaction cache for "Short Term Memory" / Working Set
         # Concept ID -> Embedding Vector
@@ -190,6 +264,7 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         # State tracking
         self.last_thought: Dict[str, Any] = {}
         self.last_interaction: Optional[Dict[str, str]] = None
+        self._pending_lm_feedback_event_id: Optional[str] = None
         
         # Action Planning State
         # Pending plan awaiting user confirmation
@@ -491,24 +566,37 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
             # Feedback Detection & Response Learning
             fb_result = self.feedback_detector.detect(payload)
             if fb_result.score != 0.0:
-                 self.affective.update(fb_result.score, ctx)
-                 logger.info(f"[{self.id}] Implicit Feedback: {fb_result.signal} ({fb_result.score})")
-                 
-                 # LEARNING LOOP: Propagate feedback to response composer
-                 # This learns which response patterns work and which don't
-                 if self._response_composer and self.last_interaction:
-                     # Convert feedback score to success boolean
-                     # Positive signals (thanks, great, yes) = success
-                     # Negative signals (what?, confused, wrong) = failure
-                     success = fb_result.score > 0
-                     self._response_composer.record_outcome(success)
-                     outcome_symbol = '✓' if success else '✗'
-                     logger.debug(f"[{self.id}] Response learning: {outcome_symbol} from implicit feedback")
-                     
-                     # PATTERN EXTRACTION: If positive feedback, store response as pattern
-                     # This is where the system grows its repertoire by learning
-                     # what responses work in what contexts
-                     if success and fb_result.score > 0.3:
+                self.affective.update(fb_result.score, ctx)
+                logger.info(f"[{self.id}] Implicit Feedback: {fb_result.signal} ({fb_result.score})")
+
+                # Layer-aware confidence updates from previous turn grounding.
+                self._apply_layered_feedback_from_last_thought(fb_result.score)
+
+                # If the previous response used LM assist, fold this feedback into
+                # a DB-backed adaptation event for future fine-tuning/export.
+                if self._pending_lm_feedback_event_id:
+                    self._finalize_lm_adaptation_event(
+                        event_id=self._pending_lm_feedback_event_id,
+                        feedback_result=fb_result,
+                        user_feedback_text=payload,
+                    )
+                    self._pending_lm_feedback_event_id = None
+                
+                # LEARNING LOOP: Propagate feedback to response composer
+                # This learns which response patterns work and which don't
+                if self._response_composer and self.last_interaction:
+                    # Convert feedback score to success boolean
+                    # Positive signals (thanks, great, yes) = success
+                    # Negative signals (what?, confused, wrong) = failure
+                    success = fb_result.score > 0
+                    self._response_composer.record_outcome(success)
+                    outcome_symbol = '✓' if success else '✗'
+                    logger.debug(f"[{self.id}] Response learning: {outcome_symbol} from implicit feedback")
+                    
+                    # PATTERN EXTRACTION: If positive feedback, store response as pattern
+                    # This is where the system grows its repertoire by learning
+                    # what responses work in what contexts
+                    if success and fb_result.score > 0.3:
                          try:
                              last_input = self.last_interaction.get("input", "")
                              last_response = self.last_interaction.get("response", "")
@@ -537,13 +625,17 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
                 
                 if rel.confidence > threshold:
                     try:
-                        # Ensure nodes exist (Upsert logic)
-                        # We use the term itself as the ID for this simple phase
-                        subj_id = rel.subject.lower().replace(" ", "_")
-                        obj_id = rel.object.lower().replace(" ", "_")
-                        
-                        self.graph.add_node(subj_id, "learned_concept", rel.subject, confidence=rel.confidence, tenant_id=tenant_id)
-                        self.graph.add_node(obj_id, "learned_concept", rel.object, confidence=rel.confidence, tenant_id=tenant_id)
+                        # Allocate stable canonical concept IDs and preserve lexical aliases.
+                        subj_id = self.graph.get_or_create_concept(
+                            rel.subject,
+                            confidence=rel.confidence,
+                            alias=rel.subject,
+                        )
+                        obj_id = self.graph.get_or_create_concept(
+                            rel.object,
+                            confidence=rel.confidence,
+                            alias=rel.object,
+                        )
                         
                         self.graph.add_edge(subj_id, obj_id, rel.predicate, confidence=rel.confidence, tenant_id=tenant_id)
                         
@@ -560,6 +652,27 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
                     except Exception as e:
                         logger.error(f"Failed to persist knowledge: {e}")
             
+            # ===== LINGUISTIC RELATION LEARNING =====
+            # Learn semantic relationships from natural language patterns like:
+            # "hot is the opposite of cold" → trains antonym(hot, cold)
+            # "a dog is an animal" → trains hypernym(dog, animal)
+            # This is core contrastive learning through conversation.
+            if hasattr(self, '_relation_extractor'):
+                try:
+                    linguistic_relations = self._relation_extractor.extract_and_train(
+                        text=payload,
+                        encoder=self.encoder,
+                        graph_store=self.graph,
+                        tenant_id=tenant_id,
+                    )
+                    for lrel in linguistic_relations:
+                        logger.info(
+                            f"[{self.id}] Learned relation: {lrel.relation_type}"
+                            f"({lrel.term1}, {lrel.term2}) conf={lrel.confidence:.2f}"
+                        )
+                except Exception as e:
+                    logger.debug(f"[{self.id}] Linguistic relation extraction failed: {e}")
+            
             # Syntax Learning (Novelty: Learn HOW it was said)
             # This feeds both GenerativeSystem AND CompositionalRealizer
             self.generative.learn_grammar(payload, extracted_knowledge)
@@ -573,6 +686,7 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         start_feedback = ctx.get("feedback_score", 0.0)
         if start_feedback != 0.0:
             self.affective.update(start_feedback, ctx)
+            self._apply_layered_feedback_from_last_thought(float(start_feedback))
 
         affective_state = self.affective.get_state_vector()
 
@@ -623,8 +737,7 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
             # Extract likely subject and check graph
             subject = self._extract_subject(payload, "")
             if subject:
-                subject_id = subject.lower().replace(" ", "_")
-                existing = self.graph.get_node(subject_id, tenant_id=tenant_id)
+                existing = self.graph.find_concept_by_term(subject)
                 if existing and existing.get("data", {}).get("definition"):
                     has_graph_knowledge = True
                     # Use the stored knowledge
@@ -762,6 +875,8 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
              "intuition": evolved_vector,
              "affect": affective_state,
              "grounding": active_concepts,
+             "grounding_details": ctx.get("grounding_details", []),
+             "grounding_trace": ctx.get("grounding_trace", []),
              "world_state": self.world_model.get_context(),
              "extracted_knowledge": extracted_knowledge,
              "external_knowledge": [f.content for f in external_context],
@@ -836,6 +951,15 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
             
         self.last_thought["response"] = response_text
         self.last_thought["composed_response"] = composed_response
+
+        # Persist LM-assisted response episodes for offline adaptation.
+        if linguistic_artifact and self.last_thought.get("lm_assist_applied"):
+            self._pending_lm_feedback_event_id = self._record_lm_adaptation_event(
+                user_input=str(payload),
+                linguistic_artifact=linguistic_artifact,
+                response_text=response_text,
+                tenant_id=tenant_id,
+            )
         
         # Update interaction history
         if isinstance(payload, str):
@@ -878,6 +1002,12 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         """
         user_input = ctx.get("original_text", str(payload))
         
+        # ===== Stage 0: Self-Knowledge Lookup =====
+        # Handle questions about identity/capabilities from bootstrapped self-knowledge
+        self_response = self._check_self_knowledge_query(user_input, tenant_id)
+        if self_response:
+            return self_response
+        
         # ===== Stage 1: Discourse Management =====
         # Track where we are in the conversation and what's expected
         
@@ -918,12 +1048,32 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         
         # 4. Last resort: first meaningful word from input
         if not topic and isinstance(payload, str):
-            words = payload.split()
-            for word in words:
-                # Skip very short words and common function words
-                if len(word) > 3 and word.lower() not in {"what", "when", "where", "which", "that", "this", "have", "been", "will", "would", "could"}:
-                    topic = word.rstrip("?!.,")
-                    break
+            # Use plastic processing if available (learned salience)
+            if self._plastic_processor:
+                salient_words = self._plastic_processor.get_salient_words(payload)
+                if salient_words:
+                    topic = salient_words[0]
+            else:
+                # Fallback: static stop words (will be removed once plastic is trained)
+                stop_words = {
+                    # Articles/determiners
+                    "what", "when", "where", "which", "that", "this", "these", "those",
+                    # Auxiliaries and common verbs
+                    "have", "been", "will", "would", "could", "should", "might",
+                    "know", "find", "tell", "think", "said", "says", "make", "take",
+                    "does", "done", "doing", "went", "going", "come", "came",
+                    # Pronouns
+                    "your", "you're", "they", "them", "their", "about", "from",
+                    # Questions/responses
+                    "yes", "yeah", "okay", "sure", "please"
+                }
+                words = payload.split()
+                for word in words:
+                    word_clean = word.lower().rstrip("?!.,")
+                    # Skip very short words and stop words
+                    if len(word_clean) > 3 and word_clean not in stop_words:
+                        topic = word_clean
+                        break
         
         # Update discourse state
         dialogue_state = self._discourse_manager.update(
@@ -1025,6 +1175,34 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         )
         
         draft_response = result.text
+
+        # LM-assisted clarification fallback for weak parses when we have little grounded content.
+        # This keeps behavior explicit and auditable while reducing brittle heuristic outputs.
+        ling = ctx.get("linguistic")
+        lm_assist = None
+        low_confidence_parse = False
+        if ling is not None:
+            try:
+                lm_assist = ling.frame.attributes.get("lm_assist")
+                low_confidence_parse = bool(getattr(ling.parsed, "confidence", 1.0) < 0.6)
+            except Exception:
+                lm_assist = None
+                low_confidence_parse = False
+
+        sparse_plan = (
+            len(plan.content_concepts) == 0
+            and len(plan.content_relations) == 0
+            and len(plan.content_facts) == 0
+        )
+
+        if low_confidence_parse and sparse_plan and lm_assist:
+            draft_response = (
+                "I may be missing your intent. "
+                f"Did you mean something like: '{lm_assist}'?"
+            )
+            self.last_thought["lm_assist_applied"] = True
+        else:
+            self.last_thought["lm_assist_applied"] = False
         
         logger.debug(f"[{self.id}] Realization: {len(result.frames_used)} frames, "
                     f"confidence={result.confidence:.2f}")
@@ -1219,6 +1397,163 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         except Exception as e:
             logger.error(f"[{self.id}] Plasticity update failed: {e}")
 
+    def _record_lm_adaptation_event(
+        self,
+        user_input: str,
+        linguistic_artifact: LinguisticArtifact,
+        response_text: str,
+        tenant_id: Optional[str] = None,
+    ) -> Optional[str]:
+        """Store an LM-assist episode as an explicit graph node for later retraining."""
+        try:
+            event_id = f"lm_evt_{uuid.uuid4().hex[:12]}"
+            lm_assist = linguistic_artifact.frame.attributes.get("lm_assist")
+            if not lm_assist:
+                return None
+
+            event = {
+                "kind": "lm_assist_episode",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "tenant_id": tenant_id,
+                "user_input": user_input,
+                "normalized_input": linguistic_artifact.normalized_text,
+                "parse_confidence": linguistic_artifact.parsed.confidence,
+                "lm_score": linguistic_artifact.lm_score,
+                "lm_suggestion": lm_assist,
+                "assistant_response": response_text,
+                "status": "pending_feedback",
+                "feedback": None,
+            }
+
+            term = f"LM assist: {user_input[:80]}"
+            self.graph.add_node(
+                event_id,
+                "lm_adaptation_event",
+                term,
+                confidence=0.5,
+                data=event,
+                tenant_id=tenant_id,
+            )
+            logger.debug(f"[{self.id}] Logged LM adaptation event {event_id}")
+            return event_id
+        except Exception as e:
+            logger.debug(f"[{self.id}] Failed to log LM adaptation event: {e}")
+            return None
+
+    def _finalize_lm_adaptation_event(
+        self,
+        event_id: str,
+        feedback_result: FeedbackResult,
+        user_feedback_text: str,
+    ) -> None:
+        """Attach user feedback outcome to a previously logged LM assist episode."""
+        try:
+            node = self.graph.get_node(event_id)
+            if not node:
+                return
+
+            data = dict(node.get("data") or {})
+            accepted = feedback_result.score > 0
+            data["feedback"] = {
+                "text": user_feedback_text,
+                "signal": getattr(feedback_result.signal, "value", str(feedback_result.signal)),
+                "score": feedback_result.score,
+                "confidence": feedback_result.confidence,
+                "reason": feedback_result.reason,
+            }
+            data["status"] = "accepted" if accepted else "rejected"
+            data["finalized_at"] = datetime.now(timezone.utc).isoformat()
+
+            self.graph.update_node(
+                event_id,
+                confidence=0.9 if accepted else 0.2,
+                data=data,
+            )
+        except Exception as e:
+            logger.debug(f"[{self.id}] Failed to finalize LM adaptation event {event_id}: {e}")
+
+    def _check_self_knowledge_query(
+        self,
+        user_input: str,
+        tenant_id: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Check if query is about self-identity or capabilities.
+        Returns a response from bootstrapped self-knowledge if applicable.
+        """
+        input_lower = user_input.lower().strip()
+        
+        # Identity queries
+        identity_patterns = [
+            "who are you", "what are you", "your name", "what's your name",
+            "tell me about yourself", "introduce yourself", "who am i talking to",
+        ]
+        
+        # Capability queries  
+        capability_patterns = [
+            "what can you do", "your capabilities", "what do you do",
+            "what are your capabilities", "how can you help", "what can you help with",
+            "what are you able to do", "your abilities",
+        ]
+        
+        is_identity = any(p in input_lower for p in identity_patterns)
+        is_capability = any(p in input_lower for p in capability_patterns)
+        
+        if not is_identity and not is_capability:
+            return None
+            
+        try:
+            # Get self-knowledge from graph
+            identity = self.graph.get_node("self:identity", tenant_id=tenant_id)
+            
+            if not identity:
+                return None
+                
+            data = identity.get("data", {})
+            
+            if is_identity:
+                name = data.get("name", "Lilith")
+                description = data.get("description", "I am an AI assistant.")
+                return description or f"I'm {name}."
+                
+            if is_capability:
+                # Get capability nodes
+                capabilities = self.graph.get_related(
+                    "self:identity", 
+                    edge_type="has_capability",
+                    tenant_id=tenant_id,
+                )
+                
+                if capabilities:
+                    cap_list = []
+                    for cap in capabilities[:5]:  # Limit to 5
+                        target = cap.get("target", {})
+                        cap_data = target.get("data", {}) if isinstance(target, dict) else {}
+                        desc = cap_data.get("description", "")
+                        if desc:
+                            # Clean up "I can" prefix for variety
+                            if desc.startswith("I can "):
+                                cap_list.append(desc[6:])
+                            else:
+                                cap_list.append(desc.lower())
+                    
+                    if cap_list:
+                        response = "I can "
+                        if len(cap_list) == 1:
+                            response += cap_list[0]
+                        elif len(cap_list) == 2:
+                            response += f"{cap_list[0]} and {cap_list[1]}"
+                        else:
+                            response += ", ".join(cap_list[:-1]) + f", and {cap_list[-1]}"
+                        return response + ". What would you like help with?"
+                
+                return "I can help with various tasks. What do you need?"
+                
+        except Exception as e:
+            logger.debug(f"Self-knowledge lookup failed: {e}")
+            
+        return None
+    
     def _ground_vector_to_concepts(
         self, 
         vector: torch.Tensor, 
@@ -1229,6 +1564,8 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         This bridge allows "thinking" in vectors but "remembering" in facts.
         """
         matches = []
+        grounding_details: List[Dict[str, Any]] = []
+        grounding_trace_events: List[Dict[str, Any]] = []
         
         # 1. Text-based Grounding (The "Breadcrumb" Implementation)
         # If we have the raw text payload available, we can use fuzzy/synonym matching
@@ -1239,27 +1576,56 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         if original_text:
             # A: Full-phrase grounding (for QA matching)
             grounded = self.grounder.ground(original_text, tenant_id=tenant_id)
+            trace = self.grounder.get_last_trace()
+            if trace:
+                trace["step"] = "full_query"
+                grounding_trace_events.append(trace)
             for g in grounded:
                 matches.append((g.concept_id, g.confidence))
+                grounding_details.append(
+                    {
+                        "concept_id": g.concept_id,
+                        "sense_id": g.sense_id,
+                        "confidence": g.confidence,
+                        "source": g.source,
+                    }
+                )
             
             # B: Linguistic token grounding (content words from parser)
             # This gives us lemmatized nouns, verbs, adjectives
             grounding_terms = ctx.get("grounding_terms", [])
             for term in grounding_terms:
                 term_grounded = self.grounder.ground(term, threshold=85.0, tenant_id=tenant_id)
+                term_trace = self.grounder.get_last_trace()
+                if term_trace:
+                    term_trace["step"] = "term"
+                    term_trace["term"] = term
+                    grounding_trace_events.append(term_trace)
                 for g in term_grounded:
                     # Slightly lower confidence since these are individual words
                     matches.append((g.concept_id, g.confidence * 0.9))
+                    grounding_details.append(
+                        {
+                            "concept_id": g.concept_id,
+                            "sense_id": g.sense_id,
+                            "confidence": g.confidence * 0.9,
+                            "source": g.source,
+                        }
+                    )
             
             # C: Topic Extraction (Neural Grounding)
             # Find implicit topics ("Tell me about snakes" -> snakes)
             topic, topic_confidence = self.topic_extractor.extract_topic(original_text)
             if topic:
-                # Add topic as a concept match with confidence from extractor
-                t_id = topic.lower().replace(" ", "_")
+                # Add topic as a concept match when known in graph.
+                existing_topic = self.graph.find_concept_by_term(topic)
+                t_id = existing_topic["id"] if existing_topic else topic.lower().replace(" ", "_")
                 # Use topic_confidence but cap at 0.95
                 matches.append((t_id, min(topic_confidence, 0.95)))
                 logger.info(f"[{self.id}] Neural Topic Grounding found: {topic} (conf: {topic_confidence:.2f})")
+
+        ctx["grounding_details"] = grounding_details
+        ctx["grounding_trace"] = grounding_trace_events
 
         # 2. Vector-based Grounding (Future)
         # In production v2, this would be an ANN search (FAISS/HNSW).
@@ -1272,6 +1638,52 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
                 seen[concept_id] = conf
         
         return sorted(seen.items(), key=lambda x: x[1], reverse=True)
+
+    def _apply_layered_feedback_from_last_thought(self, feedback_score: float) -> None:
+        """Apply feedback to lexeme/sense/concept layers from previous grounding trace."""
+        if abs(feedback_score) < 1e-6:
+            return
+
+        details = self.last_thought.get("grounding_details", []) if isinstance(self.last_thought, dict) else []
+        grounding = self.last_thought.get("grounding", []) if isinstance(self.last_thought, dict) else []
+
+        seen_concepts = set()
+        seen_senses = set()
+
+        for item in details:
+            if not isinstance(item, dict):
+                continue
+            concept_id = item.get("concept_id")
+            sense_id = item.get("sense_id")
+            conf = float(item.get("confidence", 0.5))
+            weight = max(0.5, min(1.5, conf))
+
+            if concept_id and concept_id not in seen_concepts:
+                self.graph.apply_feedback_to_node(concept_id, feedback_score, evidence_weight=weight)
+                seen_concepts.add(concept_id)
+
+            if sense_id and sense_id not in seen_senses:
+                self.graph.apply_feedback_to_node(sense_id, feedback_score, evidence_weight=weight)
+                # Also reinforce/decay the mapping edge when present.
+                if concept_id:
+                    self.graph.update_edge_confidence(
+                        source=sense_id,
+                        target=concept_id,
+                        edge_type="maps_to",
+                        delta=0.06 * max(-1.0, min(1.0, feedback_score)) * weight,
+                        min_conf=0.0,
+                        max_conf=1.0,
+                    )
+                seen_senses.add(sense_id)
+
+        # Fallback for legacy traces without detailed grounding records.
+        if not details and grounding:
+            for concept_id, conf in grounding:
+                if concept_id in seen_concepts:
+                    continue
+                weight = max(0.5, min(1.5, float(conf)))
+                self.graph.apply_feedback_to_node(concept_id, feedback_score, evidence_weight=weight)
+                seen_concepts.add(concept_id)
     
     def _detect_action_signal(
         self,
@@ -1350,6 +1762,11 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
             success = score > 0
             self._response_composer.record_outcome(success)
             logger.debug(f"[{self.id}] Response outcome recorded: {'success' if success else 'failure'}")
+        
+        # Propagate to plastic processor for salience/intent learning
+        if self._plastic_processor:
+            self._plastic_processor.learn_from_feedback(score)
+            logger.debug(f"[{self.id}] Plastic layers updated with feedback: {score:.2f}")
     
     def record_response_outcome(self, success: bool) -> None:
         """
@@ -1414,24 +1831,26 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         
         # 3. Add the main concept to the graph
         try:
-            subject_id = subject.lower().replace(" ", "_")
+            subject_id = self.graph.get_or_create_concept(
+                subject,
+                confidence=fragment.confidence,
+                data={
+                    "source": source,
+                    "definition": content[:500],
+                },
+                alias=identifier,
+            )
             
             # Create concept node with embedding
             subject_embedding = self.encoder.encode(subject.split())
             embedding_list = subject_embedding.flatten().tolist()[:64]  # Truncate for storage
-            
-            self.graph.add_node(
-                node_id=subject_id,
-                node_type="concept",
-                term=subject,
-                confidence=fragment.confidence,
-                data={
-                    "source": source,
-                    "definition": content[:500],  # Store first 500 chars
-                    "embedding": embedding_list,
-                },
-                tenant_id=tenant_id,
-            )
+
+            existing = self.graph.get_node(subject_id)
+            existing_data = dict((existing or {}).get("data") or {})
+            existing_data["embedding"] = embedding_list
+            existing_data.setdefault("source", source)
+            existing_data.setdefault("definition", content[:500])
+            self.graph.update_node(subject_id, confidence=fragment.confidence, data=existing_data)
             learned_count += 1
             logger.debug(f"[{self.id}] Added concept node: {subject}")
         except Exception as e:
@@ -1440,20 +1859,18 @@ class CognitiveStage: # We don't inherit from Stage Protocol directly as class, 
         # 4. Add extracted relations to the graph
         for rel in relations:
             try:
-                # Normalize IDs
-                subj_id = rel.subject.lower().replace(" ", "_")
-                obj_id = rel.object.lower().replace(" ", "_")
-                
-                # Add object node if it doesn't exist
-                if not self.graph.get_node(obj_id, tenant_id=tenant_id):
-                    self.graph.add_node(
-                        node_id=obj_id,
-                        node_type="concept",
-                        term=rel.object,
-                        confidence=rel.confidence * 0.8,  # Slightly lower for inferred
-                        data={"source": f"extracted_from_{source}"},
-                        tenant_id=tenant_id,
-                    )
+                # Normalize into canonical concept IDs.
+                subj_id = self.graph.get_or_create_concept(
+                    rel.subject,
+                    confidence=rel.confidence,
+                    alias=rel.subject,
+                )
+                obj_id = self.graph.get_or_create_concept(
+                    rel.object,
+                    confidence=rel.confidence * 0.8,
+                    data={"source": f"extracted_from_{source}"},
+                    alias=rel.object,
+                )
                 
                 # Add the relationship edge
                 self.graph.add_edge(

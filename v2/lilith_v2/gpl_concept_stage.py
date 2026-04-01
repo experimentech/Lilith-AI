@@ -145,6 +145,24 @@ class GPLConceptStage(Stage):
         return None
 
     def _maybe_build_encoder(self, cfg: Dict[str, Any]) -> Optional[Any]:
+        """Build encoder with semantic learning if available."""
+        # Prefer semantic encoder for learning capability
+        try:
+            from lilith.learned_vocabulary_encoder import SemanticPMFlowEncoder
+            encoder = SemanticPMFlowEncoder(
+                dimension=int(cfg.get("dimension", 96)),
+                latent_dim=int(cfg.get("latent_dim", 48)),
+                enable_flow=True,
+                bootstrap_semantics=True,
+            )
+            state_path = cfg.get("state_path")
+            if state_path:
+                encoder.attach_state_path(Path(state_path))
+            return encoder
+        except ImportError:
+            pass
+        
+        # Fallback to hash-based encoder
         if PMFlowEmbeddingEncoder is None:
             return None
         encoder = PMFlowEmbeddingEncoder(

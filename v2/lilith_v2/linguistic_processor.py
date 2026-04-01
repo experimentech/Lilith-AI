@@ -84,6 +84,8 @@ class LinguisticArtifact:
     frame: SymbolicFrame
     syntax_embedding: Optional[torch.Tensor] = None
     semantic_embedding: Optional[torch.Tensor] = None
+    lm_score: Optional[float] = None
+    lm_suggestion: Optional[str] = None
     concepts: List[str] = field(default_factory=list)  # Grounded concept IDs
 
 
@@ -495,11 +497,13 @@ class LinguisticProcessor:
         self,
         graph_store = None,  # V2 RelationalGraphStore or MultiTenantGraphManager
         encoder = None,      # PMFlow encoder for syntax embeddings
+        language_model = None,  # Optional PMFlowLanguageAdapter
     ):
         self.intake = IntakeProcessor()
         self.parser = LexicalParser()
         self.graph = graph_store
         self.encoder = encoder
+        self.language_model = language_model
         
         logger.info("LinguisticProcessor initialized")
     
@@ -526,6 +530,20 @@ class LinguisticProcessor:
                 syntax_emb = self.encoder.encode(pos_string)
             except Exception as e:
                 logger.warning(f"Syntax encoding failed: {e}")
+
+        # 4b. Optional PMFlow LM assist
+        lm_score = None
+        lm_suggestion = None
+        if self.language_model:
+            try:
+                lm_score = self.language_model.score_text(normalized)
+                # Assist only when parsing confidence is weak.
+                if parsed.confidence < 0.6 and len(parsed.tokens) >= 3:
+                    lm_suggestion = self.language_model.generate_text(normalized, max_new_tokens=12)
+                    if lm_suggestion:
+                        frame.attributes["lm_assist"] = lm_suggestion
+            except Exception as e:
+                logger.warning(f"PMFlow LM assist failed: {e}")
         
         # 5. Store artifacts in graph (if available)
         if self.graph:
@@ -537,6 +555,8 @@ class LinguisticProcessor:
             parsed=parsed,
             frame=frame,
             syntax_embedding=syntax_emb,
+            lm_score=lm_score,
+            lm_suggestion=lm_suggestion,
         )
     
     def _store_artifacts(

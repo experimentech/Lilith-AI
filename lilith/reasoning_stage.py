@@ -36,6 +36,11 @@ import numpy as np
 # Import Agentic Learner
 from .general_purpose_learner import AgenticReasoningLearner, PatternStore
 from .embedding import PMFlowEmbeddingEncoder
+try:
+    from .learned_vocabulary_encoder import SemanticPMFlowEncoder
+    HAS_SEMANTIC_ENCODER = True
+except ImportError:
+    HAS_SEMANTIC_ENCODER = False
 
 logger = logging.getLogger(__name__)
 
@@ -862,11 +867,15 @@ def demo():
     print()
     
     try:
-        from .embedding import PMFlowEmbeddingEncoder
-        encoder = PMFlowEmbeddingEncoder(dimension=64, latent_dim=32)
+        from .learned_vocabulary_encoder import SemanticPMFlowEncoder
+        encoder = SemanticPMFlowEncoder(latent_dim=32, bootstrap_semantics=True)
     except ImportError:
-        print("Could not import encoder, skipping demo")
-        return
+        try:
+            from .embedding import PMFlowEmbeddingEncoder
+            encoder = PMFlowEmbeddingEncoder(dimension=64, latent_dim=32)
+        except ImportError:
+            print("Could not import encoder, skipping demo")
+            return
         
     reasoning = ReasoningStage(encoder, deliberation_steps=3)
     

@@ -40,7 +40,17 @@ class SemanticExtractor:
             (re.compile(r'(\w+(?:\s+\w+)?) is the opposite of (\w+(?:\s+\w+)?)', re.I), "opposite_of", 0.95),
         ]
         
-        self.stop_words = {'the', 'a', 'an', 'this', 'that', 'it', 'they', 'what', 'who', 'where'}
+        self.stop_words = {
+            # Articles/determiners
+            'the', 'a', 'an', 'this', 'that', 'it', 'they', 'what', 'who', 'where',
+            # Common verbs that don't make good concepts
+            'know', 'find', 'tell', 'think', 'have', 'does', 'make', 'take',
+            'said', 'says', 'went', 'come', 'came', 'been', 'going',
+            # Pronouns/demonstratives
+            'your', 'you', 'they', 'them', 'their', 'here', 'there',
+            # Question words
+            'when', 'how', 'why', 'which',
+        }
 
     def extract(self, text: str) -> List[ExtractedRelation]:
         results = []

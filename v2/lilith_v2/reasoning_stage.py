@@ -517,10 +517,18 @@ class ReasoningStage:
     def _extract_key_terms(self, query: str) -> List[str]:
         """Extract meaningful terms from a query for concept matching."""
         stop_words = {
+            # Question words/determiners
             "what", "is", "a", "an", "the", "of", "to", "in", "for", "on", 
             "with", "it", "be", "are", "was", "were", "how", "why", "when",
             "who", "which", "that", "this", "do", "does", "did", "can", "could",
             "would", "should", "will", "tell", "me", "about", "please", "explain",
+            # Common verbs that don't make good concepts
+            "know", "find", "think", "have", "has", "had", "make", "take",
+            "said", "says", "went", "come", "came", "been", "going", "done",
+            # Pronouns
+            "you", "your", "i", "my", "we", "our", "they", "them", "their",
+            # Other function words
+            "yes", "yeah", "okay", "sure", "from", "here", "there",
         }
         
         # Clean and split

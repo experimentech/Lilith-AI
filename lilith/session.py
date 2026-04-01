@@ -176,6 +176,13 @@ class LilithSession:
         from lilith.conversation_state import ConversationState
         from lilith.conversation_history import ConversationHistory
         
+        # Prefer semantic encoder for learning capability
+        try:
+            from lilith.learned_vocabulary_encoder import SemanticPMFlowEncoder
+            HAS_SEMANTIC_ENCODER = True
+        except ImportError:
+            HAS_SEMANTIC_ENCODER = False
+        
         self.user_id = user_id
         self.context_id = context_id or "default"
         self.cache_key = f"{user_id}:{self.context_id}"
@@ -232,12 +239,22 @@ class LilithSession:
             if self.user_preferences.display_name:
                 self.display_name = self.user_preferences.display_name
         
-        # Initialize encoder
-        self.encoder = PMFlowEmbeddingEncoder()
-
         # Per-user persistence root (ignored by git)
         user_root = Path(self.config.data_path) / "users" / self.user_id
         user_root.mkdir(parents=True, exist_ok=True)
+        
+        # Initialize encoder - prefer semantic for learning capability
+        if HAS_SEMANTIC_ENCODER:
+            vocab_path = user_root / "semantic_vocab"
+            self.encoder = SemanticPMFlowEncoder(
+                dimension=96,
+                latent_dim=48,
+                enable_flow=True,
+                vocab_path=vocab_path,
+                bootstrap_semantics=True,
+            )
+        else:
+            self.encoder = PMFlowEmbeddingEncoder()
 
         # Optional modality-agnostic memory leaf (DB-backed, embedding-addressable)
         self.memory_leaf_adapter = None

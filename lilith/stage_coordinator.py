@@ -23,6 +23,14 @@ from typing import Any, Dict, List, Optional
 import torch
 
 from .base import PipelineArtifact, Utterance
+
+# Prefer semantic encoder for learning capability
+try:
+    from .learned_vocabulary_encoder import SemanticPMFlowEncoder
+    HAS_SEMANTIC_ENCODER = True
+except ImportError:
+    HAS_SEMANTIC_ENCODER = False
+
 from .embedding import PMFlowEmbeddingEncoder
 
 
@@ -86,9 +94,20 @@ class CognitiveStage:
         if encoder is not None:
             self.encoder = encoder
         else:
-            self.encoder = PMFlowEmbeddingEncoder(**config.encoder_config)
-            if config.state_path:
-                self.encoder.attach_state_path(config.state_path)
+            # Prefer semantic encoder for learning capability
+            if HAS_SEMANTIC_ENCODER:
+                self.encoder = SemanticPMFlowEncoder(
+                    dimension=config.encoder_config.get("dimension", 96),
+                    latent_dim=config.encoder_config.get("latent_dim", 48),
+                    enable_flow=True,
+                    bootstrap_semantics=True,
+                )
+                if config.state_path:
+                    self.encoder.attach_state_path(config.state_path)
+            else:
+                self.encoder = PMFlowEmbeddingEncoder(**config.encoder_config)
+                if config.state_path:
+                    self.encoder.attach_state_path(config.state_path)
         
         self._log.info(
             "Initialized %s stage (plasticity=%s, namespace=%s)",

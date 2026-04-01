@@ -434,39 +434,35 @@ class CorpusIngester:
             # Track extracted relations
             self._extracted_relations.append(rel)
             
-            # Add subject and object as concept nodes
-            subj_id = f"concept_{rel.subject.replace(' ', '_')}"
-            obj_id = f"concept_{rel.object.replace(' ', '_')}"
-            
-            # Add subject node if new
+            # Add subject and object as canonical concept nodes
+            subj_id = self.graph.get_or_create_concept(
+                rel.subject,
+                confidence=rel.confidence,
+                alias=rel.subject,
+                tenant_id=self.tenant_id,
+            )
+            obj_id = self.graph.get_or_create_concept(
+                rel.object,
+                confidence=rel.confidence,
+                alias=rel.object,
+                tenant_id=self.tenant_id,
+            )
+
+            # Track subject node if new in this ingestion run
             if subj_id not in self._seen_concepts:
                 existing = self.graph.get_node(subj_id, tenant_id=self.tenant_id)
                 if existing:
                     stats.existing_concepts += 1
                 else:
-                    self.graph.add_node(
-                        node_id=subj_id,
-                        node_type="concept",
-                        term=rel.subject,
-                        confidence=rel.confidence,
-                        tenant_id=self.tenant_id,
-                    )
                     stats.new_concepts += 1
                 self._seen_concepts.add(subj_id)
             
-            # Add object node if new
+            # Track object node if new in this ingestion run
             if obj_id not in self._seen_concepts:
                 existing = self.graph.get_node(obj_id, tenant_id=self.tenant_id)
                 if existing:
                     stats.existing_concepts += 1
                 else:
-                    self.graph.add_node(
-                        node_id=obj_id,
-                        node_type="concept",
-                        term=rel.object,
-                        confidence=rel.confidence,
-                        tenant_id=self.tenant_id,
-                    )
                     stats.new_concepts += 1
                 self._seen_concepts.add(obj_id)
             
@@ -839,13 +835,21 @@ def ingest_corpus(
     # Initialize stores
     graph = RelationalGraphStore(str(prod_path / "knowledge.sqlite"))
     
-    # Try to get encoder
+    # Try to get semantic encoder (preferred for learning capability)
     encoder = None
     try:
-        from pmflow import PMFlowEmbeddingEncoder
-        encoder = PMFlowEmbeddingEncoder(dimension=96, latent_dim=48)
+        from lilith.learned_vocabulary_encoder import SemanticPMFlowEncoder
+        encoder = SemanticPMFlowEncoder(
+            dimension=96, 
+            latent_dim=48,
+            bootstrap_semantics=True,
+        )
     except ImportError:
-        logger.warning("PMFlow not available, ingesting without embeddings")
+        try:
+            from pmflow import PMFlowEmbeddingEncoder
+            encoder = PMFlowEmbeddingEncoder(dimension=96, latent_dim=48)
+        except ImportError:
+            logger.warning("No encoder available, ingesting without embeddings")
     
     # Create ingester
     ingester = CorpusIngester(

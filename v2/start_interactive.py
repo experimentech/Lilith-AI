@@ -178,6 +178,20 @@ def main():
     
     runtime.stages["trunk.vscode"] = cognitive
     
+    # 3.5. Apply capability bootstrap (self-knowledge, magic phrases, response patterns)
+    try:
+        from v2.lilith_v2.bootstrap_loader import bootstrap_cognitive_stage
+        bootstrap_stats = bootstrap_cognitive_stage(
+            cognitive, 
+            data_path="data/seed",
+            tenant_id=tenant_id,
+        )
+        if bootstrap_stats.get("self_knowledge", 0) > 0:
+            print(f"\033[1;33m  Bootstrap loaded: {sum(v for k, v in bootstrap_stats.items() if isinstance(v, int))} items\033[0m")
+    except Exception as e:
+        if args.verbose:
+            print(f"  Bootstrap not applied: {e}")
+    
     print("\033[1;32mSystem Online.\033[0m Type /help for commands.")
     
     # 4. Interaction Loop

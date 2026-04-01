@@ -989,6 +989,10 @@ class SemanticPMFlowEncoder:
         """Add word to vocabulary (pass-through to base_encoder)."""
         return self.base_encoder.add_word(word)
     
+    def add_words(self, words) -> list:
+        """Add multiple words to vocabulary."""
+        return self.base_encoder.add_words(words)
+    
     def has_word(self, word: str) -> bool:
         """Check if word is in vocabulary."""
         return self.base_encoder.has_word(word)

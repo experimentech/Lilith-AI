@@ -12,6 +12,13 @@ from .embedding import HashedEmbeddingEncoder, PMFlowEmbeddingEncoder
 from .intake import NoiseNormalizer
 from .parser import parse as parse_sentence
 
+# Prefer semantic encoder for learning capability
+try:
+    from .learned_vocabulary_encoder import SemanticPMFlowEncoder
+    HAS_SEMANTIC_ENCODER = True
+except ImportError:
+    HAS_SEMANTIC_ENCODER = False
+
 
 class SymbolicPipeline:
     """Run the language-to-symbol pipeline for a batch of utterances."""
@@ -41,6 +48,22 @@ class SymbolicPipeline:
     ) -> HashedEmbeddingEncoder | PMFlowEmbeddingEncoder:
         if not use_pmflow:
             return HashedEmbeddingEncoder()
+        
+        # Prefer semantic encoder for learning capability
+        if HAS_SEMANTIC_ENCODER:
+            try:
+                return SemanticPMFlowEncoder(
+                    dimension=pmflow_kwargs.get("dimension", 96) if pmflow_kwargs else 96,
+                    latent_dim=pmflow_kwargs.get("latent_dim", 48) if pmflow_kwargs else 48,
+                    enable_flow=True,
+                    bootstrap_semantics=True,
+                )
+            except Exception as exc:
+                logging.getLogger(__name__).warning(
+                    "SemanticPMFlowEncoder failed (%s); trying PMFlowEmbeddingEncoder.",
+                    exc,
+                )
+        
         try:
             return PMFlowEmbeddingEncoder(**(pmflow_kwargs or {}))
         except RuntimeError as exc:

@@ -20,6 +20,7 @@ except (ImportError, LookupError):
     NLTK_AVAILABLE = False
 
 from .relational_graph_store import RelationalGraphStore
+from .sense_resolver import SenseResolver
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class GroundedConcept:
     term: str
     confidence: float
     source: str # 'exact', 'fuzzy', 'synonym'
+    sense_id: Optional[str] = None
 
 class ConceptGrounder:
     """
@@ -38,11 +40,45 @@ class ConceptGrounder:
     It resolves "dog", "Dog", and "canine" to the same node ID "dog".
     """
 
-    def __init__(self, graph_store: RelationalGraphStore):
+    def __init__(
+        self,
+        graph_store: RelationalGraphStore,
+        *,
+        language_model: Any = None,
+        enable_lm_rerank: bool = False,
+        lm_rerank_min_ambiguity: float = 0.12,
+        lm_rerank_weight: float = 0.25,
+    ):
         self.graph = graph_store
+        self.sense_resolver = SenseResolver(
+            graph_store,
+            language_model=language_model,
+            enable_lm_rerank=enable_lm_rerank,
+            lm_rerank_min_ambiguity=lm_rerank_min_ambiguity,
+            lm_rerank_weight=lm_rerank_weight,
+        )
         # Cache of (id, term) for fuzzy matching
         self._term_cache: List[Tuple[str, str]] = []
         self._term_cache_dirty = True
+        self._last_trace: Dict[str, Any] = {}
+        # Restrict grounding to semantically meaningful node types.
+        self.allowed_grounding_types = [
+            "concept",
+            "learned_concept",
+            "entity",
+            "word",
+            "lexeme",
+            "sense",
+        ]
+        self.excluded_grounding_types = [
+            "lexical_token",
+            "utterance_parsed",
+            "symbolic_frame",
+            "pos_pattern",
+            "syntax_pattern",
+            "fragment",
+            "pattern",
+        ]
 
     def ground(self, text: str, threshold: float = 80.0, tenant_id: str = None) -> List[GroundedConcept]:
         """
@@ -56,6 +92,14 @@ class ConceptGrounder:
         self._refresh_cache(tenant_id)
         
         found_concepts = []
+        self._last_trace = {
+            "query": text,
+            "threshold": threshold,
+            "tenant_id": tenant_id,
+            "raw_matches": [],
+            "resolved_candidates": [],
+            "selected": [],
+        }
         words = self._tokenize(text)
         
         # 0. PRIORITY: Full input text matching (for QA pairs)
@@ -67,9 +111,12 @@ class ConceptGrounder:
             full_match.confidence = min(1.0, full_match.confidence + 0.15)
             full_match.source = "full_phrase"
             found_concepts.append(full_match)
-            # If we have a strong full match, we likely don't need token matches
-            if full_match.confidence > 0.85:
-                return found_concepts
+            self._last_trace["raw_matches"].append({
+                "node_id": full_match.concept_id,
+                "term": full_match.term,
+                "confidence": full_match.confidence,
+                "source": full_match.source,
+            })
         
         # 1. Exact & Fuzzy matching against Graph
         # We try to match each word (and bigrams?) against known terms.
@@ -88,6 +135,12 @@ class ConceptGrounder:
                 if len(match.term) < 6 and " " not in match.term:
                     match.confidence *= 0.5  # Heavy penalty for single short words
                 found_concepts.append(match)
+                self._last_trace["raw_matches"].append({
+                    "node_id": match.concept_id,
+                    "term": match.term,
+                    "confidence": match.confidence,
+                    "source": match.source,
+                })
             elif NLTK_AVAILABLE:
                 # 2. Synonym expansion
                 # If "canine" is not in graph, but "dog" is, and they are synonyms...
@@ -101,6 +154,12 @@ class ConceptGrounder:
                         match_syn.source = "synonym"
                         match_syn.term = word # Keep original term for context? No, map to ID
                         found_concepts.append(match_syn)
+                        self._last_trace["raw_matches"].append({
+                            "node_id": match_syn.concept_id,
+                            "term": match_syn.term,
+                            "confidence": match_syn.confidence,
+                            "source": match_syn.source,
+                        })
                         break # Only need one anchor per word usually
                         
         # 3. Handle multi-word concepts (computer science)
@@ -129,6 +188,12 @@ class ConceptGrounder:
                         confidence=1.0,
                         source="exact_phrase"
                     ))
+                      self._last_trace["raw_matches"].append({
+                          "node_id": ids[idx],
+                          "term": term,
+                          "confidence": 1.0,
+                          "source": "exact_phrase",
+                      })
                  # Or if fuzzy match of term is in text?
                  # "compputer science" in "I study compputer science"
                  elif " " in term:
@@ -140,13 +205,81 @@ class ConceptGrounder:
                             confidence=ratio / 100.0,
                             source="fuzzy_phrase"
                         ))
+                          self._last_trace["raw_matches"].append({
+                              "node_id": ids[idx],
+                              "term": term,
+                              "confidence": ratio / 100.0,
+                              "source": "fuzzy_phrase",
+                          })
+
+        # 4. Resolve through sense layer to canonical concept IDs when available.
+        found_concepts = self._resolve_matches(found_concepts, context_query=text)
 
         # Post-processing: Filter out low-confidence matches that shouldn't trigger responses
         # This prevents single-word pattern triggers from hijacking unrelated conversations
         min_useful_confidence = 0.6
         found_concepts = [c for c in found_concepts if c.confidence >= min_useful_confidence]
+        self._last_trace["selected"] = [
+            {
+                "concept_id": c.concept_id,
+                "sense_id": c.sense_id,
+                "confidence": c.confidence,
+                "source": c.source,
+            }
+            for c in found_concepts
+        ]
         
         return found_concepts
+
+    def _resolve_matches(self, matches: List[GroundedConcept], context_query: Optional[str] = None) -> List[GroundedConcept]:
+        """Resolve lexeme/sense hits into canonical concept IDs with score propagation."""
+        resolved: List[GroundedConcept] = []
+
+        for m in matches:
+            candidates = self.sense_resolver.resolve(
+                m.concept_id,
+                base_confidence=m.confidence,
+                context_query=context_query,
+            )
+            ambiguous = self.sense_resolver.is_ambiguous(candidates)
+            for c in candidates:
+                source = m.source if c.path == "direct" else f"{m.source}:{c.path}"
+                if ambiguous and len(candidates) > 1:
+                    source = f"{source}:ambiguous"
+                self._last_trace["resolved_candidates"].append(
+                    {
+                        "raw_node_id": m.concept_id,
+                        "concept_id": c.concept_id,
+                        "sense_id": c.sense_id,
+                        "path": c.path,
+                        "structural_score": c.structural_score,
+                        "lm_score": c.lm_score,
+                        "fused_score": c.fused_score if c.fused_score is not None else c.confidence,
+                        "ambiguous": ambiguous,
+                    }
+                )
+                resolved.append(
+                    GroundedConcept(
+                        concept_id=c.concept_id,
+                        term=m.term,
+                        confidence=c.confidence,
+                        source=source,
+                        sense_id=c.sense_id,
+                    )
+                )
+
+        # Deduplicate by concept id, keep highest confidence.
+        best: Dict[str, GroundedConcept] = {}
+        for r in resolved:
+            current = best.get(r.concept_id)
+            if current is None or r.confidence > current.confidence:
+                best[r.concept_id] = r
+
+        return sorted(best.values(), key=lambda x: x.confidence, reverse=True)
+
+    def get_last_trace(self) -> Dict[str, Any]:
+        """Return structured trace for the most recent grounding call."""
+        return dict(self._last_trace)
 
     def _find_best_match(self, query: str, threshold: float) -> Optional[GroundedConcept]:
         """Find best matching node in graph for a single word/term."""
@@ -204,14 +337,17 @@ class ConceptGrounder:
         # In a real system, do this async or incrementally.
         # Here we just fetch all terms (assuming <10k for prototype).
         if self._term_cache_dirty:
-            # Protocol check: does graph support tenant_id?
-            # If so, pass it. Use try/except to handle mocks gracefully.
+            # Prefer type-filtered term retrieval when available.
             try:
-                method = getattr(self.graph, 'get_all_terms', None)
-                if method and hasattr(method, '__code__') and 'tenant_id' in method.__code__.co_varnames:
-                    self._term_cache = self.graph.get_all_terms(tenant_id=tenant_id)
+                method = getattr(self.graph, 'get_terms_by_types', None)
+                if callable(method):
+                    self._term_cache = method(
+                        allowed_types=self.allowed_grounding_types,
+                        excluded_types=self.excluded_grounding_types,
+                        tenant_id=tenant_id,
+                    )
                 else:
-                    self._term_cache = self.graph.get_all_terms()
+                    self._term_cache = self.graph.get_all_terms(tenant_id=tenant_id)
             except (AttributeError, TypeError):
                 # Fallback for mocks or objects without proper introspection
                 self._term_cache = self.graph.get_all_terms()

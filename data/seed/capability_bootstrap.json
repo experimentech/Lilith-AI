@@ -1,0 +1,383 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "description": "Core capability bootstrap - maps natural language to internal abilities",
+    "usage": "Loaded at startup to seed self-knowledge and magic phrases"
+  },
+  
+  "self_knowledge": {
+    "identity": {
+      "name": "Lilith",
+      "full_name": "Lilith AI",
+      "type": "conversational_ai",
+      "description": "I am Lilith, a learning AI assistant. I learn from conversations, remember what works, and can take actions in the world."
+    },
+    "capabilities": [
+      "I can have conversations and learn from them",
+      "I can read and write files in the workspace",
+      "I can run terminal commands",
+      "I can check the weather",
+      "I can plan and execute multi-step actions",
+      "I can discover and use tools from MCP servers",
+      "I can reason through complex problems step by step",
+      "I can learn new concepts and remember them",
+      "I can remember what you teach me"
+    ],
+    "limitations": [
+      "I cannot browse the internet directly",
+      "I cannot access systems outside my configured workspace",
+      "I am still learning and may make mistakes"
+    ]
+  },
+  
+  "magic_phrases": {
+    "_description": "Phrases that trigger internal abilities. Format: trigger -> {ability, action, description}",
+    
+    "tool_discovery": [
+      {"triggers": ["discover tools", "find tools", "what tools", "list tools", "available tools", "show tools"],
+       "ability": "discover_tools",
+       "action": "enumerate_available_tools",
+       "description": "Discover and list available MCP tools"},
+       
+      {"triggers": ["connect to", "use mcp", "add server", "mcp server"],
+       "ability": "mcp_connect",
+       "action": "connect_mcp_server",
+       "description": "Connect to an MCP server endpoint"}
+    ],
+    
+    "action_planning": [
+      {"triggers": ["plan", "help me", "I want to", "I need to", "can you", "please", "do this"],
+       "ability": "action_planner",
+       "action": "plan_actions",
+       "description": "Plan a sequence of actions to achieve a goal"},
+       
+      {"triggers": ["execute", "run plan", "do it", "go ahead", "proceed", "confirm"],
+       "ability": "action_executor",
+       "action": "execute_plan",
+       "description": "Execute a pending action plan"},
+       
+      {"triggers": ["cancel", "abort", "stop", "nevermind", "forget it"],
+       "ability": "action_executor",
+       "action": "cancel_plan",
+       "description": "Cancel a pending action plan"}
+    ],
+    
+    "file_system": [
+      {"triggers": ["read file", "show file", "open file", "cat", "view"],
+       "ability": "fs_tools",
+       "action": "read_file",
+       "description": "Read contents of a file"},
+       
+      {"triggers": ["write file", "save file", "create file", "edit file"],
+       "ability": "fs_tools",
+       "action": "write_file",
+       "description": "Write or create a file"},
+       
+      {"triggers": ["list files", "show directory", "ls", "dir", "what files"],
+       "ability": "fs_tools",
+       "action": "list_dir",
+       "description": "List files in a directory"}
+    ],
+    
+    "terminal": [
+      {"triggers": ["run command", "execute", "terminal", "shell", "bash"],
+       "ability": "terminal_tools",
+       "action": "run_command",
+       "description": "Execute a terminal command"},
+       
+      {"triggers": ["install", "pip install", "npm install", "apt install"],
+       "ability": "terminal_tools",
+       "action": "run_command",
+       "description": "Install packages"}
+    ],
+    
+    "weather": [
+      {"triggers": ["weather", "temperature", "forecast", "how hot", "how cold", "raining"],
+       "ability": "weather_tools",
+       "action": "get_weather",
+       "description": "Get current weather for a location"}
+    ],
+    
+    "reasoning": [
+      {"triggers": ["think about", "reason", "analyze", "figure out", "explain why"],
+       "ability": "reasoning_stage",
+       "action": "deliberate",
+       "description": "Engage deliberative reasoning"},
+       
+      {"triggers": ["step by step", "break down", "walk through"],
+       "ability": "reasoning_stage",
+       "action": "explain_steps",
+       "description": "Explain reasoning process step by step"}
+    ],
+    
+    "learning": [
+      {"triggers": ["remember this", "learn this", "note that", "keep in mind"],
+       "ability": "learning",
+       "action": "store_memory",
+       "description": "Remember information for later"},
+       
+      {"triggers": ["forget", "unlearn", "remove memory"],
+       "ability": "learning",
+       "action": "forget_memory",
+       "description": "Remove remembered information"},
+       
+      {"triggers": ["what do you know about", "tell me about", "explain"],
+       "ability": "retrieval",
+       "action": "retrieve_knowledge",
+       "description": "Retrieve stored knowledge"}
+    ],
+    
+    "meta_commands": [
+      {"triggers": ["/help", "help", "commands", "what can I say"],
+       "ability": "meta",
+       "action": "show_help",
+       "description": "Show available commands"},
+       
+      {"triggers": ["/stats", "statistics", "how are you doing"],
+       "ability": "meta",
+       "action": "show_stats",
+       "description": "Show cognitive statistics"},
+       
+      {"triggers": ["/health", "status", "system status"],
+       "ability": "meta",
+       "action": "health_check",
+       "description": "Check system health"}
+    ]
+  },
+  
+  "response_patterns": {
+    "_description": "Core response patterns for common interactions",
+    
+    "greetings": [
+      {"input": "hello", "responses": ["Hello!", "Hi there!", "Hey!"], "context": "greeting"},
+      {"input": "hi", "responses": ["Hi!", "Hello!", "Hey there!"], "context": "greeting"},
+      {"input": "hey", "responses": ["Hey!", "Hello!", "Hi!"], "context": "greeting"},
+      {"input": "good morning", "responses": ["Good morning!", "Morning!", "Hello, good morning!"], "context": "greeting"},
+      {"input": "good afternoon", "responses": ["Good afternoon!", "Hello!", "Afternoon!"], "context": "greeting"},
+      {"input": "good evening", "responses": ["Good evening!", "Hello!", "Evening!"], "context": "greeting"}
+    ],
+    
+    "farewells": [
+      {"input": "bye", "responses": ["Goodbye!", "Bye!", "See you later!"], "context": "farewell"},
+      {"input": "goodbye", "responses": ["Goodbye!", "Take care!", "See you!"], "context": "farewell"},
+      {"input": "see you", "responses": ["See you!", "Bye!", "Until next time!"], "context": "farewell"}
+    ],
+    
+    "identity": [
+      {"input": "who are you", "responses": ["I'm Lilith, a learning AI assistant.", "I am Lilith. I learn from our conversations and can help with various tasks."], "context": "identity"},
+      {"input": "what are you", "responses": ["I'm Lilith, an AI that learns through conversation. I can help with tasks, answer questions, and remember what you teach me."], "context": "identity"},
+      {"input": "what's your name", "responses": ["I'm Lilith.", "My name is Lilith.", "Call me Lilith."], "context": "identity"}
+    ],
+    
+    "capabilities": [
+      {"input": "what can you do", "responses": ["I can have conversations, run commands, read and write files, check the weather, plan multi-step actions, and learn new things. What would you like help with?"], "context": "capabilities"},
+      {"input": "help", "responses": ["I'm here to help! I can: read/write files, run terminal commands, check weather, plan actions, and learn from our conversations. What do you need?"], "context": "capabilities"},
+      {"input": "what are your capabilities", "responses": ["My capabilities include: conversation, file operations, terminal commands, weather lookups, action planning, and continuous learning. I can also connect to MCP tool servers."], "context": "capabilities"}
+    ],
+    
+    "affirmations": [
+      {"input": "thanks", "responses": ["You're welcome!", "Happy to help!", "Anytime!"], "context": "thanks"},
+      {"input": "thank you", "responses": ["You're welcome!", "Glad I could help!", "My pleasure!"], "context": "thanks"},
+      {"input": "good job", "responses": ["Thank you!", "I'm glad that worked!", "Happy to help!"], "context": "positive_feedback"},
+      {"input": "nice", "responses": ["Thanks!", "Glad you like it!", "Great!"], "context": "positive_feedback"}
+    ],
+    
+    "negations": [
+      {"input": "no", "responses": ["Okay.", "Understood.", "Alright."], "context": "negation"},
+      {"input": "nevermind", "responses": ["No problem.", "Okay, never mind then.", "Alright, let me know if you need anything else."], "context": "cancel"},
+      {"input": "stop", "responses": ["Stopping.", "Okay, I'll stop.", "Understood."], "context": "cancel"}
+    ],
+    
+    "clarification": [
+      {"input": "what", "responses": ["Could you clarify what you'd like to know?", "What specifically are you asking about?"], "context": "clarify"},
+      {"input": "huh", "responses": ["Let me try to explain differently. What part was unclear?", "I can rephrase. What didn't make sense?"], "context": "clarify"},
+      {"input": "I don't understand", "responses": ["Let me try to explain another way.", "I'll rephrase. What specifically is confusing?"], "context": "clarify"}
+    ]
+  },
+  
+  "action_bindings": {
+    "_description": "Direct mappings from intent patterns to tool invocations",
+    
+    "actions": [
+      {
+        "name": "read_file",
+        "description": "Read the contents of a file",
+        "triggers": ["read", "show", "view", "cat", "open"],
+        "tool_binding": "read_file",
+        "arg_template": {"path": "{file_path}"},
+        "examples": ["read README.md", "show the config file", "view src/main.py"]
+      },
+      {
+        "name": "write_file",
+        "description": "Write content to a file",
+        "triggers": ["write", "save", "create", "put"],
+        "tool_binding": "write_file",
+        "arg_template": {"path": "{file_path}", "content": "{content}"},
+        "examples": ["save this to output.txt", "create a new file called notes.md"]
+      },
+      {
+        "name": "list_directory",
+        "description": "List files and folders in a directory",
+        "triggers": ["list", "ls", "dir", "show files", "what files"],
+        "tool_binding": "list_dir",
+        "arg_template": {"path": "{directory}"},
+        "examples": ["list files in src/", "what's in the data folder", "ls"]
+      },
+      {
+        "name": "run_command",
+        "description": "Execute a shell command in the terminal",
+        "triggers": ["run", "execute", "shell", "terminal", "bash"],
+        "tool_binding": "run_command",
+        "arg_template": {"command": "{command}"},
+        "examples": ["run git status", "execute pip install requests", "terminal: echo hello"]
+      },
+      {
+        "name": "get_weather",
+        "description": "Get the current weather for a location",
+        "triggers": ["weather", "temperature", "forecast"],
+        "tool_binding": "get_weather",
+        "arg_template": {"location": "{location}"},
+        "examples": ["weather in London", "what's the temperature in Tokyo", "is it raining in Seattle"]
+      }
+    ]
+  },
+  
+  "semantic_bootstrap": {
+    "_description": "Core vocabulary with semantic relationships for encoder training",
+    
+    "synonyms": [
+      ["hello", "hi", "hey", "greetings"],
+      ["bye", "goodbye", "farewell", "later"],
+      ["help", "assist", "aid", "support"],
+      ["run", "execute", "launch", "start"],
+      ["stop", "halt", "cease", "end"],
+      ["file", "document", "text"],
+      ["folder", "directory", "dir"],
+      ["read", "view", "show", "display"],
+      ["write", "save", "store", "create"],
+      ["search", "find", "look", "locate"],
+      ["understand", "comprehend", "grasp", "know"],
+      ["learn", "study", "memorize", "remember"],
+      ["forget", "unlearn", "erase", "remove"],
+      ["think", "reason", "analyze", "consider"],
+      ["plan", "organize", "schedule", "arrange"],
+      ["execute", "perform", "carry out", "do"],
+      ["tool", "utility", "function", "capability"],
+      ["connect", "link", "attach", "join"],
+      ["weather", "forecast", "temperature", "climate"]
+    ],
+    
+    "antonyms": [
+      ["start", "stop"],
+      ["open", "close"],
+      ["read", "write"],
+      ["remember", "forget"],
+      ["yes", "no"],
+      ["good", "bad"],
+      ["success", "failure"],
+      ["enable", "disable"],
+      ["connect", "disconnect"],
+      ["create", "delete"]
+    ],
+    
+    "relations": [
+      ["file", "has", "path"],
+      ["file", "has", "content"],
+      ["command", "runs_in", "terminal"],
+      ["tool", "performs", "action"],
+      ["action", "produces", "result"],
+      ["weather", "has", "temperature"],
+      ["location", "has", "weather"],
+      ["plan", "contains", "steps"],
+      ["step", "uses", "tool"]
+    ],
+    
+    "linguistic_patterns": {
+      "_description": "Patterns that teach semantic relationships through language. Format: pattern -> relation_type. {X} and {Y} are extracted as the related terms.",
+      
+      "antonym_patterns": [
+        "{X} is the opposite of {Y}",
+        "{X} is opposite to {Y}",
+        "{X} means the opposite of {Y}",
+        "the opposite of {X} is {Y}",
+        "{X} vs {Y}",
+        "{X} versus {Y}",
+        "{X} contrasts with {Y}"
+      ],
+      
+      "negative_patterns": [
+        "{X} is not {Y}",
+        "{X} isn't {Y}",
+        "{X} is different from {Y}",
+        "{X} differs from {Y}",
+        "{X} and {Y} are different",
+        "don't confuse {X} with {Y}",
+        "{X} is unlike {Y}"
+      ],
+      
+      "synonym_patterns": [
+        "{X} means {Y}",
+        "{X} is like {Y}",
+        "{X} is similar to {Y}",
+        "{X} is the same as {Y}",
+        "{X} equals {Y}",
+        "{X} and {Y} are the same",
+        "{X} is another word for {Y}",
+        "{X} is also called {Y}",
+        "when I say {X} I mean {Y}",
+        "{X} aka {Y}"
+      ],
+      
+      "hypernym_patterns": [
+        "{X} is a {Y}",
+        "{X} is a type of {Y}",
+        "{X} is a kind of {Y}",
+        "{X} is an example of {Y}",
+        "a {X} is a {Y}",
+        "{X} belongs to {Y}",
+        "{X} is part of {Y}"
+      ],
+      
+      "property_patterns": [
+        "{X} has {Y}",
+        "{X} contains {Y}",
+        "{X} includes {Y}",
+        "{Y} is a property of {X}",
+        "{X} is characterized by {Y}"
+      ],
+      
+      "causal_patterns": [
+        "{X} causes {Y}",
+        "{X} leads to {Y}",
+        "{X} results in {Y}",
+        "if {X} then {Y}",
+        "{Y} is caused by {X}",
+        "because of {X}, {Y}",
+        "{X} enables {Y}"
+      ]
+    },
+    
+    "foundational_statements": [
+      {"text": "hot is the opposite of cold", "type": "antonym", "terms": ["hot", "cold"]},
+      {"text": "up is the opposite of down", "type": "antonym", "terms": ["up", "down"]},
+      {"text": "left is the opposite of right", "type": "antonym", "terms": ["left", "right"]},
+      {"text": "fast is the opposite of slow", "type": "antonym", "terms": ["fast", "slow"]},
+      {"text": "big is the opposite of small", "type": "antonym", "terms": ["big", "small"]},
+      {"text": "light is the opposite of dark", "type": "antonym", "terms": ["light", "dark"]},
+      {"text": "happy is the opposite of sad", "type": "antonym", "terms": ["happy", "sad"]},
+      {"text": "red is not blue", "type": "negative", "terms": ["red", "blue"]},
+      {"text": "green is not purple", "type": "negative", "terms": ["green", "purple"]},
+      {"text": "a dog is an animal", "type": "hypernym", "terms": ["dog", "animal"]},
+      {"text": "a cat is an animal", "type": "hypernym", "terms": ["cat", "animal"]},
+      {"text": "red is a color", "type": "hypernym", "terms": ["red", "color"]},
+      {"text": "blue is a color", "type": "hypernym", "terms": ["blue", "color"]},
+      {"text": "python is a programming language", "type": "hypernym", "terms": ["python", "programming language"]},
+      {"text": "a file has content", "type": "property", "terms": ["file", "content"]},
+      {"text": "water is wet", "type": "property", "terms": ["water", "wet"]},
+      {"text": "fire is hot", "type": "property", "terms": ["fire", "hot"]},
+      {"text": "ice is cold", "type": "property", "terms": ["ice", "cold"]},
+      {"text": "rain causes wetness", "type": "causal", "terms": ["rain", "wetness"]},
+      {"text": "heat causes melting", "type": "causal", "terms": ["heat", "melting"]}
+    ]
+  }
+}

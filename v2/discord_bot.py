@@ -122,8 +122,28 @@ class LilithV2DiscordBot:
         self._setup_events()
         self._setup_commands()
     
-    def _create_encoder(self):
-        """Create the best available encoder."""
+    def _create_encoder(self, vocab_path=None):
+        """Create the best available encoder.
+        
+        Priority:
+        1. SemanticPMFlowEncoder - trainable word embeddings + PMFlow physics
+        2. PMFlowEmbeddingEncoder - hashed embeddings + PMFlow physics  
+        3. SimpleEncoder - basic fallback
+        """
+        # Prefer semantic encoder for learning capability
+        try:
+            from lilith.learned_vocabulary_encoder import SemanticPMFlowEncoder
+            return SemanticPMFlowEncoder(
+                dimension=96,
+                latent_dim=48,
+                enable_flow=True,
+                vocab_path=vocab_path,
+                bootstrap_semantics=True,
+            )
+        except ImportError:
+            pass
+        
+        # Fallback to hash-based encoder
         try:
             from pmflow import PMFlowEmbeddingEncoder
             return PMFlowEmbeddingEncoder(

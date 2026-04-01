@@ -22,7 +22,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.getcwd())))
 from v2.lilith_v2.corpus_ingester import CorpusIngester, ExtractionConfig, IngestionStats
 from v2.lilith_v2.relational_graph_store import RelationalGraphStore
 
-# Try to import PMFlow encoder
+# Try to import encoders - prefer SemanticPMFlowEncoder
+try:
+    from lilith.learned_vocabulary_encoder import SemanticPMFlowEncoder
+    HAS_SEMANTIC = True
+except ImportError:
+    HAS_SEMANTIC = False
+
 try:
     from pmflow import PMFlowEmbeddingEncoder
     HAS_PMFLOW = True
@@ -64,16 +70,23 @@ def main():
     graph = RelationalGraphStore(str(db_path))
     print(f"Knowledge graph: {db_path}")
 
-    # Initialize encoder
+    # Initialize encoder - prefer semantic for learning capability
     encoder = None
-    if not args.no_embeddings and HAS_PMFLOW:
-        print("Loading PMFlow encoder for embeddings...")
-        encoder = PMFlowEmbeddingEncoder(dimension=96, latent_dim=48)
-        print("  PMFlow encoder ready")
-    elif args.no_embeddings:
-        print("Skipping embeddings (--no-embeddings)")
+    if not args.no_embeddings:
+        if HAS_SEMANTIC:
+            print("Loading SemanticPMFlowEncoder for embeddings...")
+            encoder = SemanticPMFlowEncoder(
+                dimension=96, latent_dim=48, bootstrap_semantics=True
+            )
+            print("  SemanticPMFlowEncoder ready (trainable word embeddings)")
+        elif HAS_PMFLOW:
+            print("Loading PMFlow encoder for embeddings...")
+            encoder = PMFlowEmbeddingEncoder(dimension=96, latent_dim=48)
+            print("  PMFlow encoder ready")
+        else:
+            print("No encoder available, ingesting without embeddings")
     else:
-        print("PMFlow not available, ingesting without embeddings")
+        print("Skipping embeddings (--no-embeddings)")
 
     # Configure extraction
     config = ExtractionConfig(

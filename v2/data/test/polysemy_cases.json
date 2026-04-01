@@ -1,0 +1,99 @@
+{
+  "graph": {
+    "concepts": [
+      {"id": "concept:financial_institution", "term": "financial institution"},
+      {"id": "concept:river_edge", "term": "river edge"},
+      {"id": "concept:flying_mammal", "term": "flying mammal"},
+      {"id": "concept:sports_equipment", "term": "sports equipment"},
+      {"id": "concept:programming_language", "term": "programming language"},
+      {"id": "concept:coffee", "term": "coffee"},
+      {"id": "concept:snake", "term": "snake"}
+    ],
+    "lexemes": [
+      {"id": "lex:bank", "term": "bank"},
+      {"id": "lex:bat", "term": "bat"},
+      {"id": "lex:java", "term": "java"},
+      {"id": "lex:python", "term": "python"}
+    ],
+    "senses": [
+      {"id": "sense:bank#finance", "term": "bank (financial institution)"},
+      {"id": "sense:bank#river", "term": "bank (river edge)"},
+      {"id": "sense:bat#animal", "term": "bat (animal)"},
+      {"id": "sense:bat#sports", "term": "bat (sports)"},
+      {"id": "sense:java#language", "term": "java programming language"},
+      {"id": "sense:java#coffee", "term": "java (coffee)"},
+      {"id": "sense:python#language", "term": "python (programming language)"},
+      {"id": "sense:python#snake", "term": "python (snake)"}
+    ],
+    "lexeme_to_sense": [
+      {"lexeme_id": "lex:bank", "sense_id": "sense:bank#finance", "confidence": 0.90},
+      {"lexeme_id": "lex:bank", "sense_id": "sense:bank#river", "confidence": 0.88},
+
+      {"lexeme_id": "lex:bat", "sense_id": "sense:bat#animal", "confidence": 0.86},
+      {"lexeme_id": "lex:bat", "sense_id": "sense:bat#sports", "confidence": 0.85},
+
+      {"lexeme_id": "lex:java", "sense_id": "sense:java#language", "confidence": 0.90},
+      {"lexeme_id": "lex:java", "sense_id": "sense:java#coffee", "confidence": 0.86},
+
+      {"lexeme_id": "lex:python", "sense_id": "sense:python#language", "confidence": 0.90},
+      {"lexeme_id": "lex:python", "sense_id": "sense:python#snake", "confidence": 0.87}
+    ],
+    "sense_to_concept": [
+      {"sense_id": "sense:bank#finance", "concept_id": "concept:financial_institution", "confidence": 0.95},
+      {"sense_id": "sense:bank#river", "concept_id": "concept:river_edge", "confidence": 0.93},
+
+      {"sense_id": "sense:bat#animal", "concept_id": "concept:flying_mammal", "confidence": 0.93},
+      {"sense_id": "sense:bat#sports", "concept_id": "concept:sports_equipment", "confidence": 0.93},
+
+      {"sense_id": "sense:java#language", "concept_id": "concept:programming_language", "confidence": 0.95},
+      {"sense_id": "sense:java#coffee", "concept_id": "concept:coffee", "confidence": 0.90},
+
+      {"sense_id": "sense:python#language", "concept_id": "concept:programming_language", "confidence": 0.95},
+      {"sense_id": "sense:python#snake", "concept_id": "concept:snake", "confidence": 0.90}
+    ]
+  },
+  "cases": [
+    {
+      "id": "bank_ambiguous",
+      "query": "bank",
+      "expected_any": ["concept:financial_institution", "concept:river_edge"],
+      "expect_ambiguous": true,
+      "non_ambiguous": false
+    },
+    {
+      "id": "bat_ambiguous",
+      "query": "bat",
+      "expected_any": ["concept:flying_mammal", "concept:sports_equipment"],
+      "expect_ambiguous": true,
+      "non_ambiguous": false
+    },
+    {
+      "id": "java_ambiguous",
+      "query": "java",
+      "expected_any": ["concept:programming_language", "concept:coffee"],
+      "expect_ambiguous": true,
+      "non_ambiguous": false
+    },
+    {
+      "id": "python_ambiguous",
+      "query": "python",
+      "expected_any": ["concept:programming_language", "concept:snake"],
+      "expect_ambiguous": true,
+      "non_ambiguous": false
+    },
+    {
+      "id": "python_language_phrase",
+      "query": "python programming",
+      "expected_top": "concept:programming_language",
+      "expect_ambiguous": false,
+      "non_ambiguous": true
+    },
+    {
+      "id": "java_language_phrase",
+      "query": "java programming language",
+      "expected_top": "concept:programming_language",
+      "expect_ambiguous": false,
+      "non_ambiguous": true
+    }
+  ]
+}
