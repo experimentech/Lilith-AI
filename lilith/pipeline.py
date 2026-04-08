@@ -66,7 +66,7 @@ class SymbolicPipeline:
         
         try:
             return PMFlowEmbeddingEncoder(**(pmflow_kwargs or {}))
-        except RuntimeError as exc:
+        except (RuntimeError, ImportError) as exc:
             logging.getLogger(__name__).warning(
                 "PMFlow embeddings unavailable (%s); falling back to hashed encoder.",
                 exc,
@@ -74,7 +74,7 @@ class SymbolicPipeline:
             return HashedEmbeddingEncoder()
 
     def _attach_pmflow_state(self) -> None:
-        if isinstance(self.encoder, PMFlowEmbeddingEncoder):
+        if hasattr(self.encoder, "attach_state_path"):
             self.encoder.attach_state_path(self.pmflow_state_path)
 
     def process(self, utterance: Utterance) -> PipelineArtifact:
